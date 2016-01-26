@@ -225,7 +225,7 @@ uvc_function_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 	struct uvc_device *uvc = req->context;
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
-
+	printk(KERN_INFO "uvc_function_ep0_complete, uvc->event_setup_out=0x%x\n", uvc->event_setup_out);
 	if (uvc->event_setup_out) {
 		uvc->event_setup_out = 0;
 
@@ -244,6 +244,10 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 
+	struct usb_composite_dev *cdev = f->config->cdev;
+	struct usb_request *req = uvc->control_req;
+
+
 	/* printk(KERN_INFO "setup request %02x %02x value %04x index %04x %04x\n",
 	 *	ctrl->bRequestType, ctrl->bRequest, le16_to_cpu(ctrl->wValue),
 	 *	le16_to_cpu(ctrl->wIndex), le16_to_cpu(ctrl->wLength));
@@ -257,6 +261,15 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	/* Stall too big requests. */
 	if (le16_to_cpu(ctrl->wLength) > UVC_MAX_REQUEST_SIZE)
 		return -EINVAL;
+
+	if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS
+			&& ctrl->bRequest == UVC_SET_CUR) {
+		printk(KERN_INFO "set cur req\n");
+		req->length = ctrl->wLength;
+		req->zero = 1;
+		req->context = uvc;
+		usb_ep_queue(cdev->gadget->ep0, req, GFP_KERNEL);
+	}
 
 	memset(&v4l2_event, 0, sizeof(v4l2_event));
 	v4l2_event.type = UVC_EVENT_SETUP;
