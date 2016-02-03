@@ -871,6 +871,7 @@ void usb_remove_config(struct usb_composite_dev *cdev,
 
 	unbind_config(cdev, config);
 }
+EXPORT_SYMBOL_GPL(usb_remove_config);
 
 /*-------------------------------------------------------------------------*/
 

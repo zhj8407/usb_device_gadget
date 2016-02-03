@@ -32,9 +32,19 @@
 
 #include "gadget_chips.h"
 
+#if 1
+#define ANDROID_AUDIO_SOURCE
+#endif
+
 #include "f_nvusb.c"
 #include "f_fs.c"
+#ifdef ANDROID_AUDIO_SOURCE
 #include "f_audio_source.c"
+#else
+#include "f_audio_sink.c"
+#endif
+#include "f_hidg.c"
+#include "f_webcam.c"
 #include "f_mass_storage.c"
 #include "f_mtp.c"
 #include "f_accessory.c"
@@ -899,6 +909,117 @@ static struct android_usb_function accessory_function = {
 	.ctrlrequest	= accessory_function_ctrlrequest,
 };
 
+/* hid descriptor for a keyboard */
+static struct hidg_func_descriptor my_hid_data = {
+        .subclass               = 0, /* No subclass */
+        .protocol               = 1, /* Keyboard */
+        .report_length          = 8,
+        .report_desc_length     = 63,
+        .report_desc            = {
+                0x05, 0x01,     /* USAGE_PAGE (Generic Desktop)           */
+                0x09, 0x06,     /* USAGE (Keyboard)                       */
+                0xa1, 0x01,     /* COLLECTION (Application)               */
+                0x05, 0x07,     /*   USAGE_PAGE (Keyboard)                */
+                0x19, 0xe0,     /*   USAGE_MINIMUM (Keyboard LeftControl) */
+                0x29, 0xe7,     /*   USAGE_MAXIMUM (Keyboard Right GUI)   */
+                0x15, 0x00,     /*   LOGICAL_MINIMUM (0)                  */
+                0x25, 0x01,     /*   LOGICAL_MAXIMUM (1)                  */
+                0x75, 0x01,     /*   REPORT_SIZE (1)                      */
+                0x95, 0x08,     /*   REPORT_COUNT (8)                     */
+                0x81, 0x02,     /*   INPUT (Data,Var,Abs)                 */
+                0x95, 0x01,     /*   REPORT_COUNT (1)                     */
+                0x75, 0x08,     /*   REPORT_SIZE (8)                      */
+                0x81, 0x03,     /*   INPUT (Cnst,Var,Abs)                 */
+                0x95, 0x05,     /*   REPORT_COUNT (5)                     */
+                0x75, 0x01,     /*   REPORT_SIZE (1)                      */
+                0x05, 0x08,     /*   USAGE_PAGE (LEDs)                    */
+                0x19, 0x01,     /*   USAGE_MINIMUM (Num Lock)             */
+                0x29, 0x05,     /*   USAGE_MAXIMUM (Kana)                 */
+                0x91, 0x02,     /*   OUTPUT (Data,Var,Abs)                */
+                0x95, 0x01,     /*   REPORT_COUNT (1)                     */
+                0x75, 0x03,     /*   REPORT_SIZE (3)                      */
+                0x91, 0x03,     /*   OUTPUT (Cnst,Var,Abs)                */
+                0x95, 0x06,     /*   REPORT_COUNT (6)                     */
+                0x75, 0x08,     /*   REPORT_SIZE (8)                      */
+                0x15, 0x00,     /*   LOGICAL_MINIMUM (0)                  */
+                0x25, 0x65,     /*   LOGICAL_MAXIMUM (101)                */
+                0x05, 0x07,     /*   USAGE_PAGE (Keyboard)                */
+                0x19, 0x00,     /*   USAGE_MINIMUM (Reserved)             */
+                0x29, 0x65,     /*   USAGE_MAXIMUM (Keyboard Application) */
+                0x81, 0x00,     /*   INPUT (Data,Ary,Abs)                 */
+                0xc0            /* END_COLLECTION                         */
+        }
+};
+
+static int hidg_function_init(struct android_usb_function *f,
+			struct usb_composite_dev *cdev)
+{
+	struct hidg_device_config *config;
+
+	config = kzalloc(sizeof(struct hidg_device_config), GFP_KERNEL);
+
+	if (!config)
+		return -ENOMEM;
+
+	config->device = -1;
+	f->config = config;
+
+	ghid_setup(NULL, 1);
+
+	return 0;
+}
+
+static void hidg_function_cleanup(struct android_usb_function *f)
+{
+	ghid_cleanup();
+	kfree(f->config);
+}
+
+static int hidg_function_bind_config(struct android_usb_function *f,
+			struct usb_configuration *c)
+{
+	struct hidg_device_config *config = f->config;
+
+	/* TODO Set the hid report descriptor */
+	return hidg_bind_config(c, config, &my_hid_data, 0);
+}
+
+static void hidg_function_unbind_config(struct android_usb_function *f,
+			struct usb_configuration *c)
+{
+	struct hidg_device_config *config = f->config;
+
+	config->device = -1;
+}
+
+static ssize_t hidg_device_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct hidg_device_config *config = f->config;
+
+	/* print hidg device numbers */
+	return sprintf(buf, "%d\n", config->device);
+}
+
+static DEVICE_ATTR(hidg_device, S_IRUGO, hidg_device_show, NULL);
+
+static struct device_attribute *hidg_function_attributes[] = {
+	&dev_attr_hidg_device,
+	NULL
+};
+
+static struct android_usb_function hidg_function = {
+	.name		= "hidg",
+	.init		= hidg_function_init,
+	.cleanup	= hidg_function_cleanup,
+	.bind_config	= hidg_function_bind_config,
+	.unbind_config	= hidg_function_unbind_config,
+	.attributes	= hidg_function_attributes,
+};
+
+#ifdef ANDROID_AUDIO_SOURCE
+
 static int audio_source_function_init(struct android_usb_function *f,
 			struct usb_composite_dev *cdev)
 {
@@ -909,6 +1030,7 @@ static int audio_source_function_init(struct android_usb_function *f,
 		return -ENOMEM;
 	config->card = -1;
 	config->device = -1;
+	config->dev = f->dev;
 	f->config = config;
 	return 0;
 }
@@ -933,6 +1055,7 @@ static void audio_source_function_unbind_config(struct android_usb_function *f,
 
 	config->card = -1;
 	config->device = -1;
+	config->dev = NULL;
 }
 
 static ssize_t audio_source_pcm_show(struct device *dev,
@@ -947,8 +1070,77 @@ static ssize_t audio_source_pcm_show(struct device *dev,
 
 static DEVICE_ATTR(pcm, S_IRUGO, audio_source_pcm_show, NULL);
 
+static ssize_t audio_source_iad_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	return sprintf(buf, "%s\n", config->iad_string);
+}
+
+static ssize_t audio_source_iad_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	if (size >= sizeof(config->iad_string))
+		return -EINVAL;
+	return strlcpy(config->iad_string, buf, sizeof(config->iad_string));
+}
+
+static DEVICE_ATTR(iad_string, S_IRUGO | S_IWUSR,
+					audio_source_iad_show,
+					audio_source_iad_store);
+
+static ssize_t audio_source_ac_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	return sprintf(buf, "%s\n", config->ac_string);
+}
+
+static ssize_t audio_source_ac_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	if (size >= sizeof(config->ac_string))
+		return -EINVAL;
+	return strlcpy(config->ac_string, buf, sizeof(config->ac_string));
+}
+
+static DEVICE_ATTR(ac_string, S_IRUGO | S_IWUSR,
+					audio_source_ac_show,
+					audio_source_ac_store);
+
+static ssize_t audio_source_as_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	return sprintf(buf, "%s\n", config->as_string);
+}
+
+static ssize_t audio_source_as_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_source_config *config = f->config;
+	if (size >= sizeof(config->as_string))
+		return -EINVAL;
+	return strlcpy(config->as_string, buf, sizeof(config->as_string));
+}
+
+static DEVICE_ATTR(as_string, S_IRUGO | S_IWUSR,
+					audio_source_as_show,
+					audio_source_as_store);
+
 static struct device_attribute *audio_source_function_attributes[] = {
 	&dev_attr_pcm,
+	&dev_attr_iad_string,
+	&dev_attr_ac_string,
+	&dev_attr_as_string,
 	NULL
 };
 
@@ -959,6 +1151,170 @@ static struct android_usb_function audio_source_function = {
 	.bind_config	= audio_source_function_bind_config,
 	.unbind_config	= audio_source_function_unbind_config,
 	.attributes	= audio_source_function_attributes,
+};
+
+#else
+
+static int
+audio_sink_function_init(struct android_usb_function *f,
+		struct usb_composite_dev *cdev)
+{
+	struct audio_sink_config *config;
+
+	config = kzalloc(sizeof(struct audio_sink_config), GFP_KERNEL);
+	if (!config)
+		return -ENOMEM;
+	config->card = -1;
+	config->device = -1;
+	config->dev = f->dev;
+	f->config = config;
+	return 0;
+}
+
+static void audio_sink_function_cleanup(struct android_usb_function *f)
+{
+	kfree(f->config);
+	f->config = NULL;
+}
+
+static int
+audio_sink_function_bind_config(struct android_usb_function *f,
+		struct usb_configuration *c)
+{
+	return audio_bind_config(c, f->config);
+}
+
+static void
+audio_sink_function_unbind_config(struct android_usb_function *f,
+		struct usb_configuration *c)
+{
+	struct audio_sink_config *config = f->config;
+
+	config->card = -1;
+	config->device = -1;
+	config->dev = NULL;
+}
+
+static ssize_t audio_sink_pcm_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+
+	/* print PCM card and device numbers */
+	return sprintf(buf, "%d %d\n", config->card, config->device);
+}
+
+static DEVICE_ATTR(pcm, S_IRUGO, audio_sink_pcm_show, NULL);
+
+static ssize_t audio_sink_iad_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	return sprintf(buf, "%s\n", config->iad_string);
+}
+
+static ssize_t audio_sink_iad_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	if (size >= sizeof(config->iad_string))
+		return -EINVAL;
+	return strlcpy(config->iad_string, buf, sizeof(config->iad_string));
+}
+
+static DEVICE_ATTR(iad_string, S_IRUGO | S_IWUSR,
+					audio_sink_iad_show,
+					audio_sink_iad_store);
+
+static ssize_t audio_sink_ac_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	return sprintf(buf, "%s\n", config->ac_string);
+}
+
+static ssize_t audio_sink_ac_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	if (size >= sizeof(config->ac_string))
+		return -EINVAL;
+	return strlcpy(config->ac_string, buf, sizeof(config->ac_string));
+}
+
+static DEVICE_ATTR(ac_string, S_IRUGO | S_IWUSR,
+					audio_sink_ac_show,
+					audio_sink_ac_store);
+
+static ssize_t audio_sink_as_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	return sprintf(buf, "%s\n", config->as_string);
+}
+
+static ssize_t audio_sink_as_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_sink_config *config = f->config;
+	if (size >= sizeof(config->as_string))
+		return -EINVAL;
+	return strlcpy(config->as_string, buf, sizeof(config->as_string));
+}
+
+static DEVICE_ATTR(as_string, S_IRUGO | S_IWUSR,
+					audio_sink_as_show,
+					audio_sink_as_store);
+
+static struct device_attribute *audio_sink_function_attributes[] = {
+	&dev_attr_pcm,
+	&dev_attr_iad_string,
+	&dev_attr_ac_string,
+	&dev_attr_as_string,
+	NULL
+};
+
+static struct android_usb_function audio_sink_function = {
+	.name		= "audio_sink",
+	.init		= audio_sink_function_init,
+	.cleanup	= audio_sink_function_cleanup,
+	.bind_config	= audio_sink_function_bind_config,
+	.unbind_config	= audio_sink_function_unbind_config,
+	.attributes	= audio_sink_function_attributes,
+};
+
+#endif
+
+static int
+webcam_function_init(struct android_usb_function *f,
+		struct usb_composite_dev *cdev)
+{
+	return 0;
+}
+
+static void webcam_function_cleanup(struct android_usb_function *f)
+{
+}
+
+static int
+webcam_function_bind_config(struct android_usb_function *f,
+		struct usb_configuration *c)
+{
+	return webcam_config_bind(c);
+}
+
+static struct android_usb_function webcam_function = {
+	.name		= "webcam",
+	.init		= webcam_function_init,
+	.cleanup	= webcam_function_cleanup,
+	.bind_config	= webcam_function_bind_config,
 };
 
 static int
@@ -994,7 +1350,13 @@ static struct android_usb_function *supported_functions[] = {
 	&rndis_function,
 	&mass_storage_function,
 	&accessory_function,
+	&hidg_function,
+#ifdef ANDROID_AUDIO_SOURCE
 	&audio_source_function,
+#else
+	&audio_sink_function,
+#endif
+	&webcam_function,
 	&nvusb_function,
 	NULL
 };
