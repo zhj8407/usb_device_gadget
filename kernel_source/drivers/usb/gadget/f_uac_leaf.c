@@ -46,6 +46,19 @@
 
 const char *uacL_name = "snd_uac_leaf";
 
+#define MAX_STRING_NAME_LENGTH		64
+
+struct audio_dual_config {
+	int	card;
+	int	device;
+	struct device *dev;
+
+	char iad_string[MAX_STRING_NAME_LENGTH];
+	char audio_control_string[MAX_STRING_NAME_LENGTH];
+	char audio_out_stream_string[MAX_STRING_NAME_LENGTH];
+	char audio_in_stream_string[MAX_STRING_NAME_LENGTH];
+};
+
 struct uacL_req {
 	struct uacL_rtd_params *pp; /* parent param */
 	struct usb_request *req;
@@ -71,7 +84,7 @@ struct uacL_rtd_params {
 	struct uacL_req ureq[USB_XFERS];
 
 	spinlock_t lock;
-	
+
 	/* Control Set command */
 	struct list_head cs;
 	u8 set_cmd;
@@ -118,6 +131,7 @@ struct audio_dev {
 };
 
 static struct audio_dev *agdev_g;
+static struct audio_dual_config *uac_leaf_config = NULL;
 
 static inline
 struct audio_dev *func_to_agdev(struct usb_function *f)
@@ -386,6 +400,11 @@ static int snd_uacL_probe(struct platform_device *pdev)
 	err = snd_card_register(card);
 	if (!err) {
 		platform_set_drvdata(pdev, card);
+		/* Update the config */
+		if (uac_leaf_config) {
+			uac_leaf_config->device = pcm->device;
+			uac_leaf_config->card = pcm->card->number;
+		}
 		return 0;
 	}
 
@@ -484,7 +503,7 @@ static struct usb_gadget_strings *fn_strings[] = {
 static struct usb_interface_assoc_descriptor ac_intf_assoc_desc = {
 	.bLength 		= sizeof ac_intf_assoc_desc,
 	.bDescriptorType 	= USB_DT_INTERFACE_ASSOCIATION,
-	.bFirstInterface 	= 0x00,
+	.bFirstInterface 	= 0x00,	/* Dynamic interface number. */
 	.bInterfaceCount 	= 0x03,
 	.bFunctionClass 	= USB_CLASS_AUDIO,
 	.bFunctionSubClass 	= 0x00,
@@ -495,7 +514,7 @@ static struct usb_interface_assoc_descriptor ac_intf_assoc_desc = {
 static struct usb_interface_descriptor ac_interface_desc = {
 	.bLength 		= sizeof ac_interface_desc,
 	.bDescriptorType 	= USB_DT_INTERFACE,
-	.bInterfaceNumber	= 0x00, 
+	.bInterfaceNumber	= 0x00,
 	.bAlternateSetting 	= 0x00,
 	.bNumEndpoints 		= 0x00,
 	.bInterfaceClass 	= USB_CLASS_AUDIO,
@@ -518,15 +537,15 @@ static struct uac1_ac_header_descriptor_2 ac_header_desc2 = {
 	.bcdADC = __constant_cpu_to_le16(0x0100),
 	.wTotalLength = __constant_cpu_to_le16(UAC_DT_TOTAL_LENGTH),
 	.bInCollection = F_AUDIO_NUM_INTERFACES,
-	.baInterfaceNr[0] = 0x01,
-	.baInterfaceNr[1] = 0x02,
+	.baInterfaceNr[0] = 0x01,	/* Dynamic interface number. */
+	.baInterfaceNr[1] = 0x02,	/* Dynamic interface number. */
 };
 
 /** Audio Topology
  * SPK unit (prefix:spk_,cs_)
  *     host:spk -> USB:OUT -> IT(1) -> FU(5) -> OT(2) -> this:capture
- * MIC unit (prefix:mic_,pm_) 
- *     this:playback -> IT(3) -> FU(6) -> OT(4) -> USB:IN -> host:mic   
+ * MIC unit (prefix:mic_,pm_)
+ *     this:playback -> IT(3) -> FU(6) -> OT(4) -> USB:IN -> host:mic
  */
 #define SPK_INPUT_TERMINAL_ID	1
 #define SPK_FEATURE_UNIT_ID		2
@@ -667,13 +686,13 @@ static struct uac1_as_header_descriptor mic_as_header_desc = {
 
 DECLARE_UAC_FORMAT_TYPE_I_DISCRETE_DESC(1);
 
-static struct uac_format_type_i_discrete_descriptor_1 spk_as_type_i_desc = {         
+static struct uac_format_type_i_discrete_descriptor_1 spk_as_type_i_desc = {
        .bLength                = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
-       .bDescriptorType        = USB_DT_CS_INTERFACE,                               
+       .bDescriptorType        = USB_DT_CS_INTERFACE,
        .bDescriptorSubtype     = UAC_FORMAT_TYPE,
-       .bFormatType            = UAC_FORMAT_TYPE_I,                                 
+       .bFormatType            = UAC_FORMAT_TYPE_I,
        .bSubframeSize          = 2,
-       .bBitResolution         = 16,                                                
+       .bBitResolution         = 16,
        .bSamFreqType           = 1,
 };
 
@@ -757,14 +776,14 @@ static struct usb_descriptor_header *uacL_fs_descriptors[] = {
 	(struct usb_descriptor_header *)&mic_input_terminal_desc,
 	(struct usb_descriptor_header *)&mic_feature_unit_desc,
 	(struct usb_descriptor_header *)&mic_output_terminal_desc,
-	
+
 	(struct usb_descriptor_header *)&spk_as_intf_alt0_desc,
 	(struct usb_descriptor_header *)&spk_as_intf_alt1_desc,
 	(struct usb_descriptor_header *)&spk_as_header_desc,
 	(struct usb_descriptor_header *)&spk_as_type_i_desc,
 	(struct usb_descriptor_header *)&spk_fs_as_out_ep_desc,
 	(struct usb_descriptor_header *)&spk_as_iso_out_desc,
-	
+
 	(struct usb_descriptor_header *)&mic_as_intf_alt0_desc,
 	(struct usb_descriptor_header *)&mic_as_intf_alt1_desc,
 	(struct usb_descriptor_header *)&mic_as_header_desc,
@@ -778,21 +797,21 @@ static struct usb_descriptor_header *uacL_hs_descriptors[] = {
 	(struct usb_descriptor_header *)&ac_intf_assoc_desc,
 	(struct usb_descriptor_header *)&ac_interface_desc,
 	(struct usb_descriptor_header *)&ac_header_desc2,
-	
+
 	(struct usb_descriptor_header *)&spk_input_terminal_desc,
 	(struct usb_descriptor_header *)&spk_feature_unit_desc,
 	(struct usb_descriptor_header *)&spk_output_terminal_desc,
 	(struct usb_descriptor_header *)&mic_input_terminal_desc,
 	(struct usb_descriptor_header *)&mic_feature_unit_desc,
 	(struct usb_descriptor_header *)&mic_output_terminal_desc,
-	
+
 	(struct usb_descriptor_header *)&spk_as_intf_alt0_desc,
 	(struct usb_descriptor_header *)&spk_as_intf_alt1_desc,
 	(struct usb_descriptor_header *)&spk_as_header_desc,
 	(struct usb_descriptor_header *)&spk_as_type_i_desc,
 	(struct usb_descriptor_header *)&spk_hs_as_out_ep_desc,
 	(struct usb_descriptor_header *)&spk_as_iso_out_desc,
-		
+
 	(struct usb_descriptor_header *)&mic_as_intf_alt0_desc,
 	(struct usb_descriptor_header *)&mic_as_intf_alt1_desc,
 	(struct usb_descriptor_header *)&mic_as_header_desc,
@@ -831,7 +850,7 @@ static int control_spk_mute_get(struct usb_audio_control *con, u8 cmd)
 static int control_spk_volume_set(struct usb_audio_control *con, u8 cmd, int value)
 {
 	/* value is s16 for volume */
-	int volume = (s16)value;	
+	int volume = (s16)value;
 
 	if (cmd != UAC__CUR) {
 		printk(KERN_WARNING "%s: set cmd=%d not support\n", __func__, cmd);
@@ -883,7 +902,7 @@ static int control_mic_mute_get(struct usb_audio_control *con, u8 cmd)
 static int control_mic_volume_set(struct usb_audio_control *con, u8 cmd, int value)
 {
 	/* value is s16 for volume */
-	int volume = (s16)value;	
+	int volume = (s16)value;
 
 	if (cmd != UAC__CUR) {
 		printk(KERN_WARNING "%s: set cmd=%d not support\n", __func__, cmd);
@@ -959,7 +978,7 @@ static struct usb_audio_control_selector mic_feature_unit = {
 
 
 static int control_selector_init(struct audio_dev *agdev)
-{	
+{
 	struct snd_uacL_chip *uacLc = &agdev->uacLc;
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
@@ -1070,6 +1089,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 	ac_interface_desc.bInterfaceNumber = ret;
 	agdev->ac_intf = ret;
+	ac_intf_assoc_desc.bFirstInterface = ret;
 	agdev->ac_alt = 0;
 
 	ret = usb_interface_id(cfg, fn);
@@ -1079,6 +1099,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 	spk_as_intf_alt0_desc.bInterfaceNumber = ret;
 	spk_as_intf_alt1_desc.bInterfaceNumber = ret;
+	ac_header_desc2.baInterfaceNr[0] = ret;
 	agdev->as_out_intf = ret;
 	agdev->as_out_alt = 0;
 
@@ -1089,6 +1110,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 	mic_as_intf_alt0_desc.bInterfaceNumber = ret;
 	mic_as_intf_alt1_desc.bInterfaceNumber = ret;
+	ac_header_desc2.baInterfaceNr[1] = ret;
 	agdev->as_in_intf = ret;
 	agdev->as_in_alt = 0;
 
@@ -1208,7 +1230,6 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 	struct device *dev = &uacLc->pdev.dev;
 	struct usb_request *req;
 	struct usb_ep *ep;
-	struct usb_endpoint_descriptor *desc;
 	struct uacL_rtd_params *prm;
 	int i;
 
@@ -1234,7 +1255,6 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 		ep = agdev->out_ep;
 		prm = &uacLc->cs_prm;
 		config_ep_by_speed(gadget, fn, ep);
-		//desc = (gadget_is_dualspeed(gadget)) ? &spk_hs_as_out_ep_desc : &spk_fs_as_out_ep_desc;
 		agdev->as_out_alt = alt;
 #ifdef CONFIG_USB_G_UAC_LEAF_USER
 		uacLU_update_spk_intf(alt);
@@ -1242,8 +1262,7 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 	} else if (intf == agdev->as_in_intf) {
 		ep = agdev->in_ep;
 		prm = &uacLc->pm_prm;
-		config_ep_by_speed(gadget, fn, ep); 
-		//desc = (gadget_is_dualspeed(gadget)) ? &mic_hs_as_in_ep_desc : &mic_fs_as_in_ep_desc;
+		config_ep_by_speed(gadget, fn, ep);
 		agdev->as_in_alt = alt;
 #ifdef CONFIG_USB_G_UAC_LEAF_USER
 		uacLU_update_mic_intf(alt);
@@ -1535,6 +1554,59 @@ static int audio_bind_config(struct usb_configuration *cfg)
 	return res;
 }
 
+static int audio_composite_bind_config(struct usb_configuration *cfg,
+		struct audio_dual_config *config)
+{
+	int res;
+
+	pr_trace("%s:%d\n", __func__, __LINE__);
+
+	agdev_g = kzalloc(sizeof *agdev_g, GFP_KERNEL);
+	if (agdev_g == NULL) {
+		printk(KERN_ERR "Unable to allocate audio gadget\n");
+		return -ENOMEM;
+	}
+
+	uac_leaf_config = config;
+
+	/* Update the strings. */
+	if (strlen(config->iad_string) > 0)
+		strings_fn[STR_ASSOC].s = config->iad_string;
+	if (strlen(config->audio_out_stream_string) > 0)
+		strings_fn[STR_AS_OUT_ALT1].s = config->audio_out_stream_string;
+	if (strlen(config->audio_in_stream_string) > 0)
+		strings_fn[STR_AS_IN_ALT1].s = config->audio_in_stream_string;
+
+	if (strings_fn[STR_ASSOC].id == 0) {
+		res = usb_string_ids_tab(cfg->cdev, strings_fn);
+		if (res) {
+			kfree(agdev_g);
+			return res;
+		}
+		ac_intf_assoc_desc.iFunction = strings_fn[STR_ASSOC].id;
+		spk_as_intf_alt1_desc.iInterface = strings_fn[STR_AS_OUT_ALT1].id;
+		mic_as_intf_alt1_desc.iInterface = strings_fn[STR_AS_IN_ALT1].id;
+	}
+
+	agdev_g->func.name = "uacL_func";
+	agdev_g->func.strings = fn_strings;
+	agdev_g->func.bind = afunc_bind;
+	agdev_g->func.unbind = afunc_unbind;
+	agdev_g->func.set_alt = afunc_set_alt;
+	agdev_g->func.get_alt = afunc_get_alt;
+	agdev_g->func.disable = afunc_disable;
+	agdev_g->func.setup = afunc_setup;
+
+	res = usb_add_function(cfg, &agdev_g->func);
+	if (res < 0)
+		kfree(agdev_g);
+
+#ifdef CONFIG_USB_G_UAC_LEAF_USER
+	uacLU_bind();
+#endif
+	return res;
+}
+
 static void
 audio_unbind_config(struct usb_configuration *cfg)
 {
@@ -1542,6 +1614,8 @@ audio_unbind_config(struct usb_configuration *cfg)
 #ifdef CONFIG_USB_G_UAC_LEAF_USER
 	uacLU_unbind();
 #endif
+	strings_fn[STR_ASSOC].id = 0;
+	uac_leaf_config = NULL;
 	kfree(agdev_g);
 	agdev_g = NULL;
 }

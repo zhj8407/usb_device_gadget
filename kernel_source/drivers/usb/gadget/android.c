@@ -32,17 +32,25 @@
 
 #include "gadget_chips.h"
 
-#if 1
-#define ANDROID_AUDIO_SOURCE
-#endif
+//#define ANDROID_AUDIO_SOURCE
+//#define ANDROID_AUDIO_SINK
+#define ANDROID_AUDIO_DUAL
 
 #include "f_nvusb.c"
 #include "f_fs.c"
+
 #ifdef ANDROID_AUDIO_SOURCE
 #include "f_audio_source.c"
-#else
+#endif
+
+#ifdef ANDROID_AUDIO_SINK
 #include "f_audio_sink.c"
 #endif
+
+#ifdef ANDROID_AUDIO_DUAL
+#include "f_uac_leaf.c"
+#endif
+
 #include "f_hidg.c"
 #include "f_webcam.c"
 #include "f_mass_storage.c"
@@ -1153,8 +1161,9 @@ static struct android_usb_function audio_source_function = {
 	.attributes	= audio_source_function_attributes,
 };
 
-#else
+#endif
 
+#ifdef ANDROID_AUDIO_SINK
 static int
 audio_sink_function_init(struct android_usb_function *f,
 		struct usb_composite_dev *cdev)
@@ -1292,6 +1301,171 @@ static struct android_usb_function audio_sink_function = {
 
 #endif
 
+#ifdef ANDROID_AUDIO_DUAL
+static int
+audio_dual_function_init(struct android_usb_function *f,
+		struct usb_composite_dev *cdev)
+{
+	struct audio_dual_config *config;
+
+	config = kzalloc(sizeof(struct audio_dual_config), GFP_KERNEL);
+	if (!config)
+		return -ENOMEM;
+	config->card = -1;
+	config->device = -1;
+	config->dev = f->dev;
+	f->config = config;
+
+	return 0;
+}
+
+static void audio_dual_function_cleanup(struct android_usb_function *f)
+{
+	kfree(f->config);
+	f->config = NULL;
+}
+
+static int
+audio_dual_function_bind_config(struct android_usb_function *f,
+		struct usb_configuration *c)
+{
+	return audio_composite_bind_config(c, f->config);
+}
+
+static void
+audio_dual_function_unbind_config(struct android_usb_function *f,
+		struct usb_configuration *c)
+{
+
+	struct audio_dual_config *config = f->config;
+
+	config->card = -1;
+	config->device = -1;
+	config->dev = NULL;
+
+	audio_unbind_config(c);
+}
+
+static ssize_t audio_dual_pcm_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+
+	/* print PCM card and device numbers */
+	return sprintf(buf, "%d %d\n", config->card, config->device);
+}
+
+static DEVICE_ATTR(pcm, S_IRUGO, audio_dual_pcm_show, NULL);
+
+static ssize_t audio_dual_iad_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->iad_string);
+}
+
+static ssize_t audio_dual_iad_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	if (size >= sizeof(config->iad_string))
+		return -EINVAL;
+	return strlcpy(config->iad_string, buf, sizeof(config->iad_string));
+}
+
+static DEVICE_ATTR(iad_string, S_IRUGO | S_IWUSR,
+					audio_dual_iad_show,
+					audio_dual_iad_store);
+
+static ssize_t audio_dual_ac_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->audio_control_string);
+}
+
+static ssize_t audio_dual_ac_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	if (size >= sizeof(config->audio_control_string))
+		return -EINVAL;
+	return strlcpy(config->audio_control_string, buf, sizeof(config->audio_control_string));
+}
+
+static DEVICE_ATTR(audio_control_string, S_IRUGO | S_IWUSR,
+					audio_dual_ac_show,
+					audio_dual_ac_store);
+
+static ssize_t audio_dual_as_out_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->audio_out_stream_string);
+}
+
+static ssize_t audio_dual_as_out_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	if (size >= sizeof(config->audio_out_stream_string))
+		return -EINVAL;
+	return strlcpy(config->audio_out_stream_string, buf, sizeof(config->audio_out_stream_string));
+}
+
+static DEVICE_ATTR(audio_out_stream_string, S_IRUGO | S_IWUSR,
+					audio_dual_as_out_show,
+					audio_dual_as_out_store);
+
+static ssize_t audio_dual_as_in_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->audio_in_stream_string);
+}
+
+static ssize_t audio_dual_as_in_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	if (size >= sizeof(config->audio_in_stream_string))
+		return -EINVAL;
+	return strlcpy(config->audio_in_stream_string, buf, sizeof(config->audio_in_stream_string));
+}
+
+static DEVICE_ATTR(audio_in_stream_string, S_IRUGO | S_IWUSR,
+					audio_dual_as_in_show,
+					audio_dual_as_in_store);
+
+static struct device_attribute *audio_dual_function_attributes[] = {
+	&dev_attr_pcm,
+	&dev_attr_iad_string,
+	&dev_attr_audio_control_string,
+	&dev_attr_audio_out_stream_string,
+	&dev_attr_audio_in_stream_string,
+	NULL
+};
+
+static struct android_usb_function audio_dual_function = {
+	.name		= "audio_dual",
+	.init		= audio_dual_function_init,
+	.cleanup	= audio_dual_function_cleanup,
+	.bind_config	= audio_dual_function_bind_config,
+	.unbind_config	= audio_dual_function_unbind_config,
+	.attributes	= audio_dual_function_attributes,
+};
+
+#endif
+
 static int
 webcam_function_init(struct android_usb_function *f,
 		struct usb_composite_dev *cdev)
@@ -1353,8 +1527,12 @@ static struct android_usb_function *supported_functions[] = {
 	&hidg_function,
 #ifdef ANDROID_AUDIO_SOURCE
 	&audio_source_function,
-#else
+#endif
+#ifdef ANDROID_AUDIO_SINK
 	&audio_sink_function,
+#endif
+#ifdef ANDROID_AUDIO_DUAL
+	&audio_dual_function,
 #endif
 	&webcam_function,
 	&nvusb_function,
