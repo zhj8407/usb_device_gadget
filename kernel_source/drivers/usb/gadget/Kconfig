@@ -847,6 +847,20 @@ config USB_ANDROID_RNDIS_DWORD_ALIGNED
 	help
 		Provides dword aligned for DMA controller.
 
+config USB_G_PLCMUSB
+	tristate "Polycom USB Composite Gadget"
+	depends on SND
+	depends on VIDEO_DEV
+	select USB_LIBCOMPOSITE
+	select SND_PCM
+	select VIDEOBUF2_VMALLOC
+	help
+	  The Polycom Composite Gadget supports multiple USB
+	  functions: audio source, audio sink, audio dual,
+	  video and hid.
+	  Each function can be configured and enabled/disabled
+	  dynamically from userspace through a sysfs interface.
+
 if TTY
 
 config USB_CDC_COMPOSITE
