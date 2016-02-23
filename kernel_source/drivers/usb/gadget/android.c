@@ -48,7 +48,7 @@
 #endif
 
 #ifdef ANDROID_AUDIO_DUAL
-#include "f_uac_leaf.c"
+#include "f_uac_plcm.c"
 #endif
 
 #include "f_hidg.c"
