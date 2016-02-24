@@ -32,10 +32,18 @@ echo "Polycom, Inc." > /sys/class/plcm_usb/plcm0/iManufacturer
 echo "CX5552" > /sys/class/plcm_usb/plcm0/iProduct
 echo "BCD12345678" > /sys/class/plcm_usb/plcm0/iSerial
 
+echo "Set Audio Interface String"
 echo "Polycom CX5552 Audio" > /sys/class/plcm_usb/plcm0/f_audio_dual/iad_string
 echo "Polycom CX5552 Audio Control" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_control_string
 echo "Polycom CX5552 Speaker" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_out_stream_string
 echo "Polycom CX5552 Micphone" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_in_stream_string
+
+echo "Set Hid report"
+echo "0" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceSubClass
+echo "1" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceProtocol
+echo "8" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_length
+
+/usr/bin/python3 /root/py_parse_hid_report.py /root/keyboardHidDescriptor.txt /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_desc
 
 echo "Set function lists"
 #echo "webcam,audio_source,hidg" > /sys/class/plcm_usb/plcm0/functions
