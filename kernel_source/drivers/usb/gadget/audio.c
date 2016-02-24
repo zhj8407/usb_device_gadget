@@ -48,7 +48,7 @@ static struct usb_gadget_strings *audio_strings[] = {
 #include "f_uac2.c"
 #endif
 #endif
-#include "f_uac_leaf.c"
+#include "f_uac_plcm.c"
 /*-------------------------------------------------------------------------*/
 
 /* DO NOT REUSE THESE IDs with a protocol-incompatible driver!!  Ever!!
