@@ -231,48 +231,6 @@ static void plcm_usb_disable(struct plcm_usb_dev *dev)
 	}
 }
 
-/* hid descriptor for a keyboard */
-static struct hidg_func_descriptor my_hid_data = {
-        .subclass               = 0, /* No subclass */
-        .protocol               = 1, /* Keyboard */
-        .report_length          = 8,
-        .report_desc_length     = 63,
-        .report_desc            = {
-                0x05, 0x01,     /* USAGE_PAGE (Generic Desktop)           */
-                0x09, 0x06,     /* USAGE (Keyboard)                       */
-                0xa1, 0x01,     /* COLLECTION (Application)               */
-                0x05, 0x07,     /*   USAGE_PAGE (Keyboard)                */
-                0x19, 0xe0,     /*   USAGE_MINIMUM (Keyboard LeftControl) */
-                0x29, 0xe7,     /*   USAGE_MAXIMUM (Keyboard Right GUI)   */
-                0x15, 0x00,     /*   LOGICAL_MINIMUM (0)                  */
-                0x25, 0x01,     /*   LOGICAL_MAXIMUM (1)                  */
-                0x75, 0x01,     /*   REPORT_SIZE (1)                      */
-                0x95, 0x08,     /*   REPORT_COUNT (8)                     */
-                0x81, 0x02,     /*   INPUT (Data,Var,Abs)                 */
-                0x95, 0x01,     /*   REPORT_COUNT (1)                     */
-                0x75, 0x08,     /*   REPORT_SIZE (8)                      */
-                0x81, 0x03,     /*   INPUT (Cnst,Var,Abs)                 */
-                0x95, 0x05,     /*   REPORT_COUNT (5)                     */
-                0x75, 0x01,     /*   REPORT_SIZE (1)                      */
-                0x05, 0x08,     /*   USAGE_PAGE (LEDs)                    */
-                0x19, 0x01,     /*   USAGE_MINIMUM (Num Lock)             */
-                0x29, 0x05,     /*   USAGE_MAXIMUM (Kana)                 */
-                0x91, 0x02,     /*   OUTPUT (Data,Var,Abs)                */
-                0x95, 0x01,     /*   REPORT_COUNT (1)                     */
-                0x75, 0x03,     /*   REPORT_SIZE (3)                      */
-                0x91, 0x03,     /*   OUTPUT (Cnst,Var,Abs)                */
-                0x95, 0x06,     /*   REPORT_COUNT (6)                     */
-                0x75, 0x08,     /*   REPORT_SIZE (8)                      */
-                0x15, 0x00,     /*   LOGICAL_MINIMUM (0)                  */
-                0x25, 0x65,     /*   LOGICAL_MAXIMUM (101)                */
-                0x05, 0x07,     /*   USAGE_PAGE (Keyboard)                */
-                0x19, 0x00,     /*   USAGE_MINIMUM (Reserved)             */
-                0x29, 0x65,     /*   USAGE_MAXIMUM (Keyboard Application) */
-                0x81, 0x00,     /*   INPUT (Data,Ary,Abs)                 */
-                0xc0            /* END_COLLECTION                         */
-        }
-};
-
 static int hidg_function_init(struct plcm_usb_function *f,
 			struct usb_composite_dev *cdev)
 {
@@ -284,6 +242,8 @@ static int hidg_function_init(struct plcm_usb_function *f,
 		return -ENOMEM;
 
 	config->device = -1;
+	config->dev = f->dev;
+
 	f->config = config;
 
 	ghid_setup(NULL, 1);
@@ -302,8 +262,7 @@ static int hidg_function_bind_config(struct plcm_usb_function *f,
 {
 	struct hidg_device_config *config = f->config;
 
-	/* TODO Set the hid report descriptor */
-	return hidg_bind_config(c, config, &my_hid_data, 0);
+	return hidg_bind_config(c, config, 0);
 }
 
 static void hidg_function_unbind_config(struct plcm_usb_function *f,
@@ -326,8 +285,76 @@ static ssize_t hidg_device_show(struct device *dev,
 
 static DEVICE_ATTR(hidg_device, S_IRUGO, hidg_device_show, NULL);
 
+#define HIDG_CONFIG_ATTR(field, format_string, max_value)				\
+static ssize_t								\
+hidg_ ## field ## _show(struct device *dev, struct device_attribute *attr,	\
+		char *buf)						\
+{	struct plcm_usb_function *f = dev_get_drvdata(dev);			\
+	struct hidg_device_config *config = f->config;				\
+	return sprintf(buf, format_string, config->field);		\
+}									\
+static ssize_t								\
+hidg_ ## field ## _store(struct device *dev, struct device_attribute *attr,	\
+		const char *buf, size_t size)				\
+{									\
+	struct plcm_usb_function *f = dev_get_drvdata(dev);			\
+	struct hidg_device_config *config = f->config;				\
+	int value;							\
+	if ((sscanf(buf, format_string, &value) == 1) && 			\
+			value <= max_value) {								\
+		config->field = value;				\
+		return size;						\
+	}								\
+	return -EINVAL;							\
+}									\
+static DEVICE_ATTR(hidg_ ## field,	\
+	S_IRUGO | S_IWUSR,				\
+	hidg_ ## field ## _show,		\
+	hidg_ ## field ## _store		\
+	);
+
+static ssize_t hidg_report_desc_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct hidg_device_config *config = f->config;
+	memcpy(buf, config->report_desc, config->report_desc_length);
+
+	return config->report_desc_length;
+}
+
+static ssize_t hidg_report_desc_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct hidg_device_config *config = f->config;
+	if (size > HID_REPORT_DESC_MAX_LENGTH)
+		return -EINVAL;
+
+	memcpy(config->report_desc, buf, size);
+
+	/* Update the length of report descriptor. */
+	config->report_desc_length = size;
+
+	return size;
+}
+
+static DEVICE_ATTR(hidg_report_desc, S_IRUGO | S_IWUSR,
+					hidg_report_desc_show,
+					hidg_report_desc_store);
+
+HIDG_CONFIG_ATTR(bInterfaceSubClass, "%d\n", 255)
+HIDG_CONFIG_ATTR(bInterfaceProtocol, "%d\n", 255)
+HIDG_CONFIG_ATTR(report_length, "%d\n", 255)
+HIDG_CONFIG_ATTR(report_desc_length, "%d\n", HID_REPORT_DESC_MAX_LENGTH)
+
 static struct device_attribute *hidg_function_attributes[] = {
 	&dev_attr_hidg_device,
+	&dev_attr_hidg_bInterfaceSubClass,
+	&dev_attr_hidg_bInterfaceProtocol,
+	&dev_attr_hidg_report_length,
+	&dev_attr_hidg_report_desc_length,
+	&dev_attr_hidg_report_desc,
 	NULL
 };
 

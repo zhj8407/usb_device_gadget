@@ -24,6 +24,14 @@
 /*                            HID gadget struct                            */
 struct hidg_device_config {
 	int	device;
+	struct device *dev;
+
+	unsigned char bInterfaceSubClass;
+	unsigned char bInterfaceProtocol;
+
+	unsigned short report_length;
+	unsigned short report_desc_length;
+	unsigned char report_desc[HID_REPORT_DESC_MAX_LENGTH];
 };
 
 struct f_hidg_req_list {
@@ -695,7 +703,6 @@ static struct usb_gadget_strings *ct_func_strings[] = {
 /*                             usb_configuration                           */
 int hidg_bind_config(struct usb_configuration *c,
 			struct hidg_device_config *config,
-			struct hidg_func_descriptor *fdesc,
 			int index)
 {
 	struct f_hidg *hidg;
@@ -720,13 +727,14 @@ int hidg_bind_config(struct usb_configuration *c,
 		return -ENOMEM;
 
 	hidg->minor = index;
-	if (fdesc) {
-		hidg->bInterfaceSubClass = fdesc->subclass;
-		hidg->bInterfaceProtocol = fdesc->protocol;
-		hidg->report_length = fdesc->report_length;
-		hidg->report_desc_length = fdesc->report_desc_length;
-		hidg->report_desc = kmemdup(fdesc->report_desc,
-						fdesc->report_desc_length,
+
+	if (config) {
+		hidg->bInterfaceSubClass = config->bInterfaceSubClass;
+		hidg->bInterfaceProtocol = config->bInterfaceProtocol;
+		hidg->report_length = config->report_length;
+		hidg->report_desc_length = config->report_desc_length;
+		hidg->report_desc = kmemdup(config->report_desc,
+						config->report_desc_length,
 						GFP_KERNEL);
 		if (!hidg->report_desc) {
 			kfree(hidg);
