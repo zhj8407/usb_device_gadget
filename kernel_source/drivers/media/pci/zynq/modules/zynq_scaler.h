@@ -12,53 +12,53 @@ typedef short scaler_coef_row_t[SCALER_COEF_DATA_COL_NUM];
 
 
 typedef enum scaler_option_flags {
-	SCALER_OPTION_RESET = 1,
-	SCALER_OPTION_SET_IN_SIZE = 2,
-	SCALER_OPTION_SET_OUT_SIZE = 3,
-	 SCALER_OPTION_SET_CROP = 4,
-	 SCALER_OPTION_SET_NUM_PHASES = 5,
-	 SCALER_OPTION_SET_COEF_DATA = 6,
-	 SCALER_OPTION_SET_SHRINK_FACTOR = 7,
-	 SCALER_OPTION_UPDATE_CHANGE = 8,
-	 SCALER_OPTION_COEF_READ_ENABLE = 9,
-	 SCALER_OPTION_ENABLE = 10
+    SCALER_OPTION_RESET = 1,
+    SCALER_OPTION_SET_IN_SIZE = 2,
+    SCALER_OPTION_SET_OUT_SIZE = 3,
+    SCALER_OPTION_SET_CROP = 4,
+    SCALER_OPTION_SET_NUM_PHASES = 5,
+    SCALER_OPTION_SET_COEF_DATA = 6,
+    SCALER_OPTION_SET_SHRINK_FACTOR = 7,
+    SCALER_OPTION_UPDATE_CHANGE = 8,
+    SCALER_OPTION_COEF_READ_ENABLE = 9,
+    SCALER_OPTION_ENABLE = 10
 } EScalerOptionFlags;
 
 typedef struct {
-	unsigned int width;
-	unsigned int height;
+    unsigned int width;
+    unsigned int height;
 } scaler_size_t;
 
 typedef struct {
-	unsigned int start_x;
-	unsigned int start_y;
-	unsigned int width;
-	unsigned int height;
+    unsigned int start_x;
+    unsigned int start_y;
+    unsigned int width;
+    unsigned int height;
 } scaler_crop_area_t;
 
 typedef struct {
-	unsigned int num_h_phases;
-	unsigned int num_v_phases;
+    unsigned int num_h_phases;
+    unsigned int num_v_phases;
 } scaler_num_phases_t;
 
 
 typedef struct {
-	scaler_coef_row_t *coef_data;
+    scaler_coef_row_t *coef_data;
 } scaler_coef_data_t;
 
 typedef struct {
-	unsigned int hsf;
-	unsigned int vsf;
+    unsigned int hsf;
+    unsigned int vsf;
 } scaler_shrink_factor_t;
 
-typedef struct{
-	unsigned char value;
+typedef struct {
+    unsigned char value;
 } scaler_enable_t;
 
-typedef struct{
-	u8 is_initialized;
-	u8 is_started;
-}scaler_status_t;
+typedef struct {
+    u8 is_initialized;
+    u8 is_started;
+} scaler_status_t;
 
 int scaler_initial(void __iomem *pci_base_addr);
 

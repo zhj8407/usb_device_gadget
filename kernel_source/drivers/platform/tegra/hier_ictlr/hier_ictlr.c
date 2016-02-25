@@ -40,6 +40,7 @@
 #define MSELECT_TIMEOUT_TIMER_0                                     0x5c
 #define MSELECT_ERROR_STATUS_0                                      0x60
 #define MSELECT_DEFAULT_TIMEOUT                                 0xFFFFFF
+#define MSELECT_ERROR_STATUS_CLEAR	0x3FF
 
 static irqreturn_t tegra_hier_ictlr_irq_handler(int irq, void *data)
 {
@@ -126,6 +127,9 @@ static int tegra_hier_ictlr_mselect_init(struct platform_device *pdev,
 
 	tegra_hier_ictlr_set_mselect_timeout(ictlr, MSELECT_DEFAULT_TIMEOUT);
 
+	/*clear error status register */
+	writel(MSELECT_ERROR_STATUS_CLEAR, ictlr->mselect_base + MSELECT_ERROR_STATUS_0);
+
 	reg = readl(ictlr->mselect_base + MSELECT_CONFIG_0);
 	writel(reg |
 		((1 << MSELECT_CONFIG_0_READ_TIMEOUT_EN_SLAVE0_SHIFT)  |
@@ -160,6 +164,8 @@ static int tegra_hier_ictlr_probe(struct platform_device *pdev)
 	if (!ictlr)
 		return -ENOMEM;
 
+	dev_set_drvdata(&pdev->dev, ictlr);
+
 	ret = tegra_hier_ictlr_map_memory(pdev, ictlr);
 	if (ret)
 		return ret;
@@ -176,7 +182,6 @@ static int tegra_hier_ictlr_probe(struct platform_device *pdev)
 
 	dev_notice(&pdev->dev, "probed\n");
 
-	dev_set_drvdata(&pdev->dev, ictlr);
 	return 0;
 }
 

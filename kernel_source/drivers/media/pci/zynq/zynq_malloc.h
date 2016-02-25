@@ -17,12 +17,13 @@
 #include <linux/dma-mapping.h>
 
 struct zynq_malloc_conf {
-	unsigned int is_always_get_first_memory; //0: increase getting, 1: always get the first memory
-	void *pool_start_address;
-	unsigned int pool_size;
+    unsigned int is_always_get_first_memory; //0: increase getting, 1: always get the first memory
+    void *pool_start_address;
+    unsigned int pool_size;
+	u32  phy_pool_start_address;
 };
 
-typedef struct zynq_malloc_conf  zynq_malloc_conf_t; 
+typedef struct zynq_malloc_conf  zynq_malloc_conf_t;
 
 extern const struct vb2_mem_ops zynq_malloc_memops;
 

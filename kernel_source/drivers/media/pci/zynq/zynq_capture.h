@@ -4,10 +4,10 @@
 #include "zynq_core.h"
 
 struct vpif_cap_device {
-	struct v4l2_device v4l2_dev;
-	struct channel_obj *dev[VPIF_CAPTURE_NUM_CHANNELS];
-	struct v4l2_subdev **sd;
-	struct v4l2_subdev **sd_of_sd;
+    struct v4l2_device v4l2_dev;
+    struct channel_obj *dev[VPIF_CAPTURE_NUM_CHANNELS];
+    struct v4l2_subdev **sd;
+    struct v4l2_subdev **sd_of_sd;
 };
 
 struct vpif_cap_device * vpif_capture_get_instnace(void);

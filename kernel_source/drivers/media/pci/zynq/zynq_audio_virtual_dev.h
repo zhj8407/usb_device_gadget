@@ -9,35 +9,34 @@
 extern struct snd_pcm_hardware minivosc_pcm_playback_hw;
 extern struct snd_pcm_hardware minivosc_pcm_capture_hw;
 
-struct minivosc_device
-{
-	const struct minivosc_pcm_ops *timer_ops;
-	/*
-	* we have only one substream, so all data in this struct
-	*/
-	/* copied from struct loopback: */
-	struct mutex cable_lock;
-	/* copied from struct loopback_cable: */
-	/* PCM parameters */
-	unsigned int pcm_period_size;
-	unsigned int pcm_bps;		/* bytes per second */
-	/* flags */
-	unsigned int valid;
-	unsigned int running;
-	unsigned int period_update_pending :1;
-	/* timer stuff */
-	unsigned int irq_pos;		/* fractional IRQ position */
-	unsigned int period_size_frac;
-	unsigned long last_jiffies;
-	struct timer_list timer;
-	/* copied from struct loopback_pcm: */
-	struct snd_pcm_substream *substream;
-	unsigned int pcm_buffer_size;
-	unsigned int buf_pos;	/* position in buffer */
-	unsigned long ms;
-	const char *pcm_buffer;
-	unsigned int pcm_buffer_offset;
-	unsigned int pcm_buffer_size1;
+struct minivosc_device {
+    const struct minivosc_pcm_ops *timer_ops;
+    /*
+    * we have only one substream, so all data in this struct
+    */
+    /* copied from struct loopback: */
+    struct mutex cable_lock;
+    /* copied from struct loopback_cable: */
+    /* PCM parameters */
+    unsigned int pcm_period_size;
+    unsigned int pcm_bps;		/* bytes per second */
+    /* flags */
+    unsigned int valid;
+    unsigned int running;
+    unsigned int period_update_pending :1;
+    /* timer stuff */
+    unsigned int irq_pos;		/* fractional IRQ position */
+    unsigned int period_size_frac;
+    unsigned long last_jiffies;
+    struct timer_list timer;
+    /* copied from struct loopback_pcm: */
+    struct snd_pcm_substream *substream;
+    unsigned int pcm_buffer_size;
+    unsigned int buf_pos;	/* position in buffer */
+    unsigned long ms;
+    const char *pcm_buffer;
+    unsigned int pcm_buffer_offset;
+    unsigned int pcm_buffer_size1;
 };
 
 int minivosc_init(struct minivosc_device **phandle);

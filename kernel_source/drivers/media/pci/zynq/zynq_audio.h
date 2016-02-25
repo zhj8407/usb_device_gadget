@@ -3,8 +3,8 @@
 #include <linux/pci.h>
 
 typedef struct {
-	void **data;
-	unsigned int data_len;
+    void **data;
+    unsigned int data_len;
 } zynq_audio_card_info_t;
 
 int zynq_audio_init (struct pci_dev *pdev);

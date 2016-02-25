@@ -230,10 +230,13 @@ static int adv7511_rd(struct v4l2_subdev *sd, u8 reg)
 	return adv_smbus_read_byte_data(client, reg);
 }
 
+#define I2C_RETRY_DELAY		5
+#define I2C_RETRIES		5
 static int adv7511_wr(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	int ret;
+	int ret = -1;
+#if 0	
 	int i;
 
 	for (i = 0; i < 3; i++) {
@@ -242,6 +245,26 @@ static int adv7511_wr(struct v4l2_subdev *sd, u8 reg, u8 val)
 			return 0;
 	}
 	v4l2_err(sd, "%s: i2c write error\n", __func__);
+#endif
+	{
+		struct i2c_msg msg;
+		unsigned char data[2] = { reg, val};
+		int err = -1;
+		int tries = 0;
+		
+		msg.addr = client->addr;
+		msg.flags = 0;
+		msg.len = 2;
+		msg.buf = data;
+	
+		do {
+        	err = i2c_transfer(client->adapter, &msg, 1);
+       	 if (err != 1)
+            msleep_interruptible(I2C_RETRY_DELAY);
+    	} while ((err != 1) && (++tries < I2C_RETRIES));
+		
+			if (err ==1) ret = 0;
+	}
 	return ret;
 }
 
@@ -706,6 +729,9 @@ static const struct v4l2_subdev_core_ops adv7511_core_ops = {
 #endif
 	.s_power = adv7511_s_power,
 	.interrupt_service_routine = adv7511_isr,
+		.g_ctrl = v4l2_subdev_g_ctrl,
+	.s_ctrl = v4l2_subdev_s_ctrl,
+	.queryctrl = v4l2_subdev_queryctrl,
 };
 
 /* ------------------------------ VIDEO OPS ------------------------------ */
@@ -1446,7 +1472,7 @@ static void adv7511_core_init(struct v4l2_subdev *sd,  unsigned int i2c_dev_addr
 	v4l2_info(sd, "Chip ID High Byte Chip ID High Byte (should be 0x75):0x%02x\n", adv7511_rd(sd, 0xf5));
 	v4l2_info(sd, "Chip ID Low Byte Chip  ID Low Byte  (shoudl be 0x11):0x%02x\n", adv7511_rd(sd, 0xf6));
 #endif	
-	adv7511_delay(1);
+//	adv7511_delay(1);
 	adv7511_wr(sd, 0x41, 0x50);//Power down the txr
 	adv7511_wr(sd, 0x41, 0x10);//Power Up the txr.
 	
@@ -1474,10 +1500,10 @@ static void adv7511_core_init(struct v4l2_subdev *sd,  unsigned int i2c_dev_addr
 	
 	adv7511_wr(sd, 0x15,  0x01); //Input ID = 1( Formatt 4:2:2 Seperate synchs)
 
-	adv7511_wr(sd, 0x16, 0x34); //Color Depth = 8 bit, Input Style=style 2
-
+	//adv7511_wr(sd, 0x16, 0x34); //Ouput format:4:4:4,  Depth = 8 bit, Input Style=style 2
+	adv7511_wr(sd, 0x16, 0xb4); //Output Format: 4:2:2, Color Depth = 8 bit, Input Style=style 2
 	adv7511_wr(sd, 0x17,  0x02);//I/P Aspect ratio 16:9
-	
+#if 0	
 	adv7511_wr(sd, 0x18,  0xe7);//CSC ENabled
 	adv7511_wr(sd, 0x19,  0x34);
 	adv7511_wr(sd, 0x1a,  0x04);
@@ -1486,9 +1512,9 @@ static void adv7511_core_init(struct v4l2_subdev *sd,  unsigned int i2c_dev_addr
 	adv7511_wr(sd, 0x1d, 0x00);
 	adv7511_wr(sd, 0x1e, 0x1c);
 	adv7511_wr(sd, 0x1f, 0x1b);
-	v4l2_info(sd, "[adv7511](%d)>>>>>>>>>>>>>>>>>>>>>>>>>\n",__LINE__);
+	v4l2_info(sd, "[adv7511](%d)>>>>>>>>>>>>>>>>>>>>>>>>>xxxx\n",__LINE__);
 	if (adv7511_rd(sd, 0x20) != 0x1d) adv7511_wr(sd, 0x20, 0x1d);
-	v4l2_info(sd, "[adv7511](%d)>>>>>>>>>>>>>>>>>>>>>>>>>\n",__LINE__);
+	v4l2_info(sd, "[adv7511](%d)>>>>>>>>>>>>>>>>>>>>>>>>>xxxx\n",__LINE__);
 	adv7511_wr(sd, 0x21, 0xdc);
 	adv7511_wr(sd,  0x22, 0x04);
 	adv7511_wr(sd,  0x23, 0xad);
@@ -1504,13 +1530,48 @@ static void adv7511_core_init(struct v4l2_subdev *sd,  unsigned int i2c_dev_addr
 	adv7511_wr(sd,  0x2d, 0x7c);
 	adv7511_wr(sd,  0x2e, 0x1b);
 	adv7511_wr(sd,  0x2f, 0x77);
+#endif
+#if 0
+	adv7511_wr(sd, 0x18,  0xac);//CSC ENabled
+	adv7511_wr(sd, 0x19,  0x53);
+	adv7511_wr(sd, 0x1a,  0x08);
+	adv7511_wr(sd, 0x1b, 0x00);
+	adv7511_wr(sd, 0x1c, 0x00);
+	adv7511_wr(sd, 0x1d, 0x00);
+	adv7511_wr(sd, 0x1e, 0x19);
+	adv7511_wr(sd, 0x1f, 0xd6);
 	
+	v4l2_info(sd, "[adv7511](%d)jefffffffffffffffffffff\n",__LINE__);
+	adv7511_wr(sd, 0x20, 0x1c);
+	v4l2_info(sd, "[adv7511](%d)jeffffffffffffffffffffff\n",__LINE__);
+	adv7511_wr(sd, 0x21, 0x56);
+	adv7511_wr(sd,  0x22, 0x08);
+	adv7511_wr(sd,  0x23, 0x00);
+	adv7511_wr(sd,  0x24, 0x1e);
+	adv7511_wr(sd,  0x25, 0x88);
+	adv7511_wr(sd,  0x26, 0x02);
+	adv7511_wr(sd,  0x27, 0x91);
+	
+	adv7511_wr(sd,  0x28, 0x1f);
+	adv7511_wr(sd,  0x29, 0xff);
+	adv7511_wr(sd,  0x2a, 0x08);
+	adv7511_wr(sd,  0x2b, 0x00);
+	adv7511_wr(sd,  0x2c, 0x0e);
+	adv7511_wr(sd,  0x2d, 0x85);
+	adv7511_wr(sd,  0x2e, 0x18);
+	adv7511_wr(sd,  0x2f, 0xbe);
+#endif	
+
+
 	adv7511_wr(sd,  0x56, 0x28); //16:9 Aspect ratio to out put
 	adv7511_wr(sd,  0xaf, 0x06); //HDMI Mode
 	adv7511_wr(sd,  0x40, 0x80); // Packet Enabled
-	adv7511_wr(sd,  0x4c, 0x04); //Color depth  24
-	adv7511_wr(sd,  0x55, 0x00); //Format RGB formatt, Scan Information:no data
-	
+	//NOTE:0x4c is RO. It should not be written!!
+	//adv7511_wr(sd,  0x4c, 0x04); //Color depth  24.
+	//adv7511_wr(sd,  0x55, 0x00); //Format RGB formatt, Scan Information:no data
+	v4l2_info(sd, "[adv7511](%d)hello1234\n",__LINE__);
+	adv7511_wr(sd,  0x55, 0x20); //Format YUV422, Scan Information:no data
+	v4l2_info(sd, "[adv7511](%d)hello1234\n",__LINE__);
 	
 	v4l2_info(sd, "Leave adv7511_core_init().\n");
 	return;

@@ -1032,7 +1032,7 @@ static int adv761x_probe(struct i2c_client *client,
 	//NOTE: When setting the reg 0xff, there will be writing error. 
 	//io_write(sd, 0xff, 0x80);// I2C reset
 
-	adv761x_delay(1);
+	//adv761x_delay(1);
 	state->i2c_cec = adv761x_dummy_client(sd, pdata->i2c_cec, 0x40, 0xf4);
 	state->i2c_inf = adv761x_dummy_client(sd, pdata->i2c_inf, 0x3e, 0xf5);
 	state->i2c_dpll = adv761x_dummy_client(sd, pdata->i2c_dpll, 0x26, 0xf8);

@@ -3,33 +3,33 @@
 #include <linux/io.h>
 
 typedef enum vselector_option_flags {
-	VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE = 1,
-	VSELECTOR_OPTION_ENABLE = 2,
-	VSELECTOR_OPTION_SET_VOUT0_FULL_SRC = 3,
-	VSELECTOR_OPTION_SET_VOUT1_FULL_SRC = 4,
-	VSELECTOR_OPTION_SET_VOUT0_1_16_SRC = 5,
-	VSELECTOR_OPTION_SET_VOUT1_1_16_SRC = 6,
+    VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE = 1,
+    VSELECTOR_OPTION_ENABLE = 2,
+    VSELECTOR_OPTION_SET_VOUT0_FULL_SRC = 3,
+    VSELECTOR_OPTION_SET_VOUT1_FULL_SRC = 4,
+    VSELECTOR_OPTION_SET_VOUT0_1_16_SRC = 5,
+    VSELECTOR_OPTION_SET_VOUT1_1_16_SRC = 6,
 } EVSelectorOptionFlags;
 
 typedef struct {
-	unsigned int width;
-	unsigned int height;
+    unsigned int width;
+    unsigned int height;
 } vselector_vout_frame_size_t;
 
 typedef struct {
-	unsigned char  vin0;
-	unsigned char vin1;
-	unsigned char vin2;
-	unsigned char cpu;
+    unsigned char  vin0;
+    unsigned char vin1;
+    unsigned char vin2;
+    unsigned char cpu;
 } vselector_source_t;
 
-typedef struct{
-	unsigned char value;
+typedef struct {
+    unsigned char value;
 } vselector_enable_t;
 
-typedef struct{
-	u8 is_initialized;
-	u8 is_started;
+typedef struct {
+    u8 is_initialized;
+    u8 is_started;
 } vselector_status_t;
 
 int vselector_initial(void __iomem *pci_base_addr);

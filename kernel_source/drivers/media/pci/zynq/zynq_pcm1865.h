@@ -10,8 +10,8 @@
 #define PCM1865_LOW_POWER_CONF2_PAGE 0xfd
 
 struct pcm1865_platform_data {
-	unsigned int id;
-	unsigned int mode; //0:slave mode, 1:master mode
+    unsigned int id;
+    unsigned int mode; //0:slave mode, 1:master mode
 };
 
 int  pcm1865_write(struct i2c_client *i2c, unsigned int reg, unsigned int val, unsigned int *cur_page_ptr, unsigned int new_page);

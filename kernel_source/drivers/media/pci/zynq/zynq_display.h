@@ -20,9 +20,9 @@
 
 /* vpif device structure */
 struct vpif_disp_device {
-	struct v4l2_device v4l2_dev;
-	struct channel_obj *dev[VPIF_DISPLAY_NUM_CHANNELS];
-	struct v4l2_subdev **sd;
+    struct v4l2_device v4l2_dev;
+    struct channel_obj *dev[VPIF_DISPLAY_NUM_CHANNELS];
+    struct v4l2_subdev **sd;
 
 };
 

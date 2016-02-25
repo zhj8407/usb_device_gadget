@@ -5,9 +5,9 @@ extern  unsigned int debug_print;
 
 #define zynq_printk(level, fmt, arg...)\
 	do { if (debug_print >= level)\
-		printk(KERN_DEBUG "[zynq]" fmt, ## arg);\
+		printk(KERN_INFO "[zynq]" fmt, ## arg);\
 	} while (0)
 
-void zynq_print_string(char *str);	
-	
+void zynq_print_string(char *str);
+
 #endif

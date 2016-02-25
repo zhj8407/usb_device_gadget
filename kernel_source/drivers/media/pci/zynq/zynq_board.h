@@ -30,7 +30,7 @@
 
 #define SUBDEV_CH0		"adv7611-0"
 #define SUBDEV_CH1		"adv7611-1"
-#define SUBDEV_CH2		M10MO_ID 
+#define SUBDEV_CH2		M10MO_ID
 #define SUBDEV_CH3 	"adv7511-0"
 #define SUBDEV_CH4		"adv7511-1"
 #define SUBDEV_CH5 	TC358746A_ID
@@ -40,10 +40,9 @@
 #define ADV7511_I2C_ID_NAME "adv7511"
 #define TC358746A_I2C_ID_NAME "tc358746"
 
-struct i2c_bus_adapter
-{
-	unsigned int bus_num;
-	struct i2c_adapter *i2c_adap;
+struct i2c_bus_adapter {
+    unsigned int bus_num;
+    struct i2c_adapter *i2c_adap;
 };
 void zynq_setup_i2c_adapter(void) ;
 struct i2c_adapter *zynq_get_i2c_adapter_by_bus_num(unsigned int  bus_num);

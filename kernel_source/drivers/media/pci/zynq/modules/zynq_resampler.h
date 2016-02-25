@@ -1,4 +1,4 @@
-#ifndef ZYNQ_RESAMPLER_H 
+#ifndef ZYNQ_RESAMPLER_H
 #define ZYNQ_RESAMPLER_H
 
 #include <linux/io.h>
@@ -6,26 +6,26 @@
 #define RESAMPLER_MAX_NUM 5
 
 typedef enum resampler_option_flags {
-	RESAMPLER_OPTION_RESET = 1,
-	RESAMPLER_OPTION_UPDATE_CHANGE = 2,
-	RESAMPLER_OPTION_BYPASS_ENABLE = 3,
-	RESAMPLER_OPTION_ENABLE = 4,
-	RESAMPLER_OPTION_SET_ACTIVE_SIZE = 5
+    RESAMPLER_OPTION_RESET = 1,
+    RESAMPLER_OPTION_UPDATE_CHANGE = 2,
+    RESAMPLER_OPTION_BYPASS_ENABLE = 3,
+    RESAMPLER_OPTION_ENABLE = 4,
+    RESAMPLER_OPTION_SET_ACTIVE_SIZE = 5
 } EResamplerOptionFlags;
 
 typedef struct {
-	unsigned int width;
-	unsigned int height;
+    unsigned int width;
+    unsigned int height;
 } resampler_size_t;
 
-typedef struct{
-	unsigned char value;
+typedef struct {
+    unsigned char value;
 } resampler_enable_t;
 
-typedef struct{
-	u8 is_initialized;
-	u8 is_started;
-}resampler_status_t;
+typedef struct {
+    u8 is_initialized;
+    u8 is_started;
+} resampler_status_t;
 
 int resampler_initial(void __iomem *pci_base_addr);
 

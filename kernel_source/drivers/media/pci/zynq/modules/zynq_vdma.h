@@ -5,26 +5,26 @@
 #define VDMA_MAX_NUM 4
 
 typedef enum vdma_option_flags {
-	VDMA_OPTION_RESET = 1,
-	VDMA_OPTION_UPDATE_CHANGE = 2,
-	VDMA_OPTION_ENABLE = 3,
-	VDMA_OPTION_SET_IN_SIZE  =4
+    VDMA_OPTION_RESET = 1,
+    VDMA_OPTION_UPDATE_CHANGE = 2,
+    VDMA_OPTION_ENABLE = 3,
+    VDMA_OPTION_SET_IN_SIZE  =4
 } EVDMAOptionFlags;
 
 
 typedef struct {
-	unsigned int width;
-	unsigned int height;
+    unsigned int width;
+    unsigned int height;
 } vdma_size_t;
 
 
-typedef struct{
-	unsigned char value;
+typedef struct {
+    unsigned char value;
 } vdma_enable_t;
 
-typedef struct{
-	u8 is_initialized;
-	u8 is_started;
+typedef struct {
+    u8 is_initialized;
+    u8 is_started;
 } vdma_status_t;
 
 int vdma_initial(void __iomem *pci_base_addr);

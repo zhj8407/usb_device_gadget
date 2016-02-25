@@ -5,7 +5,7 @@
 #include <media/v4l2-device.h>
 
 struct vpif_control_device {
-	struct v4l2_device v4l2_dev;
+    struct v4l2_device v4l2_dev;
 };
 
 struct vpif_control_device * vpif_control_get_instnace(void);

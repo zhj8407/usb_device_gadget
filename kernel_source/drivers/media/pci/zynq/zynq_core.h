@@ -40,12 +40,12 @@ extern u32 zynq_video_input_window_len;
 /* Functions for bit Manipulation */
 static inline void vpif_set_bit(u32 reg, u32 bit)
 {
-	regw((regr(reg)) | (0x01 << bit), reg);
+    regw((regr(reg)) | (0x01 << bit), reg);
 }
 
 static inline void vpif_clr_bit(u32 reg, u32 bit)
 {
-	regw(((regr(reg)) & ~(0x01 << bit)), reg);
+    regw(((regr(reg)) & ~(0x01 << bit)), reg);
 }
 
 /* Macro for Generating mask */
@@ -61,7 +61,7 @@ extern u8 irq_vpif_capture_channel[VPIF_NUM_CHANNELS];
 ///////////////////////////////////////////////////////////////////////////////
 
 /*
- 
+
  void fpga_reg_write(void __iomem *base, u32 reg, u32 val);
 u32 fpga_reg_read(void __iomem *base, u32  reg);
 void fpga_reg_rmw(void __iomem *base, u32 reg, u32 clr_bits, u32 set_bits);
@@ -70,107 +70,115 @@ void fpga_reg_rmw_set(void __iomem *base, u32 reg, u32 val);
  */
 
 
-static inline void enable_channel0_video(int enable) {
+static inline void enable_channel0_video(int enable)
+{
 
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
-	} else {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO0_READY_MASK);
-	}
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
+    } else {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO0_READY_MASK);
+    }
 }
 
-static inline void enable_channel1_video(int enable) {
+static inline void enable_channel1_video(int enable)
+{
 
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
-	} else {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO1_READY_MASK);
-	}
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
+    } else {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO1_READY_MASK);
+    }
 
 }
 
-static inline void enable_channel2_video(int enable) {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
-	} else {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO2_READY_MASK);
-	}
+static inline void enable_channel2_video(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
+    } else {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO2_READY_MASK);
+    }
 }
 
 
-static inline void enable_channel3_video(int enable) {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
-	} else {
-		fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO3_READY_MASK);
-	}
-	
+static inline void enable_channel3_video(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
+    } else {
+        fpga_reg_write(base, FPGA_VIDEO_READY_REG, FPGA_VIDEO3_READY_MASK);
+    }
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void enable_channel0_intr(int enable) {
+static inline void enable_channel0_intr(int enable)
+{
 
-	void __iomem *base =   zynq_reg_base;
+    void __iomem *base =   zynq_reg_base;
 //	fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_MASK);
-	if (enable == 0) {
-	//	fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO0_INTERRUPT_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO0_INTERRUPT_MASK | FPGA_VIDEO0_INTERRUPT_ST_MASK);
-	}
-	return;
+    if (enable == 0) {
+        //	fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO0_INTERRUPT_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO0_INTERRUPT_MASK | FPGA_VIDEO0_INTERRUPT_ST_MASK);
+    }
+    return;
 }
 
 
-static inline void enable_channel1_intr(int enable) {
+static inline void enable_channel1_intr(int enable)
+{
 
-	void __iomem *base =   zynq_reg_base;
-	//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_MASK);
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO1_INTERRUPT_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO1_INTERRUPT_MASK | FPGA_VIDEO1_INTERRUPT_ST_MASK);
-	}
-	return;
-	
+    void __iomem *base =   zynq_reg_base;
+    //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_MASK);
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO1_INTERRUPT_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO1_INTERRUPT_MASK | FPGA_VIDEO1_INTERRUPT_ST_MASK);
+    }
+    return;
+
 }
 
-static inline void enable_channel2_intr(int enable) {
-	
-	void __iomem *base =   zynq_reg_base;
-	//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_MASK);
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO2_INTERRUPT_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO2_INTERRUPT_MASK | FPGA_VIDEO2_INTERRUPT_ST_MASK);
-	}
-	return;
+static inline void enable_channel2_intr(int enable)
+{
+
+    void __iomem *base =   zynq_reg_base;
+    //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_MASK);
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO2_INTERRUPT_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO2_INTERRUPT_MASK | FPGA_VIDEO2_INTERRUPT_ST_MASK);
+    }
+    return;
 }
 
 
-static inline void enable_channel3_intr(int enable) {
+static inline void enable_channel3_intr(int enable)
+{
 
-	void __iomem *base =   zynq_reg_base;
-	//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_MASK);
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO3_INTERRUPT_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_ST_MASK);
-		fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO3_INTERRUPT_MASK | FPGA_VIDEO3_INTERRUPT_ST_MASK);
-	}
-	return;
-	
+    void __iomem *base =   zynq_reg_base;
+    //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_MASK);
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO3_INTERRUPT_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_ST_MASK);
+        fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO3_INTERRUPT_MASK | FPGA_VIDEO3_INTERRUPT_ST_MASK);
+    }
+    return;
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -178,121 +186,126 @@ static inline void enable_channel3_intr(int enable) {
 /* inline function to enable/disable channel0 */
 static inline void enable_channel0(int enable)
 {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
-		fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
-	}
-	return;
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
+        fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO0_PCI_PUSH_READY_MASK);
+    }
+    return;
 }
 
 /* inline function to enable/disable channel1 */
 static inline void enable_channel1(int enable)
 {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
-		fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
-	}
-	return;
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
+        fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO1_PCI_PUSH_READY_MASK);
+    }
+    return;
 }
 
 /* inline function to enable/disable channel2 */
 static inline void enable_channel2(int enable)
 {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
-		fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
-	}
-	return;
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
+        fpga_reg_write(base,  FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO2_PCI_PUSH_READY_MASK);
+    }
+    return;
 }
 
 /* inline function to enable/disable channel3 */
 static inline void enable_channel3(int enable)
 {
-	void __iomem *base =   zynq_reg_base;
-	if (enable == 0) {
-		//fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
-	} else {
-		//fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
-		fpga_reg_write(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
-	}
-	return;
-	
+    void __iomem *base =   zynq_reg_base;
+    if (enable == 0) {
+        //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
+    } else {
+        //fpga_reg_rmw_set(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
+        fpga_reg_write(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO3_PCI_PUSH_READY_MASK);
+    }
+    return;
+
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void ch0_set_videobuf_res(unsigned long width, unsigned long height){
-	void __iomem *base =   zynq_reg_base;
-	fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));	
-	
+static inline void ch0_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+
 }
 
-static inline void ch1_set_videobuf_res(unsigned long width, unsigned long height){
-	void __iomem *base =   zynq_reg_base;
-	fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	
+static inline void ch1_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+
 }
 
 
-static inline void ch2_set_videobuf_res(unsigned long width, unsigned long height){
-	void __iomem *base =   zynq_reg_base;
-	fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));	
-	
+static inline void ch2_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+
 }
 
-static inline void ch3_set_videobuf_res(unsigned long width, unsigned long height){
-	void __iomem *base =   zynq_reg_base;
-	fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	
+static inline void ch3_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void ch0_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr){	
-	void __iomem *base =   zynq_reg_base;
-	 fpga_reg_write(base, FPGA_VIDEO0_Y_ADDR_REG, y_addr);
-	 fpga_reg_write(base, FPGA_VIDEO0_UV_ADDR_REG, uv_addr);
-	return;
+static inline void ch0_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base, FPGA_VIDEO0_Y_ADDR_REG, y_addr);
+    fpga_reg_write(base, FPGA_VIDEO0_UV_ADDR_REG, uv_addr);
+    return;
 }
 
 static inline void ch1_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
 {
-	void __iomem *base =   zynq_reg_base;
-	 fpga_reg_write(base, FPGA_VIDEO1_Y_ADDR_REG, y_addr);
-	 fpga_reg_write(base, FPGA_VIDEO1_UV_ADDR_REG, uv_addr);		
-	return;
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base, FPGA_VIDEO1_Y_ADDR_REG, y_addr);
+    fpga_reg_write(base, FPGA_VIDEO1_UV_ADDR_REG, uv_addr);
+    return;
 }
 
 static inline void ch2_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
 {
-	void __iomem *base =   zynq_reg_base;
-	 fpga_reg_write(base, FPGA_VIDEO2_Y_ADDR_REG, y_addr);
-	 fpga_reg_write(base, FPGA_VIDEO2_UV_ADDR_REG, uv_addr);	
-	return;
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base, FPGA_VIDEO2_Y_ADDR_REG, y_addr);
+    fpga_reg_write(base, FPGA_VIDEO2_UV_ADDR_REG, uv_addr);
+    return;
 }
 
 static inline void ch3_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
 {
-	void __iomem *base =   zynq_reg_base;
-	 fpga_reg_write(base, FPGA_VIDEO3_Y_ADDR_REG, y_addr);
-	 fpga_reg_write(base, FPGA_VIDEO3_UV_ADDR_REG, uv_addr);		
-	return;
+    void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base, FPGA_VIDEO3_Y_ADDR_REG, y_addr);
+    fpga_reg_write(base, FPGA_VIDEO3_UV_ADDR_REG, uv_addr);
+    return;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static inline int vpif_intr_status(int channel)
 {
-	int status = 0;
+    int status = 0;
 
-	return status;
+    return status;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -301,20 +314,20 @@ static inline int vpif_intr_status(int channel)
 
 /* This structure will store size parameters as per the mode selected by user */
 struct vpif_channel_config_params {
-	char name[VPIF_MAX_NAME];	/* Name of the mode */
-	u16 width;						/* Indicates width of the image */
-	u16 height;						/* Indicates height of the image */
-	u8 frm_fmt;						/* Interlaced (0) or progressive (1) */
-	u16 eav2sav;					/* length of eav 2 sav */
-	u16 sav2eav;					/* length of sav 2 eav */
-	u16 l1, l3, l5, l7, l9, l11;	/* Other parameter configurations */
-	u16 vsize;							/* Vertical size of the image */
-	u8 capture_format;		/* Indicates whether capture format is in BT or in CCD/CMOS */
-	u8  vbi_supported;		/* Indicates whether this mode supports capturing vbi or not */
-	u8 hd_sd;							/* HDTV (1) or SDTV (0) format */
-	v4l2_std_id stdid;			/* SDTV format */
-	struct v4l2_dv_timings dv_timings;	/* HDTV format */
-	u32 pixelformat;
+    char name[VPIF_MAX_NAME];	/* Name of the mode */
+    u16 width;						/* Indicates width of the image */
+    u16 height;						/* Indicates height of the image */
+    u8 frm_fmt;						/* Interlaced (0) or progressive (1) */
+    u16 eav2sav;					/* length of eav 2 sav */
+    u16 sav2eav;					/* length of sav 2 eav */
+    u16 l1, l3, l5, l7, l9, l11;	/* Other parameter configurations */
+    u16 vsize;							/* Vertical size of the image */
+    u8 capture_format;		/* Indicates whether capture format is in BT or in CCD/CMOS */
+    u8  vbi_supported;		/* Indicates whether this mode supports capturing vbi or not */
+    u8 hd_sd;							/* HDTV (1) or SDTV (0) format */
+    v4l2_std_id stdid;			/* SDTV format */
+    struct v4l2_dv_timings dv_timings;	/* HDTV format */
+    u32 pixelformat;
 };
 
 extern const unsigned int vpif_ch_params_count;
@@ -328,32 +341,32 @@ int vpif_set_video_params(struct vpif_params *vpifparams, u8 channel_id);
 int vpif_pci_probe(struct pci_dev *pdev);
 int vpif_pci_remove(struct pci_dev *pdev);
 
-#ifdef CONFIG_PM_SLEEP	
+#ifdef CONFIG_PM_SLEEP
 int vpif_pci_suspend(struct pci_dev *pdev);
 int vpif_pci_resume(struct pci_dev *pdev);
 #endif
 
 enum data_size {
-	_8BITS = 0,
-	_10BITS,
-	_12BITS,
+    _8BITS = 0,
+    _10BITS,
+    _12BITS,
 };
 
 
 /* structure for vpif parameters */
 struct vpif_video_params {
-	__u8 storage_mode;	/* Indicates field or frame mode */
-	unsigned long hpitch;
-	v4l2_std_id stdid;
+    __u8 storage_mode;	/* Indicates field or frame mode */
+    unsigned long hpitch;
+    v4l2_std_id stdid;
 };
 
 struct vpif_params {
-	struct vpif_interface iface;
-	struct vpif_video_params video_params;
-	struct vpif_channel_config_params std_info;
-	union param {
-		enum data_size data_sz;
-	} params;
+    struct vpif_interface iface;
+    struct vpif_video_params video_params;
+    struct vpif_channel_config_params std_info;
+    union param {
+        enum data_size data_sz;
+    } params;
 };
 
 #endif				/* End of #ifndef VPIF_H */

@@ -11,15 +11,25 @@ zynq-objs := zynq_core.o zynq_board.o zynq_capture.o zynq_driver.o  zynq_debug.o
 			modules/zynq_osd.o\
 			modules/zynq_vdma.o\
 			zynq_control.o\
-			zynq_diagnostic.o
-
+			zynq_diagnostic.o\
+			memcpy_a15.o
+			
+ifeq ($(CONFIG_KERNEL_MODE_NEON),y)
+	#NEON_FLAGS                    := -mfloat-abi=softfp -mfpu=neon
+	NEON_FLAGS  :=  -O2 -mfpu=neon -mfloat-abi=softfp -ftree-vectorize
+	AFLAGS_memcpy_neon.o += $(NEON_FLAGS)
+	zynq-objs +=  memcpy_neon.o
+endif			
+			
 pcm1865-objs := zynq_pcm1865.o
 
 fakepci.objs :=  fakepci.o
 fakei2cmaster.objs := fakei2cmaster.o
+v4l2loopback.objs := v4l2loopback.o
 
 obj-$(CONFIG_VIDEO_ZYNQ) += zynq.o
 obj-$(CONFIG_VIDEO_ZYNQ) += pcm1865.o
 obj-$(CONFIG_VIDEO_ZYNQ) += fakepci.o
 obj-$(CONFIG_VIDEO_ZYNQ) += fakei2cmaster.o
+obj-$(CONFIG_VIDEO_ZYNQ) += v4l2loopback.o
 

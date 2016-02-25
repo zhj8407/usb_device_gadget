@@ -263,6 +263,30 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	memcpy(&uvc_event->req, ctrl, sizeof(uvc_event->req));
 	v4l2_event_queue(uvc->vdev, &v4l2_event);
 
+	#if 1 /* joseph modify */
+	/* Tell the complete callback to generate an event for
+	 * the next request that will be enqueued by
+	 * uvc_event_write.
+	 */
+	uvc->event_setup_out =
+				!(uvc_event->req.bRequestType & USB_DIR_IN);
+
+	if(uvc->event_setup_out)
+	{
+		struct usb_composite_dev *cdev = uvc->func.config->cdev;
+		struct usb_request *req = uvc->control_req;
+		int value;
+		req->length =  34; 
+		req->zero =  0; 
+		memset(req->buf, 0x00, 34);
+		value =  usb_ep_queue(cdev->gadget->ep0, req, GFP_KERNEL);
+		if (value < 0) {
+			printk(KERN_ERR "Joseph test %s %d \n",__func__,__LINE__);
+		}
+		
+	}
+	#endif
+
 	return 0;
 }
 

@@ -119,7 +119,7 @@ void zynq_pci_reg_rmw_set(void __iomem *base, u32 reg, u32 val);
 	(ZYNQ_OSD_CFG_CH(i)+ (ZYNQ_REG_LEN * 0x49))
 #define ZYNQ_OSD_LAYER_1_SIZE(i) \
 	(ZYNQ_OSD_CFG_CH(i)+ (ZYNQ_REG_LEN * 0x4a))
-		
+
 ////////////////////////////////////////////////////////////////////////////////////////////////
 /* Chroma Resampler Registers*/
 #define ZYNQ_RESAMPLER_CFG (0x1a00)
