@@ -20,10 +20,10 @@
 
 #if 1
 #define pr_trace(fmt, ...) \
-    printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+	printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 #else
 #define pr_trace(fmt, ...) \
-    no_printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+	no_printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 #endif
 
 /* Playback(USB-IN) Default Stereo - Fl/Fr */
@@ -69,6 +69,10 @@ MODULE_PARM_DESC(c_ssize, "Capture Sample Size(bytes)");
 #define USB_XFERS	2
 
 const char *uac_plcm_name = "snd_uac_plcm";
+static char *uac_sink_active[2]    = { "AUDIO_SINK_STATE=ACTIVE", NULL };
+static char *uac_sink_deactive[2]   = { "AUDIO_SINK_STATE=DEACTIVE", NULL };
+static char *uac_source_active[2]    = { "AUDIO_SOURCE_STATE=ACTIVE", NULL };
+static char *uac_source_deactive[2]   = { "AUDIO_SOURCE_STATE=DEACTIVE", NULL };
 
 #define MAX_STRING_NAME_LENGTH		64
 
@@ -97,8 +101,7 @@ struct uac_plcm_rtd_params {
 
 	struct snd_pcm_substream *ss;
 
-	/* Ring buffer */
-	ssize_t hw_ptr;
+	ssize_t hw_ptr; /* Ring buffer */
 
 	void *rbuf;
 
@@ -133,8 +136,8 @@ struct snd_uac_plcm_chip {
 
 static struct snd_pcm_hardware uac_plcm_pcm_hardware = {
 	.info = SNDRV_PCM_INFO_INTERLEAVED | SNDRV_PCM_INFO_BLOCK_TRANSFER
-		 | SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_MMAP_VALID
-		 | SNDRV_PCM_INFO_PAUSE | SNDRV_PCM_INFO_RESUME,
+		| SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_MMAP_VALID
+		| SNDRV_PCM_INFO_PAUSE | SNDRV_PCM_INFO_RESUME,
 	.rates = SNDRV_PCM_RATE_CONTINUOUS,
 	.periods_max = BUFF_SIZE_MAX / PRD_SIZE_MAX,
 	.buffer_bytes_max = BUFF_SIZE_MAX,
@@ -157,27 +160,23 @@ struct audio_dev {
 static struct audio_dev *agdev_g;
 static struct audio_dual_config *uac_plcm_config = NULL;
 
-static inline
-struct audio_dev *func_to_agdev(struct usb_function *f)
+static inline struct audio_dev *func_to_agdev(struct usb_function *f)
 {
 	return container_of(f, struct audio_dev, func);
 }
 
-static inline
-struct audio_dev *uac_plcmc_to_agdev(struct snd_uac_plcm_chip *u)
+static inline struct audio_dev *uac_plcmc_to_agdev(struct snd_uac_plcm_chip *u)
 {
 	return container_of(u, struct audio_dev, uac_plcmc);
 }
 
-static inline
-struct snd_uac_plcm_chip *pdev_to_uac_plcmc(struct platform_device *p)
+static inline struct snd_uac_plcm_chip *pdev_to_uac_plcmc(struct platform_device *p)
 {
 	return container_of(p, struct snd_uac_plcm_chip, pdev);
 }
 
 
-static void
-agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
+static void agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	unsigned pending;
 	unsigned long flags;
@@ -199,7 +198,7 @@ agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	 */
 	if (status)
 		pr_debug("%s: iso_complete status(%d) %d/%d\n",
-			__func__, status, req->actual, req->length);
+				__func__, status, req->actual, req->length);
 
 	substream = prm->ss;
 
@@ -239,8 +238,7 @@ exit:
 	return;
 }
 
-static int
-uac_plcm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
+static int uac_plcm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct snd_uac_plcm_chip *uac_plcmc = snd_pcm_substream_chip(substream);
 	struct uac_plcm_rtd_params *prm;
@@ -258,16 +256,16 @@ uac_plcm_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	prm->hw_ptr = 0;
 
 	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-	case SNDRV_PCM_TRIGGER_RESUME:
-		prm->ss = substream;
-		break;
-	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-		prm->ss = NULL;
-		break;
-	default:
-		err = -EINVAL;
+		case SNDRV_PCM_TRIGGER_START:
+		case SNDRV_PCM_TRIGGER_RESUME:
+			prm->ss = substream;
+			break;
+		case SNDRV_PCM_TRIGGER_STOP:
+		case SNDRV_PCM_TRIGGER_SUSPEND:
+			prm->ss = NULL;
+			break;
+		default:
+			err = -EINVAL;
 	}
 
 	spin_unlock_irqrestore(&prm->lock, flags);
@@ -293,7 +291,7 @@ static snd_pcm_uframes_t uac_plcm_pcm_pointer(struct snd_pcm_substream *substrea
 }
 
 static int uac_plcm_pcm_hw_params(struct snd_pcm_substream *substream,
-			       struct snd_pcm_hw_params *hw_params)
+		struct snd_pcm_hw_params *hw_params)
 {
 	struct snd_uac_plcm_chip *uac_plcmc = snd_pcm_substream_chip(substream);
 	struct uac_plcm_rtd_params *prm;
@@ -305,11 +303,12 @@ static int uac_plcm_pcm_hw_params(struct snd_pcm_substream *substream,
 		prm = &uac_plcmc->cs_prm;
 
 	err = snd_pcm_lib_malloc_pages(substream,
-					params_buffer_bytes(hw_params));
+			params_buffer_bytes(hw_params));
 	if (err >= 0) {
 		prm->dma_bytes = substream->runtime->dma_bytes;
 		prm->dma_area = substream->runtime->dma_area;
 		prm->period_size = params_period_bytes(hw_params);
+		pr_trace("%s:%d prm->period_size:%d prm->dma_bytes:%d\n", __func__, __LINE__, prm->period_size,prm->dma_bytes);
 	}
 
 	return err;
@@ -347,14 +346,14 @@ static int uac_plcm_pcm_open(struct snd_pcm_substream *substream)
 		runtime->hw.formats = SNDRV_PCM_FMTBIT_S16_LE;
 		runtime->hw.channels_min =  MIC_NUM_CHANNELS;
 		runtime->hw.period_bytes_min = 2 * uac_plcmc->pm_prm.max_psize
-						/ runtime->hw.periods_min;
+			/ runtime->hw.periods_min;
 	} else {
 		spin_lock_init(&uac_plcmc->cs_prm.lock);
 		runtime->hw.rate_min = SPK_SAMPLE_RATE;
 		runtime->hw.formats = SNDRV_PCM_FMTBIT_S16_LE;
 		runtime->hw.channels_min =  SPK_NUM_CHANNELS;
 		runtime->hw.period_bytes_min = 2 * uac_plcmc->cs_prm.max_psize
-						/ runtime->hw.periods_min;
+			/ runtime->hw.periods_min;
 	}
 
 	runtime->hw.rate_max = runtime->hw.rate_min;
@@ -419,7 +418,7 @@ static int snd_uac_plcm_probe(struct platform_device *pdev)
 	sprintf(card->longname, "Plcm_Gadget %i", pdev->id);
 
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_CONTINUOUS,
-		snd_dma_continuous_data(GFP_KERNEL), 0, BUFF_SIZE_MAX);
+			snd_dma_continuous_data(GFP_KERNEL), 0, BUFF_SIZE_MAX);
 
 	err = snd_card_register(card);
 	if (!err) {
@@ -505,8 +504,8 @@ enum {
 };
 
 static struct usb_string strings_fn[] = {
-    [STR_ASSOC].s = "Polycom Speakerphone",
-    [STR_AS_OUT_ALT0].s = "Playback Inactive",
+	[STR_ASSOC].s = "Polycom Speakerphone",
+	[STR_AS_OUT_ALT0].s = "Playback Inactive",
 	[STR_AS_OUT_ALT1].s = "Playback Active",
 	[STR_AS_IN_ALT0].s = "Capture Inactive",
 	[STR_AS_IN_ALT1].s = "Capture Active",
@@ -551,8 +550,8 @@ DECLARE_UAC_AC_HEADER_DESCRIPTOR(2);
 #define F_AUDIO_NUM_INTERFACES	2
 #define UAC_DT_AC_HEADER_LENGTH	UAC_DT_AC_HEADER_SIZE(F_AUDIO_NUM_INTERFACES)
 #define UAC_DT_TOTAL_LENGTH (UAC_DT_AC_HEADER_LENGTH \
-	+ UAC_DT_INPUT_TERMINAL_SIZE + UAC_DT_OUTPUT_TERMINAL_SIZE + UAC_DT_FEATURE_UNIT_SIZE(0) \
-	+ UAC_DT_INPUT_TERMINAL_SIZE + UAC_DT_OUTPUT_TERMINAL_SIZE + UAC_DT_FEATURE_UNIT_SIZE(0) )
+		+ UAC_DT_INPUT_TERMINAL_SIZE + UAC_DT_OUTPUT_TERMINAL_SIZE + UAC_DT_FEATURE_UNIT_SIZE(0) \
+		+ UAC_DT_INPUT_TERMINAL_SIZE + UAC_DT_OUTPUT_TERMINAL_SIZE + UAC_DT_FEATURE_UNIT_SIZE(0) )
 /* B.3.2  Class-Specific AC Interface Descriptor */
 static struct uac1_ac_header_descriptor_2 ac_header_desc2 = {
 	.bLength = UAC_DT_AC_HEADER_LENGTH,
@@ -711,23 +710,23 @@ static struct uac1_as_header_descriptor mic_as_header_desc = {
 DECLARE_UAC_FORMAT_TYPE_I_DISCRETE_DESC(1);
 
 static struct uac_format_type_i_discrete_descriptor_1 spk_as_type_i_desc = {
-       .bLength                = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
-       .bDescriptorType        = USB_DT_CS_INTERFACE,
-       .bDescriptorSubtype     = UAC_FORMAT_TYPE,
-       .bFormatType            = UAC_FORMAT_TYPE_I,
-       .bSubframeSize          = 2,
-       .bBitResolution         = 16,
-       .bSamFreqType           = 1,
+	.bLength                = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
+	.bDescriptorType        = USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype     = UAC_FORMAT_TYPE,
+	.bFormatType            = UAC_FORMAT_TYPE_I,
+	.bSubframeSize          = 2,
+	.bBitResolution         = 16,
+	.bSamFreqType           = 1,
 };
 
 static struct uac_format_type_i_discrete_descriptor_1 mic_as_type_i_desc = {
-       .bLength                = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
-       .bDescriptorType        = USB_DT_CS_INTERFACE,
-       .bDescriptorSubtype     = UAC_FORMAT_TYPE,
-       .bFormatType            = UAC_FORMAT_TYPE_I,
-       .bSubframeSize          = 2,
-       .bBitResolution         = 16,
-       .bSamFreqType           = 1,
+	.bLength                = UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
+	.bDescriptorType        = USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype     = UAC_FORMAT_TYPE,
+	.bFormatType            = UAC_FORMAT_TYPE_I,
+	.bSubframeSize          = 2,
+	.bBitResolution         = 16,
+	.bSamFreqType           = 1,
 };
 
 /* Standard ISO IN Endpoint Descriptor for highspeed */
@@ -1007,8 +1006,7 @@ static int control_selector_init(struct audio_dev *agdev)
 }
 
 /* --------- USB Function Interface ------------- */
-static inline void
-free_ep(struct uac_plcm_rtd_params *prm, struct usb_ep *ep)
+static inline void free_ep(struct uac_plcm_rtd_params *prm, struct usb_ep *ep)
 {
 	struct snd_uac_plcm_chip *uac_plcmc = prm->uac_plcmc;
 	int i;
@@ -1028,7 +1026,7 @@ free_ep(struct uac_plcm_rtd_params *prm, struct usb_ep *ep)
 
 	if (usb_ep_disable(ep))
 		dev_err(&uac_plcmc->pdev.dev,
-			"%s:%d Error!\n", __func__, __LINE__);
+				"%s:%d Error!\n", __func__, __LINE__);
 }
 
 static void audio_build_desc(struct audio_dev *agdev)
@@ -1051,8 +1049,7 @@ static void audio_build_desc(struct audio_dev *agdev)
 	memcpy(sam_freq, &rate, 3);
 }
 
-static int
-afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
+static int afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
 	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
@@ -1178,16 +1175,15 @@ err:
 	return -EINVAL;
 }
 
-static void
-afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
+static void afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
 	alsa_uac_plcm_exit(agdev);
 
-/*TODO	while ((req = audio_req_get(audio)))
-		audio_request_free(req, audio->in_ep); */
+	/*TODO	while ((req = audio_req_get(audio)))
+	  audio_request_free(req, audio->in_ep); */
 
 	kfree(agdev->uac_plcmc.pm_prm.rbuf);
 	kfree(agdev->uac_plcmc.cs_prm.rbuf);
@@ -1201,8 +1197,28 @@ afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
 		agdev->out_ep->driver_data = NULL;
 }
 
-static int
-afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
+static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsigned source, unsigned alt)
+{
+	struct audio_dev *agdev = func_to_agdev(fn);
+	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
+	struct device *dev = &uac_plcmc->pdev.dev;
+
+	if( alt == 0) {
+		if(sink == 1)
+			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_sink_deactive);
+		if(source == 1)
+			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_source_deactive);
+	} else {
+		if(sink == 1)
+			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_sink_active);
+		if(source == 1)
+			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_source_active);
+	}
+	pr_trace("%s: sink %d, source %d, alt %d \n", __func__, sink, source, alt);
+
+}
+
+static int afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 {
 	struct usb_composite_dev *cdev = fn->config->cdev;
 	struct audio_dev *agdev = func_to_agdev(fn);
@@ -1212,11 +1228,15 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 	struct usb_request *req;
 	struct usb_ep *ep;
 	struct uac_plcm_rtd_params *prm;
+	unsigned sink;
+	unsigned source;
 	int i;
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
 	pr_trace("%s: intf %d, alt %d\n", __func__, intf, alt);
 
+	sink = 0;
+	source = 0;
 	/* No i/f has more than 2 alt settings */
 	if (alt > 1) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
@@ -1237,11 +1257,13 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 		prm = &uac_plcmc->cs_prm;
 		config_ep_by_speed(gadget, fn, ep);
 		agdev->as_out_alt = alt;
+		sink = 1;
 	} else if (intf == agdev->as_in_intf) {
 		ep = agdev->in_ep;
 		prm = &uac_plcmc->pm_prm;
 		config_ep_by_speed(gadget, fn, ep);
 		agdev->as_in_alt = alt;
+		source = 1;
 	} else {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		return -EINVAL;
@@ -1249,6 +1271,7 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 
 	if (alt == 0) {
 		free_ep(prm, ep);
+		snd_uac_plcm_event_send(fn, sink, source, alt);
 		return 0;
 	}
 
@@ -1259,14 +1282,14 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 		if (prm->ureq[i].req) {
 			if (usb_ep_queue(ep, prm->ureq[i].req, GFP_ATOMIC))
 				dev_err(&uac_plcmc->pdev.dev, "%d Error!\n",
-					__LINE__);
+						__LINE__);
 			continue;
 		}
 
 		req = usb_ep_alloc_request(ep, GFP_ATOMIC);
 		if (req == NULL) {
 			dev_err(&uac_plcmc->pdev.dev,
-				"%s:%d Error!\n", __func__, __LINE__);
+					"%s:%d Error!\n", __func__, __LINE__);
 			return -EINVAL;
 		}
 
@@ -1276,18 +1299,18 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 		req->zero = 0;
 		req->context = &prm->ureq[i];
 		req->length = prm->max_psize;
-		req->complete =	agdev_iso_complete;
+		req->complete = agdev_iso_complete;
 		req->buf = prm->rbuf + i * req->length;
 
 		if (usb_ep_queue(ep, req, GFP_ATOMIC))
 			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 	}
+	snd_uac_plcm_event_send(fn, sink, source, alt);
 
 	return 0;
 }
 
-static int
-afunc_get_alt(struct usb_function *fn, unsigned intf)
+static int afunc_get_alt(struct usb_function *fn, unsigned intf)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
 	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
@@ -1302,14 +1325,13 @@ afunc_get_alt(struct usb_function *fn, unsigned intf)
 		return agdev->as_in_alt;
 	else
 		dev_err(&uac_plcmc->pdev.dev,
-			"%s:%d Invalid Interface %d!\n",
-			__func__, __LINE__, intf);
+				"%s:%d Invalid Interface %d!\n",
+				__func__, __LINE__, intf);
 
 	return -EINVAL;
 }
 
-static void
-afunc_disable(struct usb_function *fn)
+static void afunc_disable(struct usb_function *fn)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
 	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
@@ -1331,15 +1353,15 @@ static void audio_intf_req_complete(struct usb_ep *ep, struct usb_request *req)
 
 	switch (status) {
 
-	case 0:				/* normal completion? */
-		if (prm->set_con) {
-			memcpy(&data, req->buf, req->length);
-			prm->set_con->set(prm->set_con, prm->set_cmd,	le16_to_cpu(data));
-			prm->set_con = NULL;
-		}
-		break;
-	default:
-		break;
+		case 0:				/* normal completion? */
+			if (prm->set_con) {
+				memcpy(&data, req->buf, req->length);
+				prm->set_con->set(prm->set_con, prm->set_cmd,	le16_to_cpu(data));
+				prm->set_con = NULL;
+			}
+			break;
+		default:
+			break;
 	}
 }
 
@@ -1365,7 +1387,7 @@ static int audio_set_intf_req(struct usb_function *fn,
 		prm = &uac_plcmc->pm_prm;
 	} else {
 		dev_err(&uac_plcmc->pdev.dev,
-			"%s:%d Error!\n", __func__, __LINE__);
+				"%s:%d Error!\n", __func__, __LINE__);
 		return -EINVAL;
 	}
 
@@ -1387,7 +1409,6 @@ static int audio_set_intf_req(struct usb_function *fn,
 
 	return len;
 }
-
 
 
 static int audio_get_intf_req(struct usb_function *fn,
@@ -1413,7 +1434,7 @@ static int audio_get_intf_req(struct usb_function *fn,
 		prm = &uac_plcmc->pm_prm;
 	} else {
 		dev_err(&uac_plcmc->pdev.dev,
-			"%s:%d Error!\n", __func__, __LINE__);
+				"%s:%d Error!\n", __func__, __LINE__);
 		return -EINVAL;
 	}
 
@@ -1437,8 +1458,7 @@ static int audio_get_intf_req(struct usb_function *fn,
 	return len;
 }
 
-static int
-afunc_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
+static int afunc_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 {
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_request	*req = cdev->req;
@@ -1447,33 +1467,33 @@ afunc_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	u16			w_value = le16_to_cpu(ctrl->wValue);
 	u16			w_length = le16_to_cpu(ctrl->wLength);
 
-/*	pr_trace("%s:%d\n", __func__, __LINE__);
-	pr_trace("audio ctrl req: %02x.%02x v%04x i%04x l%d\n",
+	/*	pr_trace("%s:%d\n", __func__, __LINE__);
+		pr_trace("audio ctrl req: %02x.%02x v%04x i%04x l%d\n",
 		ctrl->bRequestType, ctrl->bRequest, w_value, w_index, w_length);
-*/
+		*/
 
 	/* composite driver infrastructure handles everything; interface
 	 * activation uses set_alt().
 	 */
 	switch (ctrl->bRequestType) {
-	case USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
-		value = audio_set_intf_req(f, ctrl);
-		break;
+		case USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+			value = audio_set_intf_req(f, ctrl);
+			break;
 
-	case USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
-		value = audio_get_intf_req(f, ctrl);
-		break;
+		case USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+			value = audio_get_intf_req(f, ctrl);
+			break;
 
-	default:
-		ERROR(cdev, "invalid control req: %02x.%02x v%04x i%04x l%d\n",
-			ctrl->bRequestType, ctrl->bRequest, w_value, w_index, w_length);
+		default:
+			ERROR(cdev, "invalid control req: %02x.%02x v%04x i%04x l%d\n",
+					ctrl->bRequestType, ctrl->bRequest, w_value, w_index, w_length);
 	}
 
 	/* respond with data transfer or status phase? */
 	if (value >= 0) {
 		/*pr_trace("  queue req: %02x.%02x v%04x i%04x l%d\n",
-			ctrl->bRequestType, ctrl->bRequest,
-			w_value, w_index, w_length); */
+		  ctrl->bRequestType, ctrl->bRequest,
+		  w_value, w_index, w_length); */
 		req->zero = 0;
 		req->length = value;
 		value = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
@@ -1574,8 +1594,7 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	return res;
 }
 
-static void
-audio_unbind_config(struct usb_configuration *cfg)
+static void audio_unbind_config(struct usb_configuration *cfg)
 {
 	pr_trace("%s:%d\n", __func__, __LINE__);
 	strings_fn[STR_ASSOC].id = 0;
