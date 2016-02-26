@@ -14,13 +14,16 @@
 #include <linux/hid.h>
 #include <linux/cdev.h>
 #include <linux/mutex.h>
+#include <linux/nls.h>
 #include <linux/poll.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
-#include <linux/usb/g_hid.h>
 
 /*-------------------------------------------------------------------------*/
+#define HID_REPORT_DESC_MAX_LENGTH	2048
+#define USB_STRING_MAX_LENGTH 126
+
 /*                            HID gadget struct                            */
 struct hidg_device_config {
 	int	device;
@@ -32,6 +35,7 @@ struct hidg_device_config {
 	unsigned short report_length;
 	unsigned short report_desc_length;
 	unsigned char report_desc[HID_REPORT_DESC_MAX_LENGTH];
+	unsigned char lync_ucq_string[USB_STRING_MAX_LENGTH];
 };
 
 struct f_hidg_req_list {
@@ -644,7 +648,8 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 
 	device_create(hidg_class, NULL, dev, NULL, "%s%d", "hidg", hidg->minor);
 
-	hidg_config->device = hidg->minor;
+	if (hidg_config)
+		hidg_config->device = hidg->minor;
 
 	return 0;
 
@@ -760,6 +765,57 @@ int hidg_bind_config(struct usb_configuration *c,
 		kfree(hidg);
 
 	return status;
+}
+
+int hidg_ctrlrequest(struct usb_composite_dev *cdev,
+				const struct usb_ctrlrequest *ctrl)
+{
+	int	value = -EOPNOTSUPP;
+	u8 b_requestType = ctrl->bRequestType;
+	u8 b_request = ctrl->bRequest;
+	u16	w_index = le16_to_cpu(ctrl->wIndex);
+	u16	w_value = le16_to_cpu(ctrl->wValue);
+	u16	w_length = le16_to_cpu(ctrl->wLength);
+	u8 *buf;
+	int len;
+
+	if (b_requestType == (USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) &&
+			b_request == USB_REQ_GET_DESCRIPTOR &&
+			w_value == ((USB_DT_STRING << 8) | 33) &&
+			w_index == 0x0409) {
+
+		/* Lync get UCQ Request. */
+		pr_info("hidg_ctrlrequest: Lync get UCQ String\n");
+		if (hidg_config) {
+			buf = cdev->req->buf;
+			len = strlen(hidg_config->lync_ucq_string);
+			len = utf8s_to_utf16s(hidg_config->lync_ucq_string, len,
+				UTF16_LITTLE_ENDIAN, (wchar_t *) &buf[2],
+				USB_STRING_MAX_LENGTH);
+			buf[0] = (len + 1) * 2;
+			buf[1] = USB_DT_STRING;
+
+			value = buf[0];
+		}
+
+	}
+
+	if (value >= 0) {
+		cdev->req->zero = 0;
+		cdev->req->length = value;
+		value = usb_ep_queue(cdev->gadget->ep0, cdev->req, GFP_ATOMIC);
+		if (value < 0)
+			ERROR(cdev, "%s setup response queue error\n",
+				__func__);
+	}
+
+	if (value == -EOPNOTSUPP)
+		VDBG(cdev,
+			"unknown class-specific control req "
+			"%02x.%02x v%04x i%04x l%u\n",
+			ctrl->bRequestType, ctrl->bRequest,
+			w_value, w_index, w_length);
+	return value;
 }
 
 int ghid_setup(struct usb_gadget *g, int count)

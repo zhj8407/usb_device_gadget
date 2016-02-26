@@ -21,8 +21,6 @@
 #ifndef __LINUX_USB_G_HID_H
 #define __LINUX_USB_G_HID_H
 
-#define HID_REPORT_DESC_MAX_LENGTH	2048
-
 struct hidg_func_descriptor {
 	unsigned char		subclass;
 	unsigned char		protocol;

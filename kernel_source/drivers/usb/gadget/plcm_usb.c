@@ -273,6 +273,13 @@ static void hidg_function_unbind_config(struct plcm_usb_function *f,
 	config->device = -1;
 }
 
+static int hidg_function_ctrlrequest(struct plcm_usb_function *f,
+			struct usb_composite_dev *cdev,
+			const struct usb_ctrlrequest *ctrlrequest)
+{
+	return hidg_ctrlrequest(cdev, ctrlrequest);
+}
+
 static ssize_t hidg_device_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -343,6 +350,32 @@ static DEVICE_ATTR(hidg_report_desc, S_IRUGO | S_IWUSR,
 					hidg_report_desc_show,
 					hidg_report_desc_store);
 
+
+static ssize_t hidg_ucq_string_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct hidg_device_config *config = f->config;
+
+	return sprintf(buf, "%s\n", config->lync_ucq_string);
+}
+
+static ssize_t hidg_ucq_string_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct hidg_device_config *config = f->config;
+	if (size > sizeof(config->lync_ucq_string))
+		return -EINVAL;
+
+	return strlcpy(config->lync_ucq_string,
+		buf, sizeof(config->lync_ucq_string));
+}
+
+static DEVICE_ATTR(hidg_ucq_string, S_IRUGO | S_IWUSR,
+					hidg_ucq_string_show,
+					hidg_ucq_string_store);
+
 HIDG_CONFIG_ATTR(bInterfaceSubClass, "%d\n", 255)
 HIDG_CONFIG_ATTR(bInterfaceProtocol, "%d\n", 255)
 HIDG_CONFIG_ATTR(report_length, "%d\n", 255)
@@ -355,6 +388,7 @@ static struct device_attribute *hidg_function_attributes[] = {
 	&dev_attr_hidg_report_length,
 	&dev_attr_hidg_report_desc_length,
 	&dev_attr_hidg_report_desc,
+	&dev_attr_hidg_ucq_string,
 	NULL
 };
 
@@ -364,6 +398,7 @@ static struct plcm_usb_function hidg_function = {
 	.cleanup	= hidg_function_cleanup,
 	.bind_config	= hidg_function_bind_config,
 	.unbind_config	= hidg_function_unbind_config,
+	.ctrlrequest	= hidg_function_ctrlrequest,
 	.attributes	= hidg_function_attributes,
 };
 
