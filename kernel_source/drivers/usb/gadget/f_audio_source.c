@@ -709,8 +709,9 @@ audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	return value;
 }
 
-static char *audio_source_active[2]    = { "AUDIO_SOURCE_STATE=ACTIVE", NULL };
-static char *audio_source_deactive[2]   = { "AUDIO_SOURCE_STATE=DEACTIVE", NULL };
+static char *audio_source_active[2]		= { "AUDIO_SOURCE_STATE=ACTIVE", NULL };
+static char *audio_source_deactive[2]	= { "AUDIO_SOURCE_STATE=DEACTIVE", NULL };
+static char *audio_source_suspend[2]	= { "AUDIO_SOURCE_STATE=SUSPEND", NULL };
 
 static int audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
@@ -757,6 +758,18 @@ static int audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		}
 	}
 	return 0;
+}
+
+static void audio_suspend(struct usb_function *f)
+{
+	struct audio_dev	*audio = func_to_audio(f);
+
+	pr_debug("audio_suspend\n");
+	/*usb_ep_disable(audio->in_ep);*/
+
+	/* Notify the userspace through uevent. */
+	if (audio->dev)
+		kobject_uevent_env(&audio->dev->kobj, KOBJ_CHANGE, audio_source_suspend);
 }
 
 static void audio_disable(struct usb_function *f)
@@ -984,6 +997,7 @@ static struct audio_dev _audio_dev = {
 		.unbind = audio_unbind,
 		.set_alt = audio_set_alt,
 		.setup = audio_setup,
+		.suspend = audio_suspend,
 		.disable = audio_disable,
 	},
 	.lock = __SPIN_LOCK_UNLOCKED(_audio_dev.lock),
