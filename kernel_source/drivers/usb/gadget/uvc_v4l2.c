@@ -266,6 +266,13 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		if (*type != video->queue.queue.type)
 			return -EINVAL;
 
+		/* Can not disable the ep in the suspend callback because
+		 * of the potential deadlock.
+		 * So do it here to make sure the ep is disabled.
+		 */
+		if (uvc->video.ep)
+			usb_ep_disable(uvc->video.ep);
+
 		return uvc_video_enable(video, 0);
 	}
 

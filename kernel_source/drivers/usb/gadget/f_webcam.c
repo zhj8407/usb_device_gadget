@@ -626,6 +626,23 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 }
 
 static void
+uvc_function_suspend(struct usb_function *f)
+{
+	struct uvc_device *uvc = to_uvc(f);
+	struct v4l2_event v4l2_event;
+
+	INFO(f->config->cdev, "uvc_function_suspend\n");
+
+	if (uvc->state == UVC_STATE_STREAMING) {
+		memset(&v4l2_event, 0, sizeof(v4l2_event));
+		v4l2_event.type = UVC_EVENT_STREAMOFF;
+		v4l2_event_queue(uvc->vdev, &v4l2_event);
+	}
+
+	uvc->state = UVC_STATE_DISCONNECTED;
+}
+
+static void
 uvc_function_disable(struct usb_function *f)
 {
 	struct uvc_device *uvc = to_uvc(f);
@@ -1083,6 +1100,7 @@ uvc_bind_config(struct usb_configuration *c,
 	uvc->func.unbind = uvc_function_unbind;
 	uvc->func.get_alt = uvc_function_get_alt;
 	uvc->func.set_alt = uvc_function_set_alt;
+	uvc->func.suspend = uvc_function_suspend;
 	uvc->func.disable = uvc_function_disable;
 	uvc->func.setup = uvc_function_setup;
 
