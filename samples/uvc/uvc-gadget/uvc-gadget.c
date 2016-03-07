@@ -196,6 +196,9 @@ uvc_video_reqbufs(struct uvc_device *dev, int nbufs)
 	dev->mem = 0;
 	dev->nbufs = 0;
 
+	if (nbufs <= 0)
+		return 0;
+
 	memset(&rb, 0, sizeof rb);
 	rb.count = nbufs;
 	rb.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
@@ -691,7 +694,7 @@ uvc_events_process(struct uvc_device *dev)
 	if ((ctrl_req->bRequestType & USB_DIR_IN) != 0 ||
 		(ctrl_req->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE ||
 		ctrl_req->bRequest != UVC_SET_CUR)
-	{ 
+	{
 		ioctl(dev->fd, UVCIOC_SEND_RESPONSE, &resp);
 		if (ret < 0) {
 			printf("UVCIOC_S_EVENT failed: %s (%d)\n", strerror(errno),
