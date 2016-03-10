@@ -213,6 +213,14 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 		buf->bytesused = bpl * dev->height;
 		break;
 
+	case V4L2_PIX_FMT_YUV420:
+		bpl = dev->width * 3 / 2;
+		for (i = 0; i < dev->height; ++i)
+			memset(dev->mem[buf->index] + i * bpl, dev->color++, bpl);
+
+		buf->bytesused = bpl * dev->height;
+		break;
+
 	case V4L2_PIX_FMT_MJPEG:
 		memcpy(dev->mem[buf->index], dev->imgdata, dev->imgsize);
 		buf->bytesused = dev->imgsize;
@@ -399,6 +407,12 @@ static const struct uvc_frame_info uvc_frames_yuyv[] = {
 	{ 0, 0, { 0, }, },
 };
 
+static const struct uvc_frame_info uvc_frames_i420[] = {
+	{  640, 360, { 333333, 666666, 10000000, 50000000, 0 }, },
+	{ 1280, 720, { 50000000, 0 }, },
+	{ 0, 0, { 0, }, },
+};
+
 static const struct uvc_frame_info uvc_frames_mjpeg[] = {
 	{  640, 360, { 666666, 10000000, 50000000, 0 }, },
 	{ 1280, 720, { 50000000, 0 }, },
@@ -407,6 +421,7 @@ static const struct uvc_frame_info uvc_frames_mjpeg[] = {
 
 static const struct uvc_format_info uvc_formats[] = {
 	{ V4L2_PIX_FMT_YUYV, uvc_frames_yuyv },
+	{ V4L2_PIX_FMT_YUV420, uvc_frames_i420 },
 	{ V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg },
 };
 
@@ -444,6 +459,9 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 	switch (format->fcc) {
 	case V4L2_PIX_FMT_YUYV:
 		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
+		break;
+	case V4L2_PIX_FMT_YUV420:
+		ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 3 / 2;
 		break;
 	case V4L2_PIX_FMT_MJPEG:
 		ctrl->dwMaxVideoFrameSize = dev->imgsize;
@@ -690,6 +708,9 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 	switch (format->fcc) {
 	case V4L2_PIX_FMT_YUYV:
 		target->dwMaxVideoFrameSize = frame->width * frame->height * 2;
+		break;
+	case V4L2_PIX_FMT_YUV420:
+		target->dwMaxVideoFrameSize = frame->width * frame->height * 3 / 2;
 		break;
 	case V4L2_PIX_FMT_MJPEG:
 		if (dev->imgsize == 0)
