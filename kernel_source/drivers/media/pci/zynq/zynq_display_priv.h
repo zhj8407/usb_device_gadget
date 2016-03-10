@@ -29,8 +29,8 @@
 /* enumerated data types */
 /* Enumerated data type to give id to each device per channel */
 enum vpif_channel_id {
-    VPIF_CHANNEL2_VIDEO = 0,	/* Channel2 Video */
-    VPIF_CHANNEL3_VIDEO,		/* Channel3 Video */
+    VPIF_CHANNEL0_VIDEO = 0,	/* Channel2 Video */
+    VPIF_CHANNEL1_VIDEO,		/* Channel3 Video */
 };
 
 /* structures */
@@ -85,11 +85,21 @@ struct common_obj {
 						 * starting of the buffer */
     u32 cbtm_off;				/* offset of C bottom from the
 						 * starting of the buffer */
-    /* Function pointer to set the addresses */
-    void (*set_addr) (unsigned long, unsigned long,
-                      unsigned long, unsigned long);
+
+	/* Function pointer to set the addresses */
+    void (*set_addr) (unsigned long);
+    void (*set_res) (unsigned long, unsigned long);
+    void (*enable_read) (unsigned int);
+	
     u32 height;
     u32 width;
+	
+	u32 dummy_buffer_handle;
+    char *dummy_buffer;
+    unsigned int dummy_buffer_size;
+	
+	 atomic_t refcount;
+
 };
 
 struct channel_obj {
@@ -111,6 +121,9 @@ struct channel_obj {
     struct vpif_params vpifparams;
     struct common_obj common[VPIF_NUMOBJECTS];
     struct video_obj video;
+	
+	unsigned int interrupt_count;
+	unsigned int interrupt_dummy_buffer_count;
 };
 
 /* File handle structure */

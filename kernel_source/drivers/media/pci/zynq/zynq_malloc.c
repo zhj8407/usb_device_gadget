@@ -18,7 +18,7 @@
 extern unsigned int en_use_dev_mem_map;
 
 static u8 g_is_always_get_first_memory  =0;
-static struct vm_area_struct  g_vma;
+//static struct vm_area_struct  g_vma;
 static u32 start_dma_address = 0;
 static u32 start_address = 0;
 
@@ -54,19 +54,20 @@ static void pool_destroy(void)
     mutex_destroy(&p->lock);
     return;
 }
-
+#if 0
 static size_t pool_available(void)
 {
     struct zynq_mem_pool *p = &gMemPool;
     return (size_t)(p->end - p->next);
 }
+#endif
 
 static void * pool_alloc(unsigned long *size, unsigned int is_always_get_first_memory)
 {
 
     struct zynq_mem_pool *p = &gMemPool;
     void *mem = NULL;
-    unsigned long padd_size = PAGE_ALIGN( *size + PAGE_SIZE);
+    unsigned long padd_size =   (*size+ (PAGE_SIZE -1)) & (~(PAGE_SIZE -1)); //PAGE_ALIGN( *size + PAGE_SIZE);
     *size = padd_size;
 	
 	start_address = (u32)p->pool_start_addr;
@@ -77,7 +78,7 @@ static void * pool_alloc(unsigned long *size, unsigned int is_always_get_first_m
 		return  NULL;
 	}
 		
-    if( pool_available() < padd_size ) return NULL;
+    //if( pool_available() < padd_size ) return NULL;
     if (is_always_get_first_memory) {
         mem = (void *)p->pool_start_addr;
     } else {
@@ -159,7 +160,7 @@ static void vb2_vmalloc_put(void *buf_priv)
 
     if (atomic_dec_and_test(&buf->refcount)) {
         //vfree(buf->vaddr);
-        if (pool_available() == 0) {
+     /*   if (pool_available() == 0)*/ {
             pool_destroy();
             atomic_dec(&bInitialMemorPool);
         }
@@ -282,6 +283,135 @@ static unsigned int vb2_vmalloc_num_users(void *buf_priv)
     return atomic_read(&buf->refcount);
 }
 
+#if 1
+static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma) 
+{
+	
+	struct vb2_vmalloc_buf *buf = buf_priv;
+	unsigned long start = 0;
+	//unsigned long mmio_pgoff = 0;
+	u32 len = 0;
+	int ret = 0;
+	
+	start = buf->dma_addr;
+	len = buf->size;
+	
+	vma->vm_pgoff = 0;
+#if 0	
+	mmio_pgoff = PAGE_ALIGN((start & ~PAGE_MASK) + len) >> PAGE_SHIFT;
+	printk(KERN_INFO"[zynq_malloc] mmio_pgoff = %lu, vm_pgoff = %lu\n", mmio_pgoff, vma->vm_pgoff);
+	if (vma->vm_pgoff >= mmio_pgoff) {
+		vma->vm_pgoff -= mmio_pgoff;
+	}
+#endif
+	
+	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
+	
+	if (en_use_dev_mem_map) {
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	}else {
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+	}
+	
+	vma->vm_private_data	= &buf->handler;
+	vma->vm_ops		= &vb2_common_vm_ops;
+	
+	ret = vm_iomap_memory(vma, start, len);
+	if (ret)
+		goto error;
+	
+	vma->vm_ops->open(vma);
+	
+	printk(KERN_INFO"[zynq_malloc]mapped dma addr 0x%08lx  at 0x%08lx, size 0x%08lx (use device memory type = %u)(off = %u)\n", 
+		   (unsigned long) buf->dma_addr, (unsigned long)vma->vm_start, (unsigned long)len, (unsigned int)en_use_dev_mem_map, (unsigned int)vma->vm_pgoff);
+	
+	return 0;
+	
+error:
+	return ret;
+}
+#endif
+
+#if 0
+static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma) { 
+  
+	struct vb2_vmalloc_buf *buf = buf_priv;
+  /* Remap-pfn-range will mark the range VM_IO and VM_RESERVED */
+  unsigned long	region_origin = /*vma->vm_pgoff*/ 0 * PAGE_SIZE;
+  unsigned long	region_length = vma->vm_end - vma->vm_start;
+  unsigned long	physical_addr = buf->dma_addr + region_origin;	
+  unsigned long	user_virtaddr = vma->vm_start;
+  
+  // sanity check: mapped region cannot expend past end of vram
+  //if ( region_origin + region_length > dev->ctrlreg_size ) return -EINVAL;
+  
+  // let the kernel know not to try swapping out this region
+	//vma->vm_flags =  VM_IO;
+#if 0
+    if (en_use_dev_mem_map) {
+      	  		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+			}else {
+				vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+			}
+#endif	
+  
+  // invoke kernel function that sets up the page-table entries
+  if ( remap_pfn_range( vma, 
+			user_virtaddr, 
+			physical_addr >> PAGE_SHIFT,
+			region_length, 
+			vma->vm_page_prot ) ) 
+    return -EAGAIN;
+     
+  
+	printk(KERN_INFO"[zynq_malloc] xxxffeeggg %s: mapped dma addr 0x%08lx   at 0x%08lx, size 0x%08lx (use device memory type = %u)(off = %u)\n",
+           __func__, (unsigned long) buf->dma_addr, vma->vm_start,
+           buf->size, en_use_dev_mem_map, vma->vm_pgoff);
+  
+  return 0;
+	
+}
+#endif
+#if 0
+static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma) {
+	
+	  	  struct vb2_vmalloc_buf *buf = buf_priv;
+		  unsigned long user_count = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
+		  unsigned long count = PAGE_ALIGN(buf->size) >> PAGE_SHIFT;
+		  unsigned long pfn =  page_to_pfn(virt_to_page(buf->dma_addr));// page_to_pfn(virt_to_page(buf->vaddr));
+		  unsigned long off = 0;
+		  int ret = -ENXIO;
+		  
+		vma->vm_flags		|= VM_DONTEXPAND | VM_DONTDUMP | VM_IO | VM_PFNMAP ;
+    	vma->vm_private_data	= &buf->handler;
+    	vma->vm_ops		= &vb2_common_vm_ops;
+		vma->vm_pgoff = 0;
+		
+		off = vma->vm_pgoff;
+		   if (en_use_dev_mem_map) {
+      	  		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+			}else {
+				vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+			}
+			
+
+		 if (off < count && user_count <= (count - off)) {
+		            ret = remap_pfn_range(vma, vma->vm_start,
+	                                 pfn + off,
+	                                 user_count << PAGE_SHIFT,
+	                                 vma->vm_page_prot);
+						printk(KERN_INFO"[zynq_malloc] xxxfff %s: mapped dma addr 0x%08lx   at 0x%08lx, size 0x%08lx (use device memory type = %u)(off = %u)(user_count=0x%08lx)(count=0x%08lx)\n",
+           __func__, (unsigned long) buf->dma_addr, vma->vm_start,
+           buf->size, en_use_dev_mem_map, off, user_count << PAGE_SHIFT, count << PAGE_SHIFT);
+		}
+		
+		vma->vm_ops->open(vma);
+	
+		return ret;
+}
+#endif
+
+#if 0
 static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma)
 {
     struct vb2_vmalloc_buf *buf = buf_priv;
@@ -299,7 +429,7 @@ static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma)
 	}
 #endif
     vma->vm_pgoff = 0;
-	//vma->vm_flags		|= VM_DONTEXPAND | VM_DONTDUMP | VM_IO | VM_PFNMAP ;
+	vma->vm_flags		|= VM_DONTEXPAND | VM_DONTDUMP | VM_IO | VM_PFNMAP ;
     vma->vm_private_data	= &buf->handler;
     vma->vm_ops		= &vb2_common_vm_ops;
 	
@@ -335,6 +465,7 @@ exit1:
 	
 	
 }
+#endif
 
 /*********************************************/
 /*       callbacks for DMABUF buffers        */

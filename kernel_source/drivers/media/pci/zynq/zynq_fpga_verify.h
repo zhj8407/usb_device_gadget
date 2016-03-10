@@ -95,6 +95,17 @@
 #define FPGA_SYS_MONITOR_REG 0x3400 //0x3400 ~ 0x35ff
 
 
+//FPGA DMA
+#define FPGA_DMA_ADDR_REG   0x1210 
+
+#define FPGA_DMA_RES_REG  0x1214
+#define FPGA_DMA_RES_WIDTH_OFFSET 16
+#define FPGA_DMA_RES_WIDTH_MASK 0xffff0000
+#define FPGA_DMA_RES_HEIGHT_MASK 0x0000ffff
+
+#define FPGA_DMA_READ_ENABLE_REG   0x1218
+
+
 void fpga_reg_write(void __iomem *base, u32 reg, u32 val);
 u32 fpga_reg_read(void __iomem *base, u32  reg);
 void fpga_reg_rmw(void __iomem *base, u32 reg, u32 clr_bits, u32 set_bits);

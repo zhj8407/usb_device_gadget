@@ -13,14 +13,9 @@
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
-#include <linux/slab.h>
+#include <linux/gpio.h>
 
 #include <asm/irq.h>
-#include <asm/page.h>
-
-#include <linux/kthread.h>
-#include <linux/freezer.h>
-#include <linux/sched.h>
 
 #include <media/adv7343.h>
 #include <media/v4l2-device.h>
@@ -30,41 +25,44 @@
 
 #include <media/videobuf2-dma-contig.h>
 
-
-#ifdef CONFIG_KERNEL_MODE_NEON
-void *neon_memcpy(void *, const void *, size_t);
-#include <asm/neon.h>
-#endif
-
-void *a15_memcpy(void *, const void *, size_t);
-
-#include "zynq_malloc.h"
-
 #include "zynq_debug.h"
 #include "zynq_display_priv.h"
 #include "zynq_core.h"
 #include "zynq_board.h"
+#include "zynq_gpio.h"
 
-#include "modules/zynq_scaler.h"
-#include "modules/zynq_osd.h"
-#include "modules/zynq_video_selector.h"
-#include "modules/zynq_video_timing_controller.h"
-#include "modules/zynq_resampler.h"
-
-extern unsigned int en_use_fb_mem;
 extern  unsigned int debug_print;
 
-unsigned int en_video_input_window  = 1;
-module_param(en_video_input_window, int, 0644);
+//NOTE: The value ' -1'  means that the interrupt gpio pin for FPGA DMA is not assigned. 
+unsigned int zynq_fpga_dma_interrupt_gpio_pin0 = (unsigned int) -1;//GPIO_PU3;
 
-unsigned int en_video_input_window_direct_map = 0;
-module_param(en_video_input_window_direct_map, int, 0644);
+static struct resource interrupt_resources [] = {
+	    [0] = {
+        	.name = "fpga_dma_interrupt0",
+       	 	.flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
+    	}
+};
 
-unsigned int en_video_input_window_neon_cp  = 2;//0:normal, 1:neon, 2:a15
-module_param( en_video_input_window_neon_cp, int, 0644);
+static void set_interrupts(void) {
+	if (zynq_fpga_dma_interrupt_gpio_pin0  != (unsigned int)-1) {
+		interrupt_resources[0].start =  gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0);
+    	interrupt_resources[0].end =  gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0);
+	} else {
+		interrupt_resources[0].start =  -1;
+    	interrupt_resources[0].end = -1;
+	}
+	return;
+}
 
-static u32 ch2_numbuffers = 3;
-static u32 ch2_bufsize = 1920 * 1080 * 2;
+static unsigned get_interrupt(unsigned int channel_id) {
+	
+	if (channel_id >= VPIF_DISPLAY_MAX_DEVICES) return -1;
+	
+	return (unsigned) interrupt_resources[channel_id].start;
+}
+
+static u32 ch0_numbuffers = 12;
+static u32 ch0_bufsize = 1920 * 1080 * 2;
 static u8 channel_first_int[VPIF_NUMOBJECTS][2] = { {1, 1} };
 
 #define MAX_DISPLAY_SUBDEV_NUM 2
@@ -73,11 +71,11 @@ static u8 channel_first_int[VPIF_NUMOBJECTS][2] = { {1, 1} };
 
 
 static struct vpif_config_params config_params = {
-    .min_numbuffers		= 3,
-    .numbuffers[0]		= 3,
-    .min_bufsize[0]		= 1920 * 480 * 2,
+    .min_numbuffers		= 12,
+    .numbuffers[0]		= 12,
+    .min_bufsize[0]		= 1920 * 1080 * 2,
     .channel_bufsize[0]	= 1920 * 1080 * 2,
-    .video_limit[0] = 1920 * 1080 *2*4,
+    .video_limit[0] = 1920* 1080 * 2 * 12,
     .channel_bufstride[0] = 1920,
     .pixelformat[0] = V4L2_PIX_FMT_YUV422P
 };
@@ -87,6 +85,26 @@ static struct vpif_disp_device vpif_obj = {
     .sd = NULL
 };
 static struct device *vpif_dev;
+
+////////////////////////////////////////////////////////////////////
+static void  ch0_set_dispbuf_addr (unsigned long addr) {
+	void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base, FPGA_DMA_ADDR_REG, addr);
+    return;
+}
+static void ch0_set_dispbuf_res (unsigned long width, unsigned long height) {
+	void __iomem *base =   zynq_reg_base;
+    fpga_reg_write(base,  FPGA_DMA_RES_REG, ((width << FPGA_DMA_RES_WIDTH_OFFSET) | height));
+	return;
+}
+
+static void ch0_dispenable_read (unsigned int enable) {
+	void __iomem *base =   zynq_reg_base;
+    if (enable == 1)
+        fpga_reg_write(base, FPGA_DMA_READ_ENABLE_REG, 1);
+	return;
+}
+////////////////////////////////////////////////////////////////////
 
 static void print_pixel_format( struct v4l2_pix_format *pixfmt)
 {
@@ -135,347 +153,92 @@ static int initialize_channel_pxiel_format(struct channel_obj *ch)
     //print_pixel_format(&common->fmt.fmt.pix);
     return ret;
 }
-///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-dma_addr_t  display_dam_framebuffer_handle;
-void *display_dam_framebuffer_addr = NULL;
-size_t display_dma_framebuffer_size = 0;
-
-static int allocate_reserved_memory(void)
+static void vpif_process_buffer_complete(struct common_obj *common)
 {
-    int  status = 0;
-	
-	if (zynq_video_input_window_base == NULL) goto exit;
-	if (zynq_video_input_window_base_dma_handle  == 0) goto exit;
-	
-	display_dam_framebuffer_handle = (dma_addr_t) (zynq_video_input_window_base_dma_handle);
-	display_dam_framebuffer_addr = zynq_video_input_window_base;
-	display_dma_framebuffer_size = zynq_video_input_window_len;
-		
-    zynq_printk(1, "[zynq_display]xxxx Successfull to allocate %d bytes video memory (virt:0x%p, phy:0x%p) !!\n", display_dma_framebuffer_size, display_dam_framebuffer_addr , (void *)display_dam_framebuffer_handle);
-exit:
-    return status;
+    v4l2_get_timestamp(&common->cur_frm->vb.v4l2_buf.timestamp);
+    vb2_buffer_done(&common->cur_frm->vb,
+                    VB2_BUF_STATE_DONE);
+    /* Make curFrm pointing to nextFrm */
+    common->cur_frm = common->next_frm;
 }
 
-static int release_reserved_memory(void)
+static void vpif_schedule_next_buffer(struct common_obj *common)
 {
-    return  0;
-}
-///////////////////////////////////////////////////////////////////////////////////////
+    unsigned long addr = 0;
 
-struct thread_context {
-    struct channel_obj *channel;
-    unsigned 		   ms;
-    unsigned long  jiffies;
-    struct v4l2_fract          timeperframe;
-
-    int ini_jiffies;
-    struct task_struct *kthread;
-    wait_queue_head_t wq;
-
-};
-
-#define FPS_MAX 1000
-
-static const struct v4l2_fract
-        tpf_min     = {.numerator = 1,		.denominator = FPS_MAX},
-                tpf_max     = {.numerator = FPS_MAX,	.denominator = 1},
-                tpf_30fps = {.numerator = 1000,	.denominator = 30000},	/* 30 fps*/
-                tpf_15fps = {.numerator = 1000,	.denominator = 15000},	/* 15 fps*/
-                tpf_60fps = {.numerator = 1000,	.denominator = 60000},	/* 60 fps*/
-                tpf_10fps = {.numerator = 1000,	.denominator = 10000},	/* 10 fps*/
-                tpf_120fps = {.numerator = 1000,	.denominator = 120000};	/* 120 fps*/
-
-static struct thread_context  gThreadContext[VPIF_DISPLAY_MAX_DEVICES];
-
-static void process_progressive_mode(struct common_obj *common)
-{
     spin_lock(&common->irqlock);
-    /* Get the next buffer from buffer queue */
     common->next_frm = list_entry(common->dma_queue.next,
                                   struct vpif_disp_buffer, list);
     /* Remove that buffer from the buffer queue */
     list_del(&common->next_frm->list);
     spin_unlock(&common->irqlock);
-    /* Mark status of the buffer as active */
+	
     common->next_frm->vb.state = VB2_BUF_STATE_ACTIVE;
+    addr = vb2_dma_contig_plane_dma_addr(&common->next_frm->vb, 0);
 
-    return;
+    if ((addr != 0) && (common->set_addr != NULL)) {
+        common->set_addr(addr);
+        if (common->enable_read != NULL) common->enable_read(1);
+    }
+	return;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#ifdef CONFIG_KERNEL_MODE_NEON
-static void * neon_copy(void* dest, const void* src, size_t num) {
-	
-	kernel_neon_begin();
-	neon_memcpy(dest, src, num);
-	kernel_neon_end();
-	
-	return dest;
-}
-#endif
-
-static void video_input_window_push_yuyv(unsigned char *dest,  unsigned char *yuv, unsigned int width, unsigned int height, unsigned int stride) {
-	
-	void * (*mem_copy)(void* dest, const void* src, size_t num) = memcpy;
-	size_t size = width * height *2;
-	
-	if (en_video_input_window_neon_cp == 1){
-#ifdef CONFIG_KERNEL_MODE_NEON
-		mem_copy = neon_copy;		
-#endif	
-	} else if (en_video_input_window_neon_cp == 2)  {
-		mem_copy = a15_memcpy;
-	}
-	
-	if (mem_copy == NULL) goto exit;
-	
-	mem_copy(dest, yuv, size);
-
-exit:	
-	return ;	
-}
-
-#if 0
-static void video_input_window_push_nv12_0(unsigned char *dest,  unsigned char *yuv, unsigned int width, unsigned int height, unsigned int stride) {
-	
-	void * (*mem_copy)(void* dest, const void* src, size_t num) = memcpy;
-	size_t size = (width * height *3) >>1;
-	
-	if (en_video_input_window_neon_cp == 1){
-#ifdef CONFIG_KERNEL_MODE_NEON
-		mem_copy = neon_copy;		
-#endif	
-	} else if (en_video_input_window_neon_cp == 2)  {
-		mem_copy = a15_memcpy;
-	}
-	
-	if (mem_copy == NULL) goto exit;
-	
-	mem_copy(dest, yuv, size);
-
-exit:	
-	return ;	
-}
-#endif
-
-//NV12: http://blog.csdn.net/fanbird2008/article/details/8232673
-static void video_input_window_push_nv12_1(unsigned char *dest,  unsigned char *yuv, unsigned int width, unsigned int height, unsigned int stride) {
-	
-	void * (*mem_copy)(void* dest, const void* src, size_t num) = memcpy;
-	unsigned int one_copy_size_y = stride;
-	unsigned int one_copy_size_uv  = 0;
-	unsigned char *y_buffer = yuv;
-	unsigned char *uv_buffer = yuv + (width * height);
-	unsigned char *video_input_window = dest;
-	unsigned int copy_count = (width*height)/one_copy_size_y;
-	unsigned int i = 0;
-	
-	one_copy_size_uv = ((stride * height) >> 1)/copy_count;
-	
-	if (en_video_input_window_neon_cp == 1){
-#ifdef CONFIG_KERNEL_MODE_NEON
-		mem_copy = neon_copy;		
-#endif	
-	} else if (en_video_input_window_neon_cp == 2)  {
-		mem_copy = a15_memcpy;
-	}
-	
-	if (mem_copy == NULL) goto exit;
-	
-	//zynq_printk(3, "[zynq_display] (%d) (copy_size_y, copy_size_uv, copy_count) ----> (%u, %u, %u)\n", __LINE__ , one_copy_size_y, one_copy_size_uv, copy_count);
-	
-	for ( i = 0; i < copy_count; i++) {
-		mem_copy(video_input_window, y_buffer, one_copy_size_y);
-		mem_copy(video_input_window, uv_buffer, one_copy_size_uv);
-		y_buffer += one_copy_size_y;
-		uv_buffer += one_copy_size_uv;
-		video_input_window  += (one_copy_size_y + one_copy_size_uv);
-	}
-exit:	
-	return ;
-	
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-static void thread_tick(struct thread_context  *ctx)
+static void set_to_dummy_buffer(struct common_obj *common)
 {
-    struct channel_obj *ch = ctx->channel;
+    u32 addr = common->dummy_buffer_handle;
+    if (common->set_addr != NULL) {
+        common->set_addr(addr);
+        if (common->enable_read != NULL) common->enable_read(1);
+    }
+}
+
+static irqreturn_t vpif_channel_isr(int irq, void *dev_id)
+{
     struct common_obj *common = NULL;
-    unsigned int channel_id = 0;
-	
+    struct channel_obj *ch;
+    int channel_id = 0;
+
+    channel_id = *(int *)(dev_id);
+
+    ch =vpif_obj.dev[channel_id];
+
     if (!ch) {
-        zynq_printk(0, "[zynq_display]The channel obj is NULL!!\n");
         goto exit;
     }
 
     common = &ch->common[VPIF_VIDEO_INDEX];
-    channel_id = (unsigned int)ch->channel_id;
 
-    spin_lock(&common->irqlock);
-    if (list_empty(&common->dma_queue)) {
-        spin_unlock(&common->irqlock);
-      // zynq_printk(1, "[zynq_display]The buffer queue is emty!!\n");
-        goto exit;
-    }
-    spin_unlock(&common->irqlock);
-
-    if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id]) {
-        /* Mark status of the cur_frm to
-         * done and unlock semaphore on it */
-        v4l2_get_timestamp(&common->cur_frm->vb.
-                           v4l2_buf.timestamp);
-
-        //NOTE: Check the content of current frame.
-        {
-            void *vbuf = vb2_plane_vaddr(&common->cur_frm->vb, 0);
-            unsigned char *y_buffer = (unsigned char *)vbuf;
-            u32 bytesused = common->cur_frm->vb.v4l2_planes[0].bytesused;
-            if ((y_buffer != NULL) /* && (en_video_input_window == 0)*/) {
-				//y_buffer[0] =0x1 ; 
-				//y_buffer[1] = 0x2 ;
-				//y_buffer[2] = 0x3;
-				//zynq_printk(2, "[no show123][zynq_display] (ptr, len)-->(%p,%u)\n",  y_buffer,  bytesused);
-				if (en_use_fb_mem || (en_video_input_window_direct_map == 0) ) {
-					char szpixelformat[8];
-					szpixelformat[0] =  (common->fmt.fmt.pix.pixelformat >> 0) & 0xff;
-					szpixelformat[1] =  (common->fmt.fmt.pix.pixelformat >> 8) & 0xff;
-					szpixelformat[2] =  (common->fmt.fmt.pix.pixelformat>> 16) & 0xff;
-					szpixelformat[3] =  (common->fmt.fmt.pix.pixelformat >> 24) & 0xff;
-					szpixelformat[4] = 0;
-					zynq_printk(3, "[zynq_display] [0, 1, 2] -> [%02x, %02x, %02x] (ptr, len)-->(%p,%u) (%u x %u)(memcpy method: %u)(format: %s)\n", y_buffer[0], y_buffer[1], y_buffer[2], y_buffer,  bytesused, common->width, common->height, en_video_input_window_neon_cp, szpixelformat);
-				}
-				
-				if ((en_video_input_window_direct_map == 0) && en_video_input_window) {
-					unsigned char *dest = (unsigned char *)zynq_video_input_window_base;
-					unsigned char *yuv = y_buffer;
-					unsigned int width = common->width ;
-					unsigned int height =  common->height ;
-					unsigned int stride = common->width ;
-					 if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_NV12) {
-						video_input_window_push_nv12_1(dest,  yuv,  width, height, stride);
-					} else if ((common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) || (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY ) || (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_VYUY)) {
-						video_input_window_push_yuyv(dest,  yuv,  width, height, stride);
-					}
-				}
-			}//end of 'y_buffer != NULL'
-		}
-        vb2_buffer_done(&common->cur_frm->vb,VB2_BUF_STATE_DONE);
-        /* Make cur_frm pointing to next_frm */
-        common->cur_frm = common->next_frm;
-    }
-    channel_first_int[VPIF_VIDEO_INDEX][channel_id] = 0;
-    process_progressive_mode(common);
-exit:
-#if 0
-    {
-        unsigned long ms = 0;
-        char str[100];
-
-        ctx->ms += jiffies_to_msecs(jiffies - ctx->jiffies);
-        ctx->jiffies = jiffies;
-        ms = ctx->ms;
-        memset(str, 0x0, sizeof(str));
-        snprintf(str, sizeof(str), "%02lu:%02lu:%02lu:%03lu ",
-                 (ms / (60 * 60 * 1000)) % 24,
-                 (ms / (60 * 1000)) % 60,
-                 (ms / 1000) % 60,
-                 ms % 1000);
-        zynq_printk(2, "[zynq_display] timestamp: %s\n", str);
-    }
-#endif
-    return;
-}
-
-#define frames_to_ms(ctx, frames)				\
-	((frames * ctx->timeperframe.numerator * 1000) / ctx->timeperframe.denominator)
-
-static void thread_sleep(struct thread_context  *ctx)
-{
-    int timeout = 0;
-    DECLARE_WAITQUEUE(wait, current);
-    add_wait_queue(&ctx->wq, &wait);
-	//zynq_printk(1, "[zynq_display](%d)\n",  __LINE__);
-    if (kthread_should_stop()){    
-		//zynq_printk(1, "[zynq_display](%d)\n",  __LINE__);
-		goto stop_task;
+    if (atomic_inc_and_test(&common->refcount) == 0) {
+		zynq_printk(0, "[zynq_display] The isr does not execute normally!!\n");
 	}
-    /* Calculate time to wake up */
-    timeout = msecs_to_jiffies(frames_to_ms(ctx, 1));
-
-    thread_tick(ctx);
-
-    schedule_timeout_interruptible(timeout);
-
-stop_task:
-
-    remove_wait_queue(&ctx->wq, &wait);
-    try_to_freeze();
-    return;
+	
+	if (0 == common->started) goto exit;
+	
+	spin_lock(&common->irqlock);
+	
+	if (debug_print >= 2) ch->interrupt_count++;
+	
+	if (list_empty(&common->dma_queue)) {
+            spin_unlock(&common->irqlock);
+            set_to_dummy_buffer(common);
+			 if (debug_print >= 2) ch->interrupt_dummy_buffer_count++;
+            goto exit;
+	}
+	
+	spin_unlock(&common->irqlock);
+	
+	if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id]) vpif_process_buffer_complete(common);
+	
+	channel_first_int[VPIF_VIDEO_INDEX][channel_id] = 0;
+	
+	vpif_schedule_next_buffer(common);
+exit:
+    atomic_dec(&common->refcount);
+    return IRQ_HANDLED;
 }
 
-
-static int thread_handler(void *data)
-{
-    struct thread_context *ctx = (	struct thread_context *)data;
-
-    zynq_printk(1, "[zynq_display] video input window thread started !\n");
-
-    set_freezable();
-
-    for (;;) {
-        thread_sleep(ctx);
-
-        if (kthread_should_stop())
-            break;
-    }
-    zynq_printk(1,  "[zynq_display] video input window thread exit !\n");
-    return 0;
-}
-
-static int thread_init(struct channel_obj *ch)
-{
-    struct thread_context *ctx =NULL;
-    struct v4l2_fract *fract = NULL;
-
-    if (!ch) return  -1;
-
-    ctx = &gThreadContext[ch->channel_id];
-    fract = &ctx->timeperframe;
-    ctx->channel = ch;
-    ctx->ms = 0;
-    ctx->jiffies = jiffies;
-    //NOTE: The default speed of scheduling the next buffer is 60 fps.
-    (*fract) = tpf_60fps;//tpf_60fps;//tpf_120fps;//tpf_60fps;// tpf_30fps;
-
-    ctx->ini_jiffies = ctx->jiffies;
-    init_waitqueue_head(&ctx->wq);
-    ctx->kthread = kthread_run(thread_handler, ctx, "zynq_display_thread");
-
-    if (IS_ERR(ctx->kthread)) {
-        zynq_printk(0,  "[zynq_display]kernel_thread() failed\n");
-        return PTR_ERR(ctx->kthread);
-    }
-    /* Wakes thread */
-    wake_up_interruptible(&ctx->wq);
-    return  0;
-}
-
-static int thread_rls(struct channel_obj *ch)
-{
-    struct thread_context *ctx =NULL;
-
-    if (!ch) return  -1;
-
-    ctx = &gThreadContext[ch->channel_id];
-
-    /* shutdown control thread */
-    if (ctx->kthread) {
-        kthread_stop(ctx->kthread);
-        ctx->kthread = NULL;
-    }
-    return 0;
-}
 
 //////////////////////////////////////////////////////////////////////////////////////
 
@@ -614,7 +377,10 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
     struct channel_obj *ch = fh->channel;
     struct common_obj *common = &ch->common[VPIF_VIDEO_INDEX];
     unsigned long flags;
-
+	
+	unsigned long addr = 0;
+	struct v4l2_format *fmt_ptr = &common->fmt;
+	  
     /* If buffer queue is empty, return error */
     spin_lock_irqsave(&common->irqlock, flags);
     if (list_empty(&common->dma_queue)) {
@@ -632,14 +398,36 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
     spin_unlock_irqrestore(&common->irqlock, flags);
     /* Mark state of the current frame to active */
     common->cur_frm->vb.state = VB2_BUF_STATE_ACTIVE;
+	
+	switch (ch->channel_id) {
+            case VPIF_CHANNEL0_VIDEO:
+                common->set_addr = ch0_set_dispbuf_addr;
+                common->set_res = ch0_set_dispbuf_res;
+                common->enable_read = ch0_dispenable_read;
+                break;
+            default:
+                common->set_addr = NULL;
+                common->set_res = NULL;
+              common->enable_read= NULL;
+		}
 
+	
     channel_first_int[VPIF_VIDEO_INDEX][ch->channel_id] = 1;
 
+	addr = vb2_dma_contig_plane_dma_addr(&common->cur_frm->vb, 0);
+	
+	
+	if ((addr != 0) && (common->set_addr != NULL)) {
+        common->set_addr(addr);
+        if (common->set_res != NULL) {
+            common->set_res(fmt_ptr->fmt.pix.width, fmt_ptr->fmt.pix.height);
+        }
+        if (common->enable_read != NULL) common->enable_read(1);
+    }
+	
     /* Initialize field_id and started member */
     ch->field_id = 0;
     common->started = 1;
-
-    thread_init(ch);
 
     return 0;
 }
@@ -657,8 +445,6 @@ static int vpif_stop_streaming(struct vb2_queue *vq)
 
     common = &ch->common[VPIF_VIDEO_INDEX];
 
-    thread_rls(ch);
-
     /* release all active buffers */
     spin_lock_irqsave(&common->irqlock, flags);
     while (!list_empty(&common->dma_queue)) {
@@ -669,7 +455,13 @@ static int vpif_stop_streaming(struct vb2_queue *vq)
     }
     spin_unlock_irqrestore(&common->irqlock, flags);
 
+	if (debug_print >= 2) {
+		zynq_printk(2,  "[zynq_display]Interrupt count:  (intr, dummy) ---> (%u, %u) for channel %u\n", ch->interrupt_count, ch->interrupt_dummy_buffer_count, (unsigned int)ch->channel_id);
+		ch->interrupt_count = 0;
+		ch->interrupt_dummy_buffer_count = 0;
+	}
 
+	
     return 0;
 }
 
@@ -761,7 +553,6 @@ static int vpif_check_format(struct channel_obj *ch,
 {
     return 0;
 }
-
 
 /*
  * vpif_mmap: It is used to map kernel space buffers into user spaces
@@ -857,18 +648,16 @@ static int vpif_release(struct file *filep)
     /* if this instance is doing IO */
     if (fh->io_allowed[VPIF_VIDEO_INDEX]) {
         /* Reset io_usrs member of channel object */
-        common->io_usrs = 0;
+        //common->io_usrs = 0;
 
         common->started = 0;
 
-        /* Free buffers allocated */
-        vb2_queue_release(&common->buffer_queue);
-      
-		if (en_video_input_window_direct_map == 1)
-        	zynq_malloc_cleanup_ctx(common->alloc_ctx);
-		else 
+		if (common->io_usrs != 0) {
+			common->io_usrs = 0;
+      	  /* Free buffers allocated */
+        	vb2_queue_release(&common->buffer_queue);
 			vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
-		
+		}	
         common->numbuffers =
             config_params.numbuffers[ch->channel_id];
     }
@@ -978,8 +767,7 @@ static int vpif_s_fmt_vid_out(struct file *file, void *priv,
     struct common_obj *common = &ch->common[VPIF_VIDEO_INDEX];
     int ret = 0;
 
-    if ((VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)) {
+    if (VPIF_CHANNEL0_VIDEO == ch->channel_id) {
         if (!fh->initialized) {
             zynq_printk(0,  "[zynq_display]Channel Busy!!\n");
             return -EBUSY;
@@ -1061,12 +849,11 @@ static int vpif_reqbufs(struct file *file, void *priv,
     struct common_obj *common;
     struct vb2_queue *q;
     u8 index = 0;
-    int ret;
+    int ret = 0;
 	
     /* This file handle has not initialized the channel,
        It is not allowed to do settings */
-    if ((VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)) {
+    if (VPIF_CHANNEL0_VIDEO == ch->channel_id) {
         if (!fh->initialized) {
             zynq_printk(0, "[zynq_display]Channel Busy\n");
             return -EBUSY;
@@ -1080,39 +867,38 @@ static int vpif_reqbufs(struct file *file, void *priv,
 
     common = &ch->common[index];
 
-    if (0 != common->io_usrs)
-        return -EBUSY;
-
-	if (en_video_input_window_direct_map == 1) {
-        zynq_malloc_conf_t  ctx;
-        ctx.is_always_get_first_memory = en_video_input_window_direct_map;
-        ctx.pool_start_address = display_dam_framebuffer_addr;
-        ctx.pool_size = display_dma_framebuffer_size;
-		ctx.phy_pool_start_address = display_dam_framebuffer_handle;
+	if ((common->io_usrs != 0) && (reqbuf->count == 0)) {
+			common->io_usrs = 0;
+        /* Free buffers allocated */
+        vb2_queue_release(&common->buffer_queue);
+        vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
+		zynq_printk(0, "[zynq_display][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
+		goto exit;
+		 
+	}
+	
+	if (0 != common->io_usrs) {
+     	common->io_usrs = 0;
+        /* Free buffers allocated */
+        vb2_queue_release(&common->buffer_queue);
+        vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
+		 zynq_printk(0, "[zynq_display][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
 		
-        common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
-        if (IS_ERR(common->alloc_ctx)) {
-            zynq_printk(0, "[zynq_display]Failed to get the context\n");
-            return PTR_ERR(common->alloc_ctx);
-        }
-    } else {
-		common->alloc_ctx = vb2_dma_contig_init_ctx(vpif_dev);
-    	if (IS_ERR(common->alloc_ctx)) {
+		//zynq_printk(0, "[zynq_display][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!! (common->io_usrs = %d)\n", __LINE__, common->io_usrs);
+		//return -EBUSY;
+	}
+
+	common->alloc_ctx = vb2_dma_contig_init_ctx(vpif_dev);
+    if (IS_ERR(common->alloc_ctx)) {
         	zynq_printk(0, "[zynq_display]Failed to get the context\n");
         	return PTR_ERR(common->alloc_ctx);
-    	}
-	}
+    }
     q = &common->buffer_queue;
     q->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
     q->io_modes = VB2_MMAP | VB2_USERPTR;
     q->drv_priv = fh;
     q->ops = &video_qops;
-
-	if (en_video_input_window_direct_map == 1)  {
-    	q->mem_ops = &zynq_malloc_memops;
-	} else {
-		 q->mem_ops = &vb2_dma_contig_memops;
-	}
+	q->mem_ops = &vb2_dma_contig_memops;
 	
     q->buf_struct_size = sizeof(struct vpif_disp_buffer);
 #if (LINUX_VERSION_CODE <=  KERNEL_VERSION(3,14,0))
@@ -1124,11 +910,7 @@ static int vpif_reqbufs(struct file *file, void *priv,
     ret = vb2_queue_init(q);
     if (ret) {
         zynq_printk(0, "[zynq_display]vpif_display: vb2_queue_init() failed\n");
-		if (en_video_input_window_direct_map == 1) 
-        	zynq_malloc_cleanup_ctx(common->alloc_ctx);
-		else 
-			vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
-
+		vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
         return ret;
     }
     /* Set io allowed member of file handle to TRUE */
@@ -1138,8 +920,16 @@ static int vpif_reqbufs(struct file *file, void *priv,
     /* Store type of memory requested in channel object */
     common->memory = reqbuf->memory;
     INIT_LIST_HEAD(&common->dma_queue);
-    /* Allocate buffers */
-    return vb2_reqbufs(&common->buffer_queue, reqbuf);
+	 /* Allocate buffers */
+	ret = vb2_reqbufs(&common->buffer_queue, reqbuf);
+	if (ret) {
+		zynq_printk(0, "[zynq_display][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!(ret = %d)\n", __LINE__, ret);
+	}else {
+	  zynq_printk(0, "[zynq_display][vpif_reqbufs] (%d)Call vpif_reqbufs() to allocate buffer may be successfull!!\n", __LINE__);
+	}
+	
+  exit: 
+    return ret;
 }
 
 static int vpif_querybuf(struct file *file, void *priv,
@@ -1638,19 +1428,19 @@ static int initialize_vpif(void)
     int err = 0, i = 0, j = 0;
 
     /* Default number of buffers should be 3 */
-    if ((ch2_numbuffers > 0) &&
-        (ch2_numbuffers < config_params.min_numbuffers))
-        ch2_numbuffers = config_params.min_numbuffers;
+    if ((ch0_numbuffers > 0) &&
+        (ch0_numbuffers < config_params.min_numbuffers))
+        ch0_numbuffers = config_params.min_numbuffers;
 
     /* Set buffer size to min buffers size if invalid buffer size is
      * given */
-    if (ch2_bufsize < config_params.min_bufsize[VPIF_CHANNEL2_VIDEO])
-        ch2_bufsize = config_params.min_bufsize[VPIF_CHANNEL2_VIDEO];
+    if (ch0_bufsize < config_params.min_bufsize[VPIF_CHANNEL0_VIDEO])
+        ch0_bufsize = config_params.min_bufsize[VPIF_CHANNEL0_VIDEO];
 
-    config_params.numbuffers[VPIF_CHANNEL2_VIDEO] = ch2_numbuffers;
+    config_params.numbuffers[VPIF_CHANNEL0_VIDEO] = ch0_numbuffers;
 
-    if (ch2_numbuffers) {
-        config_params.channel_bufsize[VPIF_CHANNEL2_VIDEO] = ch2_bufsize;
+    if (ch0_numbuffers) {
+        config_params.channel_bufsize[VPIF_CHANNEL0_VIDEO] = ch0_bufsize;
     }
 
     /* Allocate memory for six channel objects */
@@ -1686,10 +1476,10 @@ int vpif_display_init(struct pci_dev *pdev)
     struct video_device *vfd = NULL;
     int subdev_count = 0;
     int actual_subdev_count = 0;
-    vpif_dev = &pdev->dev;
+	unsigned irq = (unsigned)-1;
 	
+    vpif_dev = &pdev->dev;
     err = initialize_vpif();
-
     if (err) {
         zynq_printk(0, "[zynq_display] Failed to call  initialize_vpif()!!\n");
         return err;
@@ -1735,6 +1525,8 @@ int vpif_display_init(struct pci_dev *pdev)
         /* Set video_dev to the video device */
         ch->video_dev = vfd;
     }
+    
+    set_interrupts();
 
     for (j = 0; j < VPIF_DISPLAY_MAX_DEVICES; j++) {
         ch = vpif_obj.dev[j];
@@ -1754,11 +1546,16 @@ int vpif_display_init(struct pci_dev *pdev)
             common->cur_frm = common->next_frm = NULL;
             memset(&common->fmt, 0, sizeof(common->fmt));
             common->numbuffers = config_params.numbuffers[k];
-
+			 atomic_set(&common->refcount, -1);
+			 common->dummy_buffer_size = 1920 * 1080 * 2;
+        	common->dummy_buffer = dma_alloc_coherent(NULL, 	common->dummy_buffer_size , &common->dummy_buffer_handle, GFP_KERNEL);
         }
         ch->initialized = 0;
 
         ch->channel_id = j;
+		ch->interrupt_count = 0;
+		ch->interrupt_dummy_buffer_count = 0;
+		
         ch->common[VPIF_VIDEO_INDEX].numbuffers = config_params.numbuffers[ch->channel_id];
 
         memset(&ch->vpifparams, 0, sizeof(ch->vpifparams));
@@ -1780,14 +1577,28 @@ int vpif_display_init(struct pci_dev *pdev)
                                     VFL_TYPE_GRABBER, (j ? 3 : 2));
         if (err < 0)
             goto probe_out;
-
-        initialize_channel_pxiel_format(ch);
+		
+		initialize_channel_pxiel_format(ch);
+		
+		irq = get_interrupt(ch->channel_id);
+		
+		if (irq == (unsigned) -1) continue;
+        
+		err = request_irq(irq,
+                          vpif_channel_isr,
+                          IRQF_ONESHOT   | IRQF_TRIGGER_HIGH,//IRQF_TRIGGER_HIGH, //IRQF_TRIGGER_RISING,
+                          "zynq_display",  &ch->channel_id);
+        if (err) {
+            zynq_printk(0, "[zynq_display] Call request_irq() for channel %d failed!!\n", ch->channel_id);
+            err = -EBUSY;
+            for (j = 0; j < i; j++) {
+                irq = get_interrupt(j);
+                free_irq(irq, (void *)(&ch->channel_id));
+            }
+            goto probe_out;
+        }
+       
     }
-
-	
-	if (en_video_input_window_direct_map == 1) {
-    	if (allocate_reserved_memory() != 0) goto probe_out;
-	}
 	
 
     subdev_count = 	 MAX_DISPLAY_SUBDEV_NUM;
@@ -1795,7 +1606,8 @@ int vpif_display_init(struct pci_dev *pdev)
     if (vpif_obj.sd == NULL) {
         zynq_printk(0, "[zynq_display]Unable to allocate memory for subdevice(adv7511) pointers\n");
         err = -ENOMEM;
-        goto probe_out;
+       // goto probe_out;
+		goto rls_irq;
     }
 
     for (i = 0; i < subdev_count; i++) {
@@ -1845,22 +1657,27 @@ int vpif_display_init(struct pci_dev *pdev)
 
         //zynq_printk(1, "[zynq_display]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  info->name, bus_num, info->board_info.addr);
     }
-
-#ifdef CONFIG_KERNEL_MODE_NEON
-	    zynq_printk(1, "[zynq_display]The display function is  initialized with neon enabled !! (en_video_input_window_direct_map = %u, en_video_input_window_neon_cp=%u, en_video_input_window=%u, en_use_fb_mem=%u)\n", en_video_input_window_direct_map, en_video_input_window_neon_cp, en_video_input_window, en_use_fb_mem);
-#else
-		zynq_printk(1, "[zynq_display]The display function is  initialized without neon enabled !! (en_video_input_window_direct_map = %u, en_video_input_window_neon_cp=%u, en_video_input_window=%u, en_use_fb_mem=%u)\n", en_video_input_window_direct_map, en_video_input_window_neon_cp, en_video_input_window, en_use_fb_mem);
-#endif	
 	
 	return 0;
 
 rls_sd_obj:
     if (vpif_obj.sd != NULL) kfree(vpif_obj.sd);
+rls_irq:
+    for (i = 0; i < VPIF_DISPLAY_MAX_DEVICES; i++) {
+        ch = vpif_obj.dev[i];
+        if (ch != NULL) {
+            unsigned irq = get_interrupt(i);
+            if (irq == (unsigned) -1) continue;
+            free_irq(irq, (void *)(&ch->channel_id));
+        }
+    }	
 probe_out:
     for (k = 0; k < j; k++) {
         ch = vpif_obj.dev[k];
-        video_unregister_device(ch->video_dev);
-        ch->video_dev = NULL;
+		if (ch->video_dev != NULL) {
+        	video_unregister_device(ch->video_dev);
+        	ch->video_dev = NULL;
+		}
     }
 vpif_int_err:
     v4l2_device_unregister(&vpif_obj.v4l2_dev);
@@ -1875,23 +1692,32 @@ vpif_int_err:
  */
 int vpif_display_release(struct pci_dev *pdev)
 {
-    struct channel_obj *ch;
-    int i;
+    struct channel_obj *ch = NULL;
+	 struct common_obj *common = NULL;
+    int i = 0;
+	unsigned irq = (unsigned)-1;
 
     v4l2_device_unregister(&vpif_obj.v4l2_dev);
 
     /* un-register device */
     for (i = 0; i < VPIF_DISPLAY_MAX_DEVICES; i++) {
-        /* Get the pointer to the channel object */
+		/* Get the pointer to the channel object */
         ch = vpif_obj.dev[i];
+		
+		if (!ch) continue;
+		
+		irq = get_interrupt(ch->channel_id);
+		
+		if (irq != (unsigned) -1) free_irq(irq, (void *)(&ch->channel_id));
+		
+		common = &(ch->common[VPIF_VIDEO_INDEX]);
+		if (common->dummy_buffer  != NULL)
+                dma_free_coherent(NULL, common->dummy_buffer_size, common->dummy_buffer, common->dummy_buffer_handle);
         /* Unregister video device */
         video_unregister_device(ch->video_dev);
 
         ch->video_dev = NULL;
     }
-    
-	if (en_video_input_window_direct_map == 1) 
-    	release_reserved_memory();
 
     if (vpif_obj.sd != NULL) kfree(vpif_obj.sd);
 

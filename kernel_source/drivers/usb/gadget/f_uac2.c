@@ -90,6 +90,7 @@ struct uac2_req {
 };
 
 struct uac2_rtd_params {
+	struct snd_uac2_chip *uac2; /* parent chip */
 	bool ep_enabled; /* if the ep is enabled */
 	/* Size of the ring buffer */
 	size_t dma_bytes;
@@ -119,6 +120,15 @@ struct snd_uac2_chip {
 
 	struct snd_card *card;
 	struct snd_pcm *pcm;
+
+	/* timekeeping for the playback endpoint */
+	unsigned int p_interval;
+	unsigned int p_residue;
+
+	/* pre-calculated values for playback iso completion */
+	unsigned int p_pktsize;
+	unsigned int p_pktsize_residue;
+	unsigned int p_framesize;
 };
 
 #define BUFF_SIZE_MAX	(PAGE_SIZE * 16)
@@ -198,13 +208,13 @@ agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	unsigned pending;
 	unsigned long flags;
+	unsigned int hw_ptr;
 	bool update_alsa = false;
-	unsigned char *src, *dst;
 	int status = req->status;
 	struct uac2_req *ur = req->context;
 	struct snd_pcm_substream *substream;
 	struct uac2_rtd_params *prm = ur->pp;
-	struct snd_uac2_chip *uac2 = prm_to_uac2(prm);
+	struct snd_uac2_chip *uac2 = prm->uac2;
 
 	/* i/f shutting down */
 	if (!prm->ep_enabled)
@@ -223,16 +233,31 @@ agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	/* Do nothing if ALSA isn't active */
 	if (!substream)
 		goto exit;
-
+	
 	spin_lock_irqsave(&prm->lock, flags);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		src = prm->dma_area + prm->hw_ptr;
+		/*
+		 * For each IN packet, take the quotient of the current data
+		 * rate and the endpoint's interval as the base packet size.
+		 * If there is a residue from this division, add it to the
+		 * residue accumulator.
+		 */
+		req->length = uac2->p_pktsize;
+		uac2->p_residue += uac2->p_pktsize_residue;
+
+		/*
+		 * Whenever there are more bytes in the accumulator than we
+		 * need to add one more sample frame, increase this packet's
+		 * size and decrease the accumulator.
+		 */
+		if (uac2->p_residue / uac2->p_interval >= uac2->p_framesize) {
+			req->length += uac2->p_framesize;
+			uac2->p_residue -= uac2->p_framesize *
+					   uac2->p_interval;
+		}
 		req->actual = req->length;
-		dst = req->buf;
-	} else {
-		dst = prm->dma_area + prm->hw_ptr;
-		src = req->buf;
+		
 	}
 
 	pending = prm->hw_ptr % prm->period_size;
@@ -240,19 +265,38 @@ agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	if (pending >= prm->period_size)
 		update_alsa = true;
 
+	hw_ptr = prm->hw_ptr;
 	prm->hw_ptr = (prm->hw_ptr + req->actual) % prm->dma_bytes;
 
 	spin_unlock_irqrestore(&prm->lock, flags);
 
 	/* Pack USB load in ALSA ring buffer */
-	memcpy(dst, src, req->actual);
+	pending = prm->dma_bytes - hw_ptr;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		if (unlikely(pending < req->actual)) {
+			memcpy(req->buf, prm->dma_area + hw_ptr, pending);
+			memcpy(req->buf + pending, prm->dma_area, req->actual - pending);
+		} else {
+			memcpy(req->buf, prm->dma_area + hw_ptr, req->actual);
+		}
+	} else {
+		if (unlikely(pending < req->actual)) {
+			memcpy(prm->dma_area + hw_ptr, req->buf, pending);
+			memcpy(prm->dma_area, req->buf + pending,
+			       req->actual - pending);
+		} else {
+			memcpy(prm->dma_area + hw_ptr, req->buf, req->actual);
+		}
+	}
+
 exit:
 	if (usb_ep_queue(ep, req, GFP_ATOMIC))
 		dev_err(&uac2->pdev.dev, "%d Error!\n", __LINE__);
 
 	if (update_alsa)
 		snd_pcm_period_elapsed(substream);
-
+		
 	return;
 }
 
@@ -722,6 +766,7 @@ struct usb_endpoint_descriptor fs_epout_desc = {
 
 	.bEndpointAddress = USB_DIR_OUT,
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC,
+	.wMaxPacketSize = cpu_to_le16(1023),
 	.bInterval = 1,
 };
 
@@ -730,6 +775,7 @@ struct usb_endpoint_descriptor hs_epout_desc = {
 	.bDescriptorType = USB_DT_ENDPOINT,
 
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC,
+	.wMaxPacketSize = cpu_to_le16(1024),
 	.bInterval = 4,
 };
 
@@ -797,6 +843,7 @@ struct usb_endpoint_descriptor fs_epin_desc = {
 
 	.bEndpointAddress = USB_DIR_IN,
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC,
+	.wMaxPacketSize = cpu_to_le16(1023),
 	.bInterval = 1,
 };
 
@@ -805,6 +852,7 @@ struct usb_endpoint_descriptor hs_epin_desc = {
 	.bDescriptorType = USB_DT_ENDPOINT,
 
 	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC,
+	.wMaxPacketSize = cpu_to_le16(1024),
 	.bInterval = 4,
 };
 
@@ -894,8 +942,11 @@ struct cntrl_range_lay3 {
 static inline void
 free_ep(struct uac2_rtd_params *prm, struct usb_ep *ep)
 {
-	struct snd_uac2_chip *uac2 = prm_to_uac2(prm);
+	struct snd_uac2_chip *uac2 = prm->uac2;
 	int i;
+
+	if (!prm->ep_enabled)
+		return;
 
 	prm->ep_enabled = false;
 
@@ -912,7 +963,30 @@ free_ep(struct uac2_rtd_params *prm, struct usb_ep *ep)
 			"%s:%d Error!\n", __func__, __LINE__);
 }
 
-static int __init
+static void set_ep_max_packet_size(/* const struct f_uac2_opts *uac2_opts, */
+	struct usb_endpoint_descriptor *ep_desc,
+	unsigned int factor, bool is_playback)
+{
+	int chmask, srate, ssize;
+	u16 max_packet_size;
+
+	if (is_playback) {
+		chmask = p_chmask;
+		srate = p_srate;
+		ssize = p_ssize;
+	} else {
+		chmask = c_chmask;
+		srate = c_srate;
+		ssize = c_ssize;
+	}
+
+	max_packet_size = num_channels(chmask) * ssize *
+		DIV_ROUND_UP(srate, factor / (1 << (ep_desc->bInterval - 1)));	
+	ep_desc->wMaxPacketSize = cpu_to_le16(min_t(u16, max_packet_size,
+				le16_to_cpu(ep_desc->wMaxPacketSize)));
+}
+
+static int
 afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
@@ -970,11 +1044,19 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	}
 	agdev->in_ep->driver_data = agdev;
 
-	hs_epout_desc.bEndpointAddress = fs_epout_desc.bEndpointAddress;
-	hs_epout_desc.wMaxPacketSize = fs_epout_desc.wMaxPacketSize;
-	hs_epin_desc.bEndpointAddress = fs_epin_desc.bEndpointAddress;
-	hs_epin_desc.wMaxPacketSize = fs_epin_desc.wMaxPacketSize;
+	uac2->p_prm.uac2 = uac2;
+	uac2->c_prm.uac2 = uac2;
 
+	/* Calculate wMaxPacketSize according to audio bandwidth */
+	set_ep_max_packet_size(&fs_epin_desc, 1000, true);
+	set_ep_max_packet_size(&fs_epout_desc, 1000, false);
+	set_ep_max_packet_size(&hs_epin_desc, 8000, true);
+	set_ep_max_packet_size(&hs_epout_desc, 8000, false);
+
+	hs_epout_desc.bEndpointAddress = fs_epout_desc.bEndpointAddress;
+	//hs_epout_desc.wMaxPacketSize = fs_epout_desc.wMaxPacketSize;
+	hs_epin_desc.bEndpointAddress = fs_epin_desc.bEndpointAddress;
+	//hs_epin_desc.wMaxPacketSize = fs_epin_desc.wMaxPacketSize;
 	ret = usb_assign_descriptors(fn, fs_audio_desc, hs_audio_desc, NULL);
 	if (ret)
 		goto err;
@@ -1045,7 +1127,7 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 	struct usb_request *req;
 	struct usb_ep *ep;
 	struct uac2_rtd_params *prm;
-	int i;
+	int req_len, i;
 
 	/* No i/f has more than 2 alt settings */
 	if (alt > 1) {
@@ -1069,14 +1151,40 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 		prm = &uac2->c_prm;
 		config_ep_by_speed(gadget, fn, ep);
 		agdev->as_out_alt = alt;
+		req_len = prm->max_psize;
 	} else if (intf == agdev->as_in_intf) {
+		unsigned int factor, rate;
+		struct usb_endpoint_descriptor *ep_desc;
+
 		ep = agdev->in_ep;
 		prm = &uac2->p_prm;
 		config_ep_by_speed(gadget, fn, ep);
 		agdev->as_in_alt = alt;
+
+		/* pre-calculate the playback endpoint's interval */
+		if (gadget->speed == USB_SPEED_FULL) {
+			ep_desc = &fs_epin_desc;
+			factor = 1000;
 	} else {
-		dev_err(&uac2->pdev.dev,
-			"%s:%d Error!\n", __func__, __LINE__);
+			ep_desc = &hs_epin_desc;
+			factor = 8000;
+		}
+
+	uac2->p_framesize = p_ssize * num_channels(p_chmask);
+	rate = p_srate * uac2->p_framesize;
+
+	uac2->p_interval = factor / (1 << (ep_desc->bInterval - 1));
+	uac2->p_pktsize = min_t(unsigned int, rate / uac2->p_interval, prm->max_psize);
+
+	if (uac2->p_pktsize < prm->max_psize)
+		uac2->p_pktsize_residue = rate % uac2->p_interval;
+	else
+		uac2->p_pktsize_residue = 0;
+
+	req_len = uac2->p_pktsize;
+	uac2->p_residue = 0;
+	} else {	
+		printk(KERN_ERR "%s %d error\n",__func__,__LINE__);
 		return -EINVAL;
 	}
 
@@ -1089,31 +1197,23 @@ afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
 	usb_ep_enable(ep);
 
 	for (i = 0; i < USB_XFERS; i++) {
-		if (prm->ureq[i].req) {
-			if (usb_ep_queue(ep, prm->ureq[i].req, GFP_ATOMIC))
-				dev_err(&uac2->pdev.dev, "%d Error!\n",
-					__LINE__);
-			continue;
-		}
-
+		if (!prm->ureq[i].req) {
 		req = usb_ep_alloc_request(ep, GFP_ATOMIC);
-		if (req == NULL) {
-			dev_err(&uac2->pdev.dev,
-				"%s:%d Error!\n", __func__, __LINE__);
-			return -EINVAL;
-		}
+			if (req == NULL)
+				return -ENOMEM;
 
 		prm->ureq[i].req = req;
 		prm->ureq[i].pp = prm;
 
 		req->zero = 0;
 		req->context = &prm->ureq[i];
-		req->length = prm->max_psize;
+			req->length = req_len;
 		req->complete =	agdev_iso_complete;
-		req->buf = prm->rbuf + i * req->length;
+			req->buf = prm->rbuf + i * prm->max_psize;
+		}
 
-		if (usb_ep_queue(ep, req, GFP_ATOMIC))
-			dev_err(&uac2->pdev.dev, "%d Error!\n", __LINE__);
+	if (usb_ep_queue(ep, prm->ureq[i].req, GFP_ATOMIC))
+		printk(KERN_ERR "%s:%d Error!\n",__func__,__LINE__);
 	}
 
 	return 0;

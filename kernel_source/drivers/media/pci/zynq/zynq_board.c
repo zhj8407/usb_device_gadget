@@ -6,6 +6,8 @@
 #include "zynq_types.h"
 #include "zynq_gpio.h"
 #include "zynq_board.h"
+#include "zynq_debug.h"
+#include "zynq_core.h"
 
 #include "modules/zynq_scaler.h"
 #include "modules/zynq_osd.h"
@@ -14,6 +16,7 @@
 #include "modules/zynq_resampler.h"
 #include "modules/zynq_vdma.h"
 
+extern unsigned int zynq_fpga_dma_interrupt_gpio_pin0;
 ////////////////////////////////////////////////////////////////////////////////////
 /*Video capture specific setting*/
 
@@ -143,8 +146,15 @@ void zynq_setup_interrupt(void)
 
 unsigned  zynq_get_irq(int channel_id)
 {
-    if (channel_id > 3) return (unsigned) -1;
+    if (channel_id >= VPIF_CAPTURE_NUM_CHANNELS) return (unsigned) -1;
 
+	if (zynq_fpga_dma_interrupt_gpio_pin0 != -1) {
+		if (gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0) == zynq_interrupt_resources[channel_id].start) {
+			zynq_printk(0, "[zynq_board] The interrupt irq %u is equal to irq %u for FPGA DMA. So do not assign the irq to capure channel %u!!\n", zynq_interrupt_resources[channel_id].start, gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0), channel_id);
+			return  -1;
+		}
+	}
+	
     return (unsigned) zynq_interrupt_resources[channel_id].start;
 }
 

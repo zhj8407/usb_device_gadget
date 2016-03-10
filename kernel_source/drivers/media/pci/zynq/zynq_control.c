@@ -468,7 +468,11 @@ static char  *videofmt_to_string(eVideoFormat fmt)
     }
 }
 
-
+static void vpif_print_vout_pipeline(struct v4l2_vout_pipeline *a) {
+	zynq_printk(1, "[zynq_control] configure format: %s \n", videofmt_to_string(a->format));
+	zynq_printk(1, "[zynq_control] configure vout_0:  (full, osd) -> (%u,%u) \n", a->pipes[0].full, a->pipes[0].osd);
+	zynq_printk(1, "[zynq_control] configure vout_1:  (full, osd) -> (%u,%u) \n", a->pipes[1].full, a->pipes[1].osd);
+}
 
 static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipeline *a)
 {
@@ -492,13 +496,19 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     if ((fpga_release_date < FPGA_MODULE_SUPPORT_DATE) || (en_modules == 0)) return -1;
 
     if (entity == NULL) return  -1;
+	
+	vpif_print_vout_pipeline(a) ;
+	zynq_printk(1, "[zynq_control] configure: %s -> %s \n", videofmt_to_string(g_vout_pipeline_config.format), videofmt_to_string(a->format));
+    zynq_printk(1, "[zynq_control]  valid status: (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", is_valid_vin0, is_valid_vin1, is_valid_vin2, is_valid_cpu);
 
-    zynq_printk(1, "[zynq_control]%s -> %s,  (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", videofmt_to_string(g_vout_pipeline_config.format), videofmt_to_string(a->format), is_valid_vin0, is_valid_vin1, is_valid_vin2, is_valid_cpu);
+   if ((is_valid_vin0  == 0) && (is_valid_vin1 == 0)){
+	   zynq_printk(0, "[zynq_control] Because (vin0, vin1)==(%u, %u),  could not configure the VOUT !! \n", is_valid_vin0, is_valid_vin1);
+	   return 0;
+   }
 
-    if (is_valid_vin0  == 0 && is_valid_vin1 == 0 ) return 0;
-
-    /*if (g_vout_pipeline_config.format != a->format)*/
-    {
+    if (g_vout_pipeline_config.format != a->format) {
+        
+		zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
 
         mutex_lock(&g_config_lock);
         g_vout_pipeline_config.format = a->format;
@@ -531,18 +541,17 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
                 default_frame_rate = 50;
         }
 
-        vpif_control_enable_video_streams(0);
+       vpif_control_enable_video_streams(0);
         stop_all_video_pipeline_entities(zynq_reg_base);
         release_all_video_pipeline_entities(zynq_reg_base);
 
         init_all_video_pipeline_entities(zynq_reg_base);
         config_all_video_pipeline_entities(zynq_reg_base);
         start_all_video_pipeline_entities(zynq_reg_base) ;
-        //zynq_printk(0, "[zynq_control]video format: %s\n", videofmt_to_string(a->format));
+		vpif_control_enable_video_streams(1);
 
     }
-
-
+    
     for (i = 0; i < vout_num; i++) {
         p = &(a->pipes[i]);
 
@@ -610,7 +619,7 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     if (is_config) {
         int  i = 0;
 
-        vpif_control_enable_video_streams(0);
+        //vpif_control_enable_video_streams(0);
 
         for (i = 0; i < 2; i++) {
             if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {
@@ -960,10 +969,10 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     if (b_firstconfig_vout_pipeline == 1) {
         b_firstconfig_vout_pipeline = 0;
         mutex_lock(&g_config_lock);
-        g_vout_pipeline_config.pipes[0].full = ENONE;
-        g_vout_pipeline_config.pipes[0].osd = ENONE;
-        g_vout_pipeline_config.pipes[1].full = ENONE;
-        g_vout_pipeline_config.pipes[1].osd = ENONE;
+        g_vout_pipeline_config.pipes[0].full = EVIN0;
+        g_vout_pipeline_config.pipes[0].osd = EVIN2;
+        g_vout_pipeline_config.pipes[1].full = EVIN1;
+        g_vout_pipeline_config.pipes[1].osd = EVIN2;
         mutex_unlock(&g_config_lock);
     }
 
@@ -1015,10 +1024,8 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     src.cpu	=	 (g_vout_pipeline_config.pipes[1].osd == ECPU)?1:0 ;
     config.data = &src;
     entity->config(entity,  &config);
-
-
-
-    vpif_control_enable_video_streams(0);
+	
+    //vpif_control_enable_video_streams(0);
 
     for (i = 0; i < 2; i++) {
         if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {

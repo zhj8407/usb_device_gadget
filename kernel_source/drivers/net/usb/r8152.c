@@ -587,6 +587,8 @@ enum rtl_version {
 	RTL_VER_03,
 	RTL_VER_04,
 	RTL_VER_05,
+	RTL_VER_06,
+	RTL_VER_07,
 	RTL_VER_MAX
 };
 
@@ -3448,7 +3450,7 @@ static void r8152b_get_version(struct r8152 *tp)
 
 	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_TCR1);
 	version = (u16)(ocp_data & VERSION_MASK);
-
+	printk("%s %d version=%x\n",__func__,__LINE__,version);
 	switch (version) {
 	case 0x4c00:
 		tp->version = RTL_VER_01;
@@ -3467,6 +3469,13 @@ static void r8152b_get_version(struct r8152 *tp)
 	case 0x5c20:
 		tp->version = RTL_VER_05;
 		tp->mii.supports_gmii = 1;
+		break;
+	case 0x5c30:
+		tp->version = RTL_VER_06;
+		tp->mii.supports_gmii = 1;
+		break;
+	case 0x4800:
+		tp->version = RTL_VER_07;
 		break;
 	default:
 		netif_info(tp, probe, tp->netdev,
