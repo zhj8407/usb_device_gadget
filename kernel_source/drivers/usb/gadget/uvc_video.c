@@ -242,6 +242,9 @@ uvc_video_alloc_requests(struct uvc_video *video)
 		 * max_t(unsigned int, video->ep->maxburst, 1)
 		 * (video->ep->mult + 1);
 
+	pr_debug("uvc_video_alloc_requests: req_size: %d, mult: %d, maxburst: %d\n",
+		req_size, video->ep->mult, video->ep->maxburst);
+
 	for (i = 0; i < UVC_NUM_REQUESTS; ++i) {
 		video->req_buffer[i] = kmalloc(req_size, GFP_KERNEL);
 		if (video->req_buffer[i] == NULL)
