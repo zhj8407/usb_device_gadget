@@ -1507,7 +1507,7 @@ static int
 webcam_function_bind_config(struct android_usb_function *f,
 		struct usb_configuration *c)
 {
-	return webcam_config_bind(c);
+	return webcam_config_bind(c, NULL);
 }
 
 static struct android_usb_function webcam_function = {
