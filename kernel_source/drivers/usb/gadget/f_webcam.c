@@ -50,6 +50,7 @@ struct webcam_config {
 	unsigned int interval;
 	unsigned int maxpacket;
 	unsigned int maxburst;
+	unsigned char headersize;
 };
 
 static struct webcam_config *_webcam_config = NULL;
@@ -881,6 +882,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	unsigned int streaming_interval = 1;
 	unsigned int streaming_maxpacket = 1024;
 	unsigned int streaming_maxburst = 0;
+	unsigned char headersize = 2;
 
 	INFO(cdev, "uvc_function_bind\n");
 
@@ -890,6 +892,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		streaming_interval = clamp(_webcam_config->interval, 1U, 16U);
 		streaming_maxpacket = clamp(_webcam_config->maxpacket, 1U, 3072U);
 		streaming_maxburst = min(_webcam_config->maxburst, 15U);
+		headersize = clamp(_webcam_config->headersize, (unsigned char)2U, (unsigned char)255U);
 	}
 
 	/* Fill in the FS/HS/SS Video Streaming specific descriptors from the
@@ -990,7 +993,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		goto error;
 
 	/* Initialise video. */
-	ret = uvc_video_init(&uvc->video);
+	ret = uvc_video_init(&uvc->video, headersize);
 	if (ret < 0)
 		goto error;
 

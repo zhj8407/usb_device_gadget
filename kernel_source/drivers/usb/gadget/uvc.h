@@ -133,6 +133,7 @@ struct uvc_video
 
 	struct uvc_video_queue queue;
 	unsigned int fid;
+	unsigned char payload_headsize;
 };
 
 enum uvc_state

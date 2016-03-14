@@ -29,13 +29,14 @@ static int
 uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
 		u8 *data, int len)
 {
-	data[0] = 2;
+	memset(data, 0, video->payload_headsize);
+	data[0] = video->payload_headsize;
 	data[1] = UVC_STREAM_EOH | video->fid;
 
-	if (buf->bytesused - video->queue.buf_used <= len - 2)
+	if (buf->bytesused - video->queue.buf_used <= len - video->payload_headsize)
 		data[1] |= UVC_STREAM_EOF;
 
-	return 2;
+	return video->payload_headsize;
 }
 
 static int
@@ -376,7 +377,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
  * Initialize the UVC video stream.
  */
 static int
-uvc_video_init(struct uvc_video *video)
+uvc_video_init(struct uvc_video *video, unsigned char headersize)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
@@ -386,6 +387,7 @@ uvc_video_init(struct uvc_video *video)
 	video->width = 320;
 	video->height = 240;
 	video->imagesize = 320 * 240 * 2;
+	video->payload_headsize = headersize;
 
 	/* Initialize the video buffers queue. */
 	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT);
