@@ -52,6 +52,9 @@
 #define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID		(1)
 #define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID		(2)
 
+#define WEBCAM_DEVICE_SYS_PATH		"/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
+#define WEBCAM_MAXPACKET_SYS_PATH	"/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
+
 struct uvc_device
 {
 	int fd;
@@ -74,17 +77,91 @@ struct uvc_device
 	uint8_t color;
 	unsigned int imgsize;
 	void *imgdata;
+
+	int v4ldevnum;
+	int maxpayloadsize;
 };
+
+static int
+uvc_read_value_from_file(const char* filename,
+	int *value)
+{
+	int fd = 0;
+	char buf[8];
+	int len;
+
+	fd = open(filename, O_RDONLY);
+
+	if (fd < 0) {
+		fprintf(stderr, "Can not open the file: %s, error: %d(%s)\n",
+			filename, errno, strerror(errno));
+		return -1;
+	}
+
+	len = read(fd, buf, sizeof(buf));
+	if (len <= 0) {
+		fprintf(stderr, "Can not read data from file: %s, error: %d(%s)\n",
+			filename, errno, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	len = sscanf(buf, "%d\n", value);
+	if (len <= 0) {
+		fprintf(stderr, "Can not parse the value from %s\n", filename);
+		close(fd);
+		return -1;
+	}
+
+	close(fd);
+	return 0;
+}
+
+
+static int
+uvc_video_init(struct uvc_device *dev)
+{
+	uvc_read_value_from_file(WEBCAM_DEVICE_SYS_PATH,
+		&dev->v4ldevnum);
+
+	uvc_read_value_from_file(WEBCAM_MAXPACKET_SYS_PATH,
+		&dev->maxpayloadsize);
+
+	printf("uvc_video_init: maxpayloadsize: %d\n", dev->maxpayloadsize);
+
+	return 0;
+}
 
 static struct uvc_device *
 uvc_open(const char *devname)
 {
 	struct uvc_device *dev;
 	struct v4l2_capability cap;
+	char v4ldevname[64];
 	int ret;
-	int fd;
+	int fd = 0;
 
-	fd = open(devname, O_RDWR | O_NONBLOCK);
+	dev = malloc(sizeof * dev);
+	if (dev == NULL) {
+		close(fd);
+		return NULL;
+	}
+
+	memset(dev, 0, sizeof * dev);
+	dev->v4ldevnum = -1;
+	dev->maxpayloadsize = 1024;
+
+	uvc_video_init(dev);
+
+	if (dev->v4ldevnum != -1) {
+		snprintf(v4ldevname, sizeof(v4ldevname), "/dev/video%d", dev->v4ldevnum);
+	} else {
+		snprintf(v4ldevname, sizeof(v4ldevname), "%s", devname);
+	}
+
+	printf("We are trying to open the dev: %s\n", v4ldevname);
+
+	fd = open(v4ldevname, O_RDWR | O_NONBLOCK);
 	if (fd == -1) {
 		printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
 		return NULL;
@@ -102,13 +179,6 @@ uvc_open(const char *devname)
 
 	printf("device is %s on bus %s\n", cap.card, cap.bus_info);
 
-	dev = malloc(sizeof * dev);
-	if (dev == NULL) {
-		close(fd);
-		return NULL;
-	}
-
-	memset(dev, 0, sizeof * dev);
 	dev->fd = fd;
 
 	return dev;
@@ -306,12 +376,6 @@ uvc_video_set_format(struct uvc_device *dev)
 	return ret;
 }
 
-static int
-uvc_video_init(struct uvc_device *dev __attribute__((__unused__)))
-{
-	return 0;
-}
-
 /* ---------------------------------------------------------------------------
  * Request processing
  */
@@ -385,7 +449,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
 		ctrl->dwMaxVideoFrameSize = dev->imgsize;
 		break;
 	}
-	ctrl->dwMaxPayloadTransferSize = 512;	/* TODO this should be filled by the driver. */
+	ctrl->dwMaxPayloadTransferSize = dev->maxpayloadsize;	/* TODO this should be filled by the driver. */
 	ctrl->bmFramingInfo = 3;
 	ctrl->bPreferedVersion = 1;
 	ctrl->bMaxVersion = 1;
@@ -813,7 +877,6 @@ int main(int argc, char *argv[])
 	dev->bulk = bulk_mode;
 
 	uvc_events_init(dev);
-	uvc_video_init(dev);
 
 	FD_ZERO(&fds);
 	FD_SET(dev->fd, &fds);
