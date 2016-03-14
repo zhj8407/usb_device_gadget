@@ -60,10 +60,10 @@ MODULE_PARM_DESC(c_ssize, "Capture Sample Size(bytes)");
 #define SPK_NUM_CHANNELS 1
 #define MIC_CHANNEL_CONFIG 0
 #define SPK_CHANNEL_CONFIG 0
-#define MIC_SAMPLE_RATE 48000
-#define SPK_SAMPLE_RATE 48000
-#define MIC_EP_MAX_PACKET_SIZE	96		/* MIC_SAMPLE_RATE * MIC_NUM_CHANNELS * 2 byte * 0.0001 msec */
-#define SPK_EP_MAX_PACKET_SIZE	96
+#define MIC_SAMPLE_RATE 32000
+#define SPK_SAMPLE_RATE 32000
+#define MIC_EP_MAX_PACKET_SIZE	64		/* MIC_SAMPLE_RATE * MIC_NUM_CHANNELS * 2 byte * 0.0001 msec */
+#define SPK_EP_MAX_PACKET_SIZE	64
 
 /* Keep everyone on toes */
 #define USB_XFERS	2
@@ -1201,7 +1201,11 @@ static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsi
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
 	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
-	struct device *dev = &uac_plcmc->pdev.dev;
+	struct device *dev = NULL;
+	if(!uac_plcm_config)
+		return;
+
+	dev = uac_plcm_config->dev;
 
 	if( alt == 0) {
 		if(sink == 1)

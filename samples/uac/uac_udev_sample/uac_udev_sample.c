@@ -23,9 +23,9 @@ pid_t start_audio_in()
 
     if ((child = fork()) == 0) {
         //Child process
-        execlp("aplay", "aplay", "-Dplughw:CARD=audiosource,DEV=0", "-c2",
-               "-f", "S16_LE", "-r48000", "/root/spkDumpStero.data", NULL);
-        perror("aplay");
+        execlp("audio_capture", "audio_capture", "-m 0", "-n 16",
+               "-t2", "-d4", "-r32000", "-b 1", "-c -1","-o 1", NULL);
+        perror("audio_capture");
         exit(errno);
     } else {
         //Parent process
@@ -166,7 +166,7 @@ int main()
                     //            udev_list_entry_get_value(props_list_entry));
                     // }
                     if (strcmp(udev_device_get_subsystem(dev), "plcm_usb") ||
-                            strcmp(udev_device_get_syspath(dev), "/sys/devices/virtual/plcm_usb/plcm0/f_audio_source") ||
+                            strcmp(udev_device_get_syspath(dev), "/sys/devices/virtual/plcm_usb/plcm0/f_audio_dual") ||
                             strcmp(udev_device_get_action(dev), "change")) {
                         udev_device_unref(dev);
                         continue;
