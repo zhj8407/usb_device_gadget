@@ -41,20 +41,18 @@
 
 /*-------------------------------------------------------------------------*/
 
- unsigned int uvc_gadget_trace_param;
+unsigned int uvc_gadget_trace_param;
 
-/* module parameters specific to the Video streaming endpoint */
-static unsigned int streaming_interval = 1;
-module_param(streaming_interval, uint, S_IRUGO|S_IWUSR);
-MODULE_PARM_DESC(streaming_interval, "1 - 16");
+struct webcam_config {
+	int	device;
+	struct device *dev;
 
-static unsigned int streaming_maxpacket = 1024;
-module_param(streaming_maxpacket, uint, S_IRUGO|S_IWUSR);
-MODULE_PARM_DESC(streaming_maxpacket, "1 - 1023 (FS), 1 - 3072 (hs/ss)");
+	unsigned int interval;
+	unsigned int maxpacket;
+	unsigned int maxburst;
+};
 
-static unsigned int streaming_maxburst;
-module_param(streaming_maxburst, uint, S_IRUGO|S_IWUSR);
-MODULE_PARM_DESC(streaming_maxburst, "0 - 15 (ss only)");
+static struct webcam_config *_webcam_config = NULL;
 
 /* string IDs are assigned dynamically */
 
@@ -690,6 +688,7 @@ uvc_register_video(struct uvc_device *uvc)
 {
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	struct video_device *video;
+	int ret = 0;
 
 	/* TODO reference counting. */
 	video = video_device_alloc();
@@ -704,7 +703,12 @@ uvc_register_video(struct uvc_device *uvc)
 	uvc->vdev = video;
 	video_set_drvdata(video, uvc);
 
-	return video_register_device(video, VFL_TYPE_GRABBER, -1);
+	ret = video_register_device(video, VFL_TYPE_GRABBER, -1);
+
+	if (_webcam_config)
+		_webcam_config->device = video->num;
+
+	return ret;
 }
 
 #define UVC_COPY_DESCRIPTOR(mem, dst, desc) \
@@ -874,14 +878,19 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	unsigned int max_packet_size;
 	struct usb_ep *ep;
 	int ret = -EINVAL;
+	unsigned int streaming_interval = 1;
+	unsigned int streaming_maxpacket = 1024;
+	unsigned int streaming_maxburst = 0;
 
 	INFO(cdev, "uvc_function_bind\n");
 
 	/* Sanity check the streaming endpoint module parameters.
 	 */
-	streaming_interval = clamp(streaming_interval, 1U, 16U);
-	streaming_maxpacket = clamp(streaming_maxpacket, 1U, 3072U);
-	streaming_maxburst = min(streaming_maxburst, 15U);
+	if (_webcam_config) {
+		streaming_interval = clamp(_webcam_config->interval, 1U, 16U);
+		streaming_maxpacket = clamp(_webcam_config->maxpacket, 1U, 3072U);
+		streaming_maxburst = min(_webcam_config->maxburst, 15U);
+	}
 
 	/* Fill in the FS/HS/SS Video Streaming specific descriptors from the
 	 * module parameters.
@@ -1116,11 +1125,22 @@ error:
 }
 
 static int
-webcam_config_bind(struct usb_configuration *c)
+webcam_config_bind(struct usb_configuration *c,
+		struct webcam_config *config)
 {
+	/* Set the global _webcam_config. */
+	_webcam_config = config;
+
 	return uvc_bind_config(c, uvc_fs_control_cls, uvc_ss_control_cls,
 		uvc_fs_streaming_cls, uvc_hs_streaming_cls,
 		uvc_ss_streaming_cls);
+}
+
+static void
+webcam_config_unbind(struct usb_configuration *c)
+{
+	/* TODO */
+	_webcam_config = NULL;
 }
 
 module_param_named(trace, uvc_gadget_trace_param, uint, S_IRUGO|S_IWUSR);
