@@ -854,6 +854,7 @@ webcam_function_init(struct plcm_usb_function *f,
 	config->interval = 1;
 	config->maxpacket = 1024;
 	config->maxburst = 0;
+	config->headersize = 2;
 
 	f->config = config;
 
@@ -885,6 +886,7 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 	config->interval = 1;
 	config->maxpacket = 1024;
 	config->maxburst = 0;
+	config->headersize = 2;
 
 	webcam_config_unbind(c);
 }
@@ -933,12 +935,14 @@ static DEVICE_ATTR(webcam_ ## field,	\
 WEBCAM_CONFIG_ATTR(interval, "%d\n", 1, 16)
 WEBCAM_CONFIG_ATTR(maxpacket, "%d\n", 1, 3072)
 WEBCAM_CONFIG_ATTR(maxburst, "%d\n", 0, 15)
+WEBCAM_CONFIG_ATTR(headersize, "%d\n", 2, 255)
 
 static struct device_attribute *webcam_function_attributes[] = {
 	&dev_attr_webcam_device,
 	&dev_attr_webcam_interval,
 	&dev_attr_webcam_maxpacket,
 	&dev_attr_webcam_maxburst,
+	&dev_attr_webcam_headersize,
 	NULL
 };
 
