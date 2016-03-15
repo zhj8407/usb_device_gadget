@@ -56,8 +56,8 @@ if [ -f '/root/py_parse_hid_report.py' ] && [ -f '/root/lyncTelHidDescriptor.txt
 fi
 
 echo "Set Webcam config"
-echo "2048" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket
-echo "15" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize
+#echo "2048" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket
+#echo "15" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize
 
 echo "Set function lists"
 #echo "webcam,audio_source,hidg" > /sys/class/plcm_usb/plcm0/functions
