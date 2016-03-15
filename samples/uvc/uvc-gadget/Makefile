@@ -12,6 +12,7 @@ all: uvc-gadget
 
 uvc-gadget: uvc-gadget.o
 	$(CC) $(LDFLAGS) -o $@ $^
+	cp uvc-gadget test_uvc
 
 clean:
 	rm -f *.o
