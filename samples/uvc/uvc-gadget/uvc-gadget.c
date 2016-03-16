@@ -36,6 +36,8 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
+#include <turbojpeg.h>
+
 #include "uvc.h"
 
 #include "log_str.h"
@@ -55,6 +57,9 @@
 
 #define WEBCAM_DEVICE_SYS_PATH		"/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
 #define WEBCAM_MAXPACKET_SYS_PATH	"/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
+
+#define JPEG_QUALITY        80
+#define COLOR_COMPONENTS    3
 
 struct uvc_device
 {
@@ -444,7 +449,7 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
                 printf("ERROR! buffer not enough: len=%u, need %u\n", bufferLen, buf.bytesused);
                 ret = -1;
             } else {
-            	printf("Successfully read from camera: len=%u, need %u\n", bufferLen, buf.bytesused);
+                printf("Successfully read from camera: len=%u, need %u\n", bufferLen, buf.bytesused);
                 memcpy(buffer, buffers[buf.index].mem, buf.bytesused);
                 *readLen = buf.bytesused;
             }
@@ -589,46 +594,106 @@ void NV12toYUY2scale(char * inBuffer, unsigned int inWidth, unsigned int inHeigh
     free(tempBuf);
 }
 
+/* convert a YUV set to a rgb set - thanks to MartinS and
+   http://www.efg2.com/lab/Graphics/Colors/YUV.htm */
+static void yuvtorgb(unsigned int Y, unsigned int U, unsigned int V, unsigned int *r_ptr, unsigned int *g_ptr, unsigned int *b_ptr)
+{
+    int r, g, b;
+    static short L1[256], L2[256], L3[256], L4[256], L5[256];
+    static int initialised = 0;
+
+    if (!initialised) {
+        int i;
+        initialised=1;
+        for (i=0; i<256; i++) {
+            L1[i] = 1.164*(i-16);
+            L2[i] = 1.596*(i-128);
+            L3[i] = -0.813*(i-128);
+            L4[i] = 2.018*(i-128);
+            L5[i] = -0.391*(i-128);
+        }
+    }
+
+    r = L1[Y] + L2[V];
+    g = L1[Y] + L3[U] + L5[V];
+    b = L1[Y] + L4[U];
+
+    if (r < 0) r = 0;
+    if (g < 0) g = 0;
+    if (b < 0) b = 0;
+    if (r > 255) r = 255;
+    if (g > 255) g = 255;
+    if (b > 255) b = 255;
+
+    *r_ptr = r;
+    *g_ptr = g;
+    *b_ptr = b;
+
+    return;
+}
+
+static void get_rgb(unsigned char *src,
+                    unsigned int x,
+                    unsigned int  y,
+                    unsigned int width,
+                    unsigned int height,
+                    unsigned int *r_value,
+                    unsigned int *g_value,
+                    unsigned int *b_value,
+                    unsigned int format)
+{
+    unsigned int y_value = 0;
+    unsigned int u_value = 0;
+    unsigned int v_value = 0;
+    unsigned char *y_buffer = src;
+    unsigned char *uv_buffer = (unsigned char *)(src + (width *height));
+    unsigned int yOffset = y *width + x ;
+    unsigned int uvOffset = (y >> 1)*(width >> 1) + (x >> 1) ;
+    y_value = *(y_buffer +  yOffset );
+    //0:NV12, 1:YUV422 Planar
+    if (format == 0) {
+        u_value = *(uv_buffer + 2*uvOffset);
+        v_value =  *(uv_buffer+ 2*uvOffset  + 1);
+    } else if (format == 1) {
+        //TODO:Support YUV422 Planar
+    }
+    yuvtorgb(y_value, u_value, v_value, r_value, g_value, b_value);
+
+    return ;
+}
+
+static int NV12toRGBA(unsigned char *yuv_buffer,
+    unsigned int width, unsigned int height,
+    unsigned char *rgb_buffer)
+{
+    unsigned int _width = width;
+    unsigned int _height = height;
+    unsigned int x = 0, y = 0;
+    unsigned int r_value= 0, g_value = 0, b_value =0;
+    unsigned long location = 0;
+
+    if (!yuv_buffer || !rgb_buffer)
+        return -1;
+
+    for (y = 0; y < _height; y++) {
+        for (x = 0; x < _width; x++) {
+            /* Figure out where in memory to put the pixel */
+
+            location = (x) * (COLOR_COMPONENTS) + (y) * (_width*COLOR_COMPONENTS);
+
+            get_rgb(yuv_buffer, x, y, _width, _height, &r_value, &g_value, &b_value, 0);
+
+            *(rgb_buffer + location) = r_value; //Paint a black pixel.
+            *(rgb_buffer + location+1) = g_value;
+            *(rgb_buffer + location+2) = b_value;
+        }
+    }
+
+    return 0;
+}
 
 /*******************for camera capture end*********/
-/*
-static struct uvc_device *
-uvc_open(const char *devname)
-{
-    struct uvc_device *dev;
-    struct v4l2_capability cap;
-    int ret;
-    int fd;
-    fd = open(devname, O_RDWR | O_NONBLOCK);
 
-    if (fd == -1) {
-        printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
-        return NULL;
-    }
-
-    printf("open succeeded, file descriptor = %d\n", fd);
-    ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-
-    if (ret < 0) {
-        printf("unable to query device: %s (%d)\n", strerror(errno),
-               errno);
-        close(fd);
-        return NULL;
-    }
-
-    printf("device is %s on bus %s\n", cap.card, cap.bus_info);
-    dev = malloc(sizeof * dev);
-
-    if (dev == NULL) {
-        close(fd);
-        return NULL;
-    }
-
-    memset(dev, 0, sizeof * dev);
-    dev->fd = fd;
-    return dev;
-}
-*/
 static void
 uvc_close(struct uvc_device *dev)
 {
@@ -653,6 +718,10 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
     int ret;
     unsigned int cam_read_len = 0;
     unsigned int act_len = 0;
+    unsigned char *rgbraw;
+    long unsigned int jpegSize = 0;
+    tjhandle _jpegCompressor;
+    unsigned char *jpegBuffer = NULL;
 
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
@@ -705,8 +774,39 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
             break;
 
         case V4L2_PIX_FMT_MJPEG:
-            memcpy(dev->mem[buf->index], dev->imgdata, dev->imgsize);
-            buf->bytesused = dev->imgsize;
+            ret = read_one_camera_frame(vBuf, LEN_720P_I420, &cam_read_len);
+
+            if (ret != 0) {
+                buf->bytesused = 0;
+                return;
+            }
+            /* Allocate the rgba raw buffer */
+            rgbraw = calloc(dev->height * dev->width * COLOR_COMPONENTS, 1);
+
+            if (!rgbraw) {
+                buf->bytesused = 0;
+                return;
+            }
+
+            NV12toRGBA((unsigned char *)vBuf, dev->width, dev->height, rgbraw);
+
+            /* Start to compress */
+            _jpegCompressor = tjInitCompress();
+
+            tjCompress2(_jpegCompressor, rgbraw, dev->width, 0, dev->height, TJPF_RGB,
+                &jpegBuffer, &jpegSize, TJSAMP_444, JPEG_QUALITY, TJFLAG_FASTDCT);
+
+            tjDestroy(_jpegCompressor);
+
+            free(rgbraw);
+
+            /* Copy to uvc buffer. */
+            memcpy(dev->mem[buf->index], jpegBuffer, jpegSize);
+
+            buf->bytesused = jpegSize;
+
+            tjFree(jpegBuffer);
+
             break;
     }
 }
@@ -854,8 +954,9 @@ uvc_video_set_format(struct uvc_device *dev)
     fmt.fmt.pix.pixelformat = dev->fcc;
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-    if (dev->fcc == V4L2_PIX_FMT_MJPEG)
-        fmt.fmt.pix.sizeimage = dev->imgsize * 1.5;
+	if (dev->fcc == V4L2_PIX_FMT_MJPEG) {
+		fmt.fmt.pix.sizeimage = dev->width * dev->height * 1.5;
+    }
 
     if ((ret = ioctl(dev->fd, VIDIOC_S_FMT, &fmt)) < 0)
         printf("Unable to set format: %s (%d).\n",
@@ -950,7 +1051,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
             break;
 
         case V4L2_PIX_FMT_MJPEG:
-            ctrl->dwMaxVideoFrameSize = dev->imgsize;
+            ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 3 / 2;
             break;
     }
 
@@ -1221,10 +1322,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             break;
 
         case V4L2_PIX_FMT_MJPEG:
-            if (dev->imgsize == 0)
-                printf("WARNING: MJPEG requested and no image loaded.\n");
-
-            target->dwMaxVideoFrameSize = dev->imgsize;
+            target->dwMaxVideoFrameSize = frame->width * frame->height;
+            target->wCompQuality = JPEG_QUALITY;
             break;
     }
 

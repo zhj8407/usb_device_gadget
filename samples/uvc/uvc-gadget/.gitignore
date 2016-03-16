@@ -1,2 +1,3 @@
 *.o
 uvc-gadget
+test_uvc
