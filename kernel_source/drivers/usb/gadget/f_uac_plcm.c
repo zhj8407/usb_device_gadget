@@ -73,6 +73,7 @@ static char *uac_sink_active[2]    = { "AUDIO_SINK_STATE=ACTIVE", NULL };
 static char *uac_sink_deactive[2]   = { "AUDIO_SINK_STATE=DEACTIVE", NULL };
 static char *uac_source_active[2]    = { "AUDIO_SOURCE_STATE=ACTIVE", NULL };
 static char *uac_source_deactive[2]   = { "AUDIO_SOURCE_STATE=DEACTIVE", NULL };
+static char *uac_suspend[2]	= { "AUDIO_SOURCE_STATE=SUSPEND", NULL };
 
 #define MAX_STRING_NAME_LENGTH		64
 
@@ -1200,7 +1201,6 @@ static void afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
 static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsigned source, unsigned alt)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
-	struct snd_uac_plcm_chip *uac_plcmc = &agdev->uac_plcmc;
 	struct device *dev = NULL;
 	if(!uac_plcm_config)
 		return;
@@ -1348,6 +1348,21 @@ static void afunc_disable(struct usb_function *fn)
 	free_ep(&uac_plcmc->cs_prm, agdev->out_ep);
 	agdev->as_out_alt = 0;
 }
+
+static void afunc_suspend(struct usb_function *fn)
+{
+	struct device *dev = NULL;
+	if(!uac_plcm_config)
+		return;
+
+	dev = uac_plcm_config->dev;
+	pr_trace("%s:%d\n", __func__, __LINE__);
+
+	/* Notify the userspace through uevent. */
+	if (dev)
+		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_suspend);
+}
+
 
 static void audio_intf_req_complete(struct usb_ep *ep, struct usb_request *req)
 {
@@ -1542,6 +1557,7 @@ static int audio_bind_config(struct usb_configuration *cfg)
 	agdev_g->func.get_alt = afunc_get_alt;
 	agdev_g->func.disable = afunc_disable;
 	agdev_g->func.setup = afunc_setup;
+	agdev_g->func.suspend = afunc_suspend;
 
 	res = usb_add_function(cfg, &agdev_g->func);
 	if (res < 0)
