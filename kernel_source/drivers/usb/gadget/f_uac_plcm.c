@@ -1352,11 +1352,16 @@ static void afunc_disable(struct usb_function *fn)
 static void afunc_suspend(struct usb_function *fn)
 {
 	struct device *dev = NULL;
-	if(!uac_plcm_config)
+
+	pr_trace("%s:%d\n", __func__, __LINE__);
+
+	if(!uac_plcm_config) {
+		pr_trace("%s:%d - uac_plcm_config is NULL, return\n",
+			__func__, __LINE__);
 		return;
+	}
 
 	dev = uac_plcm_config->dev;
-	pr_trace("%s:%d\n", __func__, __LINE__);
 
 	/* Notify the userspace through uevent. */
 	if (dev)
@@ -1525,46 +1530,6 @@ static int afunc_setup(struct usb_function *f, const struct usb_ctrlrequest *ctr
 }
 
 /* --------- USB Config Interface ------------- */
-static int audio_bind_config(struct usb_configuration *cfg)
-{
-	int res;
-
-	pr_trace("%s:%d\n", __func__, __LINE__);
-
-	agdev_g = kzalloc(sizeof *agdev_g, GFP_KERNEL);
-	if (agdev_g == NULL) {
-		printk(KERN_ERR "Unable to allocate audio gadget\n");
-		return -ENOMEM;
-	}
-
-	res = usb_string_ids_tab(cfg->cdev, strings_fn);
-	if (res) {
-		kfree(agdev_g);
-		return res;
-	}
-
-	ac_intf_assoc_desc.iFunction = strings_fn[STR_ASSOC].id;
-	spk_as_intf_alt0_desc.iInterface = strings_fn[STR_AS_OUT_ALT0].id;
-	spk_as_intf_alt1_desc.iInterface = strings_fn[STR_AS_OUT_ALT1].id;
-	mic_as_intf_alt0_desc.iInterface = strings_fn[STR_AS_IN_ALT0].id;
-	mic_as_intf_alt1_desc.iInterface = strings_fn[STR_AS_IN_ALT1].id;
-
-	agdev_g->func.name = "uac_plcm_func";
-	agdev_g->func.strings = fn_strings;
-	agdev_g->func.bind = afunc_bind;
-	agdev_g->func.unbind = afunc_unbind;
-	agdev_g->func.set_alt = afunc_set_alt;
-	agdev_g->func.get_alt = afunc_get_alt;
-	agdev_g->func.disable = afunc_disable;
-	agdev_g->func.setup = afunc_setup;
-	agdev_g->func.suspend = afunc_suspend;
-
-	res = usb_add_function(cfg, &agdev_g->func);
-	if (res < 0)
-		kfree(agdev_g);
-	return res;
-}
-
 static int audio_composite_bind_config(struct usb_configuration *cfg,
 		struct audio_dual_config *config)
 {
@@ -1605,6 +1570,7 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	agdev_g->func.unbind = afunc_unbind;
 	agdev_g->func.set_alt = afunc_set_alt;
 	agdev_g->func.get_alt = afunc_get_alt;
+	agdev_g->func.suspend = afunc_suspend;
 	agdev_g->func.disable = afunc_disable;
 	agdev_g->func.setup = afunc_setup;
 
@@ -1612,6 +1578,11 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	if (res < 0)
 		kfree(agdev_g);
 	return res;
+}
+
+static int audio_bind_config(struct usb_configuration *cfg)
+{
+	return audio_composite_bind_config(cfg, NULL);
 }
 
 static void audio_unbind_config(struct usb_configuration *cfg)
