@@ -25,13 +25,42 @@
 static int bTerminate = 0;
 static int bSleep = 0;
 
+static snd_pcm_t *phandle = NULL;
+static snd_pcm_t *handle = NULL;
+
 static void sig_kill(int signo)
 {
-	printf("Receive SIGNAL: %d\n", signo);
+	printf("Receive SIGNAL: %s\n", strsignal(signo));
+	if (bTerminate)
+		return;
+
 	if ((signo == SIGTERM) || (signo == SIGINT) || (signo == SIGABRT))
 	{
-		printf("signo recv %s,%d", __func__, signo);
 		bTerminate = 1;
+
+		if (phandle)
+			snd_pcm_abort(phandle);
+
+		if (handle)
+			snd_pcm_abort(handle);
+
+		if (signo == SIGABRT)
+		{
+			if (phandle)
+			{
+				snd_pcm_close(phandle);
+				phandle = NULL;
+			}
+
+			if (handle)
+			{
+				snd_pcm_close(handle);
+				handle = NULL;
+			}
+
+			/* Exit. */
+			exit(EXIT_FAILURE);
+		}
 	}
 	else if (signo == SIGHUP) {
 		if (bSleep == 0)
@@ -40,6 +69,8 @@ static void sig_kill(int signo)
 			bSleep =0;
 		//bIssueEvent = 1;
 	}
+
+	signal(signo, SIG_DFL);
 }
 #define INTERLEAVED_FILE_NAME "interleaved.pcm"
 
@@ -187,8 +218,6 @@ int setHwParams(snd_pcm_t *pcm_handle,
 	return 0;
 }
 
-static snd_pcm_t *phandle;
-
 int main(int argc, char* argv[]) {
 	int rc;
 
@@ -204,7 +233,6 @@ int main(int argc, char* argv[]) {
 	int period_size  = 0;
 	int buffer_size  = 0;
 
-	snd_pcm_t *handle;
 	char *pcm_name;
 
 	snd_pcm_hw_params_t *params;
@@ -339,12 +367,14 @@ int main(int argc, char* argv[]) {
 	signal(SIGTERM, sig_kill);
 	signal(SIGINT, sig_kill);
 	signal(SIGHUP, sig_kill);
+	signal(SIGABRT, sig_kill);
 
 	/* Open PCM device for playback. */
 	rc = snd_pcm_open(&handle, pcm_name, SND_PCM_STREAM_CAPTURE, 0);
 	if (rc < 0)
 	{
-		fprintf(stderr,	"[audio_capture] unable to open pcm device: %s\n", snd_strerror(rc));
+		fprintf(stderr,	"[audio_capture] unable to open pcm device: %s, error:%d(%s)\n",
+			pcm_name, rc, snd_strerror(rc));
 		exit(1);
 	}
 
@@ -352,7 +382,8 @@ int main(int argc, char* argv[]) {
 	rc = snd_pcm_open(&phandle, pcm_name, SND_PCM_STREAM_PLAYBACK, 0);
 	if (rc < 0)
 	{
-		fprintf(stderr,	"[audio_play] unable to open pcm device: %s\n", snd_strerror(rc));
+		fprintf(stderr,	"[audio_play] unable to open pcm device: %s, error:%d(%s)\n",
+			pcm_name, rc, snd_strerror(rc));
 		exit(1);
 	}
 
@@ -452,7 +483,7 @@ int main(int argc, char* argv[]) {
 #endif
 	{
 		unsigned int hoped_sample_rate = 16000;
-		unsigned int hoped_frame_num_of_period = 2048;
+		unsigned int hoped_frame_num_of_period = 1024;
 		unsigned int ratio = samplerate/hoped_sample_rate;
 
 		if (ratio == 0) ratio =1;

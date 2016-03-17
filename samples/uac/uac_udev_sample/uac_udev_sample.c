@@ -37,7 +37,7 @@ pid_t start_audio_in()
 void stop_audio_in(pid_t child)
 {
     if (child > 0)
-        kill(child, SIGINT);
+        kill(child, SIGABRT);
 }
 
 
