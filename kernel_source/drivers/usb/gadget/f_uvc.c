@@ -713,7 +713,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		goto error;
 
 	/* Initialise video. */
-	ret = uvc_video_init(&uvc->video, 2);
+	ret = uvc_video_init(&uvc->video, 0, 2);
 	if (ret < 0)
 		goto error;
 

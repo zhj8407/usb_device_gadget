@@ -107,6 +107,9 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 	video->width = fmt->fmt.pix.width;
 	video->height = fmt->fmt.pix.height;
 	video->imagesize = imagesize;
+	/* Bulk mode. */
+	if (video->bulk_mode)
+		video->max_payload_size = 16 * 1024;
 
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
 	fmt->fmt.pix.bytesperline = bpl;
@@ -246,16 +249,33 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		if (*type != video->queue.queue.type)
 			return -EINVAL;
 
+		/*
+		 * In bulk mode, there is not set_alt request.
+		 * So we shall configure and enable the ep here.
+		 */
+		if (video->bulk_mode)
+		{
+			if (uvc->video.ep) {
+				ret = config_ep_by_speed(uvc->func.config->cdev->gadget,
+						&(uvc->func), uvc->video.ep);
+				if (ret)
+					return ret;
+				usb_ep_enable(uvc->video.ep);
+			}
+		}
+
 		/* Enable UVC video. */
 		ret = uvc_video_enable(video, 1);
 		if (ret < 0)
 			return ret;
 
-		/*
-		 * Complete the alternate setting selection setup phase now that
-		 * userspace is ready to provide video frames.
-		 */
-		uvc_function_setup_continue(uvc);
+		if (!video->bulk_mode) {
+			/*
+			 * Complete the alternate setting selection setup phase now that
+			 * userspace is ready to provide video frames.
+			 */
+			uvc_function_setup_continue(uvc);
+		}
 		uvc->state = UVC_STATE_STREAMING;
 
 		return 0;
@@ -272,7 +292,7 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		 * of the potential deadlock.
 		 * So do it here to make sure the ep is disabled.
 		 */
-		if (uvc->video.ep)
+		if (uvc->suspended && uvc->video.ep)
 			usb_ep_disable(uvc->video.ep);
 
 		return uvc_video_enable(video, 0);

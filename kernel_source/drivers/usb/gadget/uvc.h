@@ -134,6 +134,7 @@ struct uvc_video
 	struct uvc_video_queue queue;
 	unsigned int fid;
 	unsigned char payload_headsize;
+	unsigned char bulk_mode;
 };
 
 enum uvc_state
@@ -169,6 +170,8 @@ struct uvc_device
 	/* Events */
 	unsigned int event_length;
 	unsigned int event_setup_out : 1;
+
+	unsigned int suspended : 1;
 };
 
 static inline struct uvc_device *to_uvc(struct usb_function *f)

@@ -367,7 +367,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
 	if ((ret = uvc_video_alloc_requests(video)) < 0)
 		return ret;
 
-	if (video->max_payload_size) {
+	if (video->bulk_mode) {
 		video->encode = uvc_video_encode_bulk;
 		video->payload_size = 0;
 	} else
@@ -380,7 +380,8 @@ uvc_video_enable(struct uvc_video *video, int enable)
  * Initialize the UVC video stream.
  */
 static int
-uvc_video_init(struct uvc_video *video, unsigned char headersize)
+uvc_video_init(struct uvc_video *video,
+		unsigned char bulkmode, unsigned char headersize)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
@@ -391,6 +392,7 @@ uvc_video_init(struct uvc_video *video, unsigned char headersize)
 	video->height = 240;
 	video->imagesize = 320 * 240 * 2;
 	video->payload_headsize = headersize;
+	video->bulk_mode = bulkmode;
 
 	/* Initialize the video buffers queue. */
 	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT);
