@@ -214,6 +214,7 @@ static void drvUsbHidDeviceTxTask(void *data)
 
         if (item == NULL) {
             UtilSemGive(&handle->MsgQueueSem);
+            UtilSleep(5);
             continue;
         }
 
