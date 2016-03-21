@@ -775,6 +775,8 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 act_len = (dev->width) * (dev->height) * 2;
                 memcpy(dev->mem[buf->index], vBuf, act_len);
                 buf->bytesused = act_len;
+            } else {
+                buf->bytesused = 0;
             }
 
             printf("sending data for YUY2: len=%u, ret=%u\n", buf->bytesused, ret);
@@ -793,6 +795,8 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 act_len = (dev->width) * (dev->height) * 3 / 2;
                 memcpy(dev->mem[buf->index], vBuf, act_len);
                 buf->bytesused = act_len;
+            } else {
+                buf->bytesused = 0;
             }
 
             printf("sending data for YUV420: len=%u, ret=%u\n", buf->bytesused, ret);
@@ -800,6 +804,10 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 
         case V4L2_PIX_FMT_NV12:
             ret = read_one_camera_frame(dev->mem[buf->index], buf->length, &(buf->bytesused));
+
+            if (ret)
+                buf->bytesused = 0;
+
             printf("sending data for NV12: len=%u, ret=%u\n", buf->bytesused, ret);
             break;
 
