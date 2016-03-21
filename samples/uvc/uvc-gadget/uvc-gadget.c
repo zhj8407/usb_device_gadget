@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/video.h>
@@ -55,14 +56,15 @@
 #define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID     (1)
 #define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID     (2)
 
-#define WEBCAM_DEVICE_SYS_PATH		"/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
-#define WEBCAM_MAXPACKET_SYS_PATH	"/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
+#define WEBCAM_DEVICE_SYS_PATH      "/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
+#define WEBCAM_MAXPACKET_SYS_PATH   "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
+#define WEBCAM_HEADERSIZE_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize"
+#define WEBCAM_BULKMODE_SYS_PATH    "/sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode"
 
 #define JPEG_QUALITY        80
 #define COLOR_COMPONENTS    3
 
-struct uvc_device
-{
+struct uvc_device {
     int fd;
 
     struct uvc_streaming_control probe;
@@ -79,99 +81,113 @@ struct uvc_device
     unsigned int nbufs;
     unsigned int bufsize;
 
-    unsigned int bulk;
-	uint8_t color;
-	unsigned int imgsize;
-	void *imgdata;
+    int bulk;
+    uint8_t color;
+    unsigned int imgsize;
+    void *imgdata;
 
-	int v4ldevnum;
-	int maxpayloadsize;
+    int v4ldevnum;
+    int maxpayloadsize;
+    int headersize;
 };
 
 static int
 uvc_read_value_from_file(const char* filename,
-	int *value)
+                         int *value)
 {
-	int fd = 0;
-	char buf[8];
-	int len;
+    int fd = 0;
+    char buf[8];
+    int len;
 
-	fd = open(filename, O_RDONLY);
+    fd = open(filename, O_RDONLY);
 
-	if (fd < 0) {
-		fprintf(stderr, "Can not open the file: %s, error: %d(%s)\n",
-			filename, errno, strerror(errno));
-		return -1;
-	}
+    if (fd < 0) {
+        fprintf(stderr, "Can not open the file: %s, error: %d(%s)\n",
+                filename, errno, strerror(errno));
+        return -1;
+    }
 
-	len = read(fd, buf, sizeof(buf));
-	if (len <= 0) {
-		fprintf(stderr, "Can not read data from file: %s, error: %d(%s)\n",
-			filename, errno, strerror(errno));
-		close(fd);
-		return -1;
-	}
+    len = read(fd, buf, sizeof(buf));
 
-	len = sscanf(buf, "%d\n", value);
-	if (len <= 0) {
-		fprintf(stderr, "Can not parse the value from %s\n", filename);
-		close(fd);
-		return -1;
-	}
+    if (len <= 0) {
+        fprintf(stderr, "Can not read data from file: %s, error: %d(%s)\n",
+                filename, errno, strerror(errno));
+        close(fd);
+        return -1;
+    }
 
-	close(fd);
-	return 0;
+    len = sscanf(buf, "%d\n", value);
+
+    if (len <= 0) {
+        fprintf(stderr, "Can not parse the value from %s\n", filename);
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
 }
 
 
 static int
 uvc_video_init(struct uvc_device *dev)
 {
-	uvc_read_value_from_file(WEBCAM_DEVICE_SYS_PATH,
-		&dev->v4ldevnum);
+    uvc_read_value_from_file(WEBCAM_DEVICE_SYS_PATH,
+                             &dev->v4ldevnum);
 
-	uvc_read_value_from_file(WEBCAM_MAXPACKET_SYS_PATH,
-		&dev->maxpayloadsize);
+    uvc_read_value_from_file(WEBCAM_MAXPACKET_SYS_PATH,
+                             &dev->maxpayloadsize);
 
-	printf("uvc_video_init: maxpayloadsize: %d\n", dev->maxpayloadsize);
+    uvc_read_value_from_file(WEBCAM_HEADERSIZE_SYS_PATH,
+                             &dev->headersize);
 
-	return 0;
+    uvc_read_value_from_file(WEBCAM_BULKMODE_SYS_PATH,
+                             &dev->bulk);
+
+    printf("uvc_video_init: maxpayloadsize: %d\n", dev->maxpayloadsize);
+
+    return 0;
 }
 
 static struct uvc_device *
 uvc_open(const char *devname)
 {
-	struct uvc_device *dev;
-	struct v4l2_capability cap;
-	char v4ldevname[64];
-	int ret = -1;
-	int fd = 0;
+    struct uvc_device *dev;
+    struct v4l2_capability cap;
+    char v4ldevname[64];
+    int ret = -1;
+    int fd = 0;
 
-	dev = malloc(sizeof * dev);
-	if (dev == NULL) {
-		close(fd);
-		return NULL;
-	}
+    dev = malloc(sizeof * dev);
 
-	memset(dev, 0, sizeof * dev);
-	dev->v4ldevnum = -1;
-	dev->maxpayloadsize = 1024;
+    if (dev == NULL) {
+        close(fd);
+        return NULL;
+    }
 
-	uvc_video_init(dev);
+    memset(dev, 0, sizeof * dev);
+    dev->v4ldevnum = -1;
+    dev->maxpayloadsize = 1024;
+    dev->headersize = 2;
+    dev->bulk = 0;
 
-	if (dev->v4ldevnum != -1) {
-		snprintf(v4ldevname, sizeof(v4ldevname), "/dev/video%d", dev->v4ldevnum);
-	} else {
-		snprintf(v4ldevname, sizeof(v4ldevname), "%s", devname);
-	}
+    uvc_video_init(dev);
 
-	printf("We are trying to open the dev: %s\n", v4ldevname);
+    if (dev->v4ldevnum != -1) {
+        snprintf(v4ldevname, sizeof(v4ldevname), "/dev/video%d", dev->v4ldevnum);
+    } else {
+        snprintf(v4ldevname, sizeof(v4ldevname), "%s", devname);
+    }
 
-	fd = open(v4ldevname, O_RDWR | O_NONBLOCK);
-	if (fd == -1) {
-		printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
-		return NULL;
-	}
+    printf("We are trying to open the dev: %s\n", v4ldevname);
+
+    fd = open(v4ldevname, O_RDWR | O_NONBLOCK);
+
+    if (fd == -1) {
+        printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
+        return NULL;
+    }
+
     printf("open succeeded, file descriptor = %d\n", fd);
     ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
 
@@ -183,6 +199,12 @@ uvc_open(const char *devname)
     }
 
     printf("device is %s on bus %s\n", cap.card, cap.bus_info);
+
+    printf("The config values are as below\n");
+    printf("\t\tv4ldevnum: %d\n", dev->v4ldevnum);
+    printf("\t\tmaxpayloadsize(iso): %d\n", dev->maxpayloadsize);
+    printf("\t\theadersize: %d\n", dev->headersize);
+    printf("\t\tbulkmode: %d\n", dev->bulk);
     dev->fd = fd;
     return dev;
 }
@@ -604,13 +626,14 @@ static void yuvtorgb(unsigned int Y, unsigned int U, unsigned int V, unsigned in
 
     if (!initialised) {
         int i;
-        initialised=1;
-        for (i=0; i<256; i++) {
-            L1[i] = 1.164*(i-16);
-            L2[i] = 1.596*(i-128);
-            L3[i] = -0.813*(i-128);
-            L4[i] = 2.018*(i-128);
-            L5[i] = -0.391*(i-128);
+        initialised = 1;
+
+        for (i = 0; i < 256; i++) {
+            L1[i] = 1.164 * (i - 16);
+            L2[i] = 1.596 * (i - 128);
+            L3[i] = -0.813 * (i - 128);
+            L4[i] = 2.018 * (i - 128);
+            L5[i] = -0.391 * (i - 128);
         }
     }
 
@@ -619,10 +642,15 @@ static void yuvtorgb(unsigned int Y, unsigned int U, unsigned int V, unsigned in
     b = L1[Y] + L4[U];
 
     if (r < 0) r = 0;
+
     if (g < 0) g = 0;
+
     if (b < 0) b = 0;
+
     if (r > 255) r = 255;
+
     if (g > 255) g = 255;
+
     if (b > 255) b = 255;
 
     *r_ptr = r;
@@ -646,30 +674,32 @@ static void get_rgb(unsigned char *src,
     unsigned int u_value = 0;
     unsigned int v_value = 0;
     unsigned char *y_buffer = src;
-    unsigned char *uv_buffer = (unsigned char *)(src + (width *height));
-    unsigned int yOffset = y *width + x ;
-    unsigned int uvOffset = (y >> 1)*(width >> 1) + (x >> 1) ;
-    y_value = *(y_buffer +  yOffset );
+    unsigned char *uv_buffer = (unsigned char *)(src + (width * height));
+    unsigned int yOffset = y * width + x ;
+    unsigned int uvOffset = (y >> 1) * (width >> 1) + (x >> 1) ;
+    y_value = *(y_buffer +  yOffset);
+
     //0:NV12, 1:YUV422 Planar
     if (format == 0) {
-        u_value = *(uv_buffer + 2*uvOffset);
-        v_value =  *(uv_buffer+ 2*uvOffset  + 1);
+        u_value = *(uv_buffer + 2 * uvOffset);
+        v_value =  *(uv_buffer + 2 * uvOffset  + 1);
     } else if (format == 1) {
         //TODO:Support YUV422 Planar
     }
+
     yuvtorgb(y_value, u_value, v_value, r_value, g_value, b_value);
 
     return ;
 }
 
 static int NV12toRGBA(unsigned char *yuv_buffer,
-    unsigned int width, unsigned int height,
-    unsigned char *rgb_buffer)
+                      unsigned int width, unsigned int height,
+                      unsigned char *rgb_buffer)
 {
     unsigned int _width = width;
     unsigned int _height = height;
     unsigned int x = 0, y = 0;
-    unsigned int r_value= 0, g_value = 0, b_value =0;
+    unsigned int r_value = 0, g_value = 0, b_value = 0;
     unsigned long location = 0;
 
     if (!yuv_buffer || !rgb_buffer)
@@ -679,13 +709,13 @@ static int NV12toRGBA(unsigned char *yuv_buffer,
         for (x = 0; x < _width; x++) {
             /* Figure out where in memory to put the pixel */
 
-            location = (x) * (COLOR_COMPONENTS) + (y) * (_width*COLOR_COMPONENTS);
+            location = (x) * (COLOR_COMPONENTS) + (y) * (_width * COLOR_COMPONENTS);
 
             get_rgb(yuv_buffer, x, y, _width, _height, &r_value, &g_value, &b_value, 0);
 
             *(rgb_buffer + location) = r_value; //Paint a black pixel.
-            *(rgb_buffer + location+1) = g_value;
-            *(rgb_buffer + location+2) = b_value;
+            *(rgb_buffer + location + 1) = g_value;
+            *(rgb_buffer + location + 2) = b_value;
         }
     }
 
@@ -780,6 +810,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 buf->bytesused = 0;
                 return;
             }
+
             /* Allocate the rgba raw buffer */
             rgbraw = calloc(dev->height * dev->width * COLOR_COMPONENTS, 1);
 
@@ -794,7 +825,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
             _jpegCompressor = tjInitCompress();
 
             tjCompress2(_jpegCompressor, rgbraw, dev->width, 0, dev->height, TJPF_RGB,
-                &jpegBuffer, &jpegSize, TJSAMP_444, JPEG_QUALITY, TJFLAG_FASTDCT);
+                        &jpegBuffer, &jpegSize, TJSAMP_444, JPEG_QUALITY, TJFLAG_FASTDCT);
 
             tjDestroy(_jpegCompressor);
 
@@ -954,8 +985,8 @@ uvc_video_set_format(struct uvc_device *dev)
     fmt.fmt.pix.pixelformat = dev->fcc;
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-	if (dev->fcc == V4L2_PIX_FMT_MJPEG) {
-		fmt.fmt.pix.sizeimage = dev->width * dev->height * 1.5;
+    if (dev->fcc == V4L2_PIX_FMT_MJPEG) {
+        fmt.fmt.pix.sizeimage = dev->width * dev->height * 1.5;
     }
 
     if ((ret = ioctl(dev->fd, VIDIOC_S_FMT, &fmt)) < 0)
@@ -1055,8 +1086,9 @@ uvc_fill_streaming_control(struct uvc_device *dev,
             break;
     }
 
-    ctrl->dwMaxPayloadTransferSize = dev->maxpayloadsize;	/* TODO this should be filled by the driver. */
-    //ctrl->dwMaxPayloadTransferSize = 1024;  /* TODO this should be filled by the driver. */
+    if (!dev->bulk)
+        ctrl->dwMaxPayloadTransferSize = dev->maxpayloadsize;   /* TODO this should be filled by the driver. */
+
     ctrl->bmFramingInfo = 3;
     ctrl->bPreferedVersion = 1;
     ctrl->bMaxVersion = 1;
@@ -1335,8 +1367,22 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         dev->height = frame->height;
         uvc_video_set_format(dev);
 
-        if (dev->bulk)
+        if (dev->bulk) {
+            /* In bulk mode, we can receive the set_alt
+             * request from the host. That means no STREAM_ON
+             * or STREAM_OFF event from the gadget driver. So
+             * we need to start the transfer immediatly after
+             * receiving the COMMIT Set_CUR.
+             */
+            //Cancel the alarm. Stop the stream if possible
+            alarm(0);
+            uvc_video_stream(dev, 0);
+            uvc_video_reqbufs(dev, 0);
+
+            uvc_video_reqbufs(dev, 4);
             uvc_video_stream(dev, 1);
+            alarm(2);
+        }
     }
 }
 
@@ -1385,6 +1431,8 @@ uvc_events_process(struct uvc_device *dev)
             break;
 
         case UVC_EVENT_STREAMOFF:
+            // Cacel the alarm.
+            alarm(0);
             uvc_video_stream(dev, 0);
             uvc_video_reqbufs(dev, 0);
             break;
@@ -1468,27 +1516,37 @@ static void usage(const char *argv0)
 {
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
-    fprintf(stderr, " -b		Use bulk mode\n");
     fprintf(stderr, " -d device	Video device\n");
     fprintf(stderr, " -h		Print this help screen and exit\n");
     fprintf(stderr, " -i image	MJPEG image\n");
+}
+
+static struct uvc_device *global_uvc = NULL;
+
+void sig_handle(int sig)
+{
+    printf("Received signal: %d(%s)\n", sig, strsignal(sig));
+
+    // Alarm timeout. Stop the video
+    if (sig != SIGALRM)
+        return;
+
+    if (global_uvc) {
+        uvc_video_stream(global_uvc, 0);
+        uvc_video_reqbufs(global_uvc, 0);
+    }
 }
 
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
     struct uvc_device *dev;
-    int bulk_mode = 0;
     char *mjpeg_image = NULL;
     fd_set fds;
     int ret, opt;
 
-    while ((opt = getopt(argc, argv, "bd:hi:")) != -1) {
+    while ((opt = getopt(argc, argv, "d:hi:")) != -1) {
         switch (opt) {
-            case 'b':
-                bulk_mode = 1;
-                break;
-
             case 'd':
                 device = optarg;
                 break;
@@ -1508,6 +1566,18 @@ int main(int argc, char *argv[])
         }
     }
 
+    /*
+     * Setup the signal handler for SIGALRM. It is used
+     * for the bulk transfer mode. Because in bulk mode,
+     * the driver will not send the STREAM_OFF event when
+     * the host stops the video stream. We need to have a
+     * timer that if we can not receive the video frame
+     * transfer done event in 1 second. We will stop the
+     * video and clean the buffer.
+     */
+
+    signal(SIGALRM, sig_handle);
+
     /* load camera */
     start_camera();
     //read_camera();
@@ -1519,8 +1589,9 @@ int main(int argc, char *argv[])
     if (dev == NULL)
         return 1;
 
+    global_uvc = dev;
+
     image_load(dev, mjpeg_image);
-    dev->bulk = bulk_mode;
     uvc_events_init(dev);
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
@@ -1531,13 +1602,21 @@ int main(int argc, char *argv[])
         ret = select(dev->fd + 1, NULL, &wfds, &efds, NULL);
 
         if (ret == -1) {
-            break;
+            if (errno != EINTR) {
+                printf("Error in select\n");
+                break;
+            }
         } else {
             if (FD_ISSET(dev->fd, &efds))
                 uvc_events_process(dev);
 
-            if (FD_ISSET(dev->fd, &wfds))
+            if (FD_ISSET(dev->fd, &wfds)) {
                 uvc_video_process(dev);
+                if (dev->bulk) {
+                    // Reset the alarm.
+                    alarm(1);
+                }
+            }
         }
     }
 
