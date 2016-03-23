@@ -381,7 +381,9 @@ uvc_video_enable(struct uvc_video *video, int enable)
  */
 static int
 uvc_video_init(struct uvc_video *video,
-		unsigned char bulkmode, unsigned char headersize)
+		unsigned char bulkmode,
+		unsigned char headersize,
+		unsigned int maxpayload)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
@@ -393,6 +395,7 @@ uvc_video_init(struct uvc_video *video,
 	video->imagesize = 320 * 240 * 2;
 	video->payload_headsize = headersize;
 	video->bulk_mode = bulkmode;
+	video->max_payload_size = maxpayload;
 
 	/* Initialize the video buffers queue. */
 	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT);

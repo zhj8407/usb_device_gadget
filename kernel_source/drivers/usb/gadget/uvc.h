@@ -74,6 +74,9 @@ struct uvc_event
 #define UVC_WARN_MINMAX				0
 #define UVC_WARN_PROBE_DEF			1
 
+#define UVC_DEFAULT_MAX_PAYLOAD_SIZE	16 * 1024
+#define UVC_DEFAULT_PAYLOAD_HEADER_SIZE	2
+
 extern unsigned int uvc_gadget_trace_param;
 
 #define uvc_trace(flag, msg...) \

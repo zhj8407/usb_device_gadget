@@ -107,9 +107,6 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 	video->width = fmt->fmt.pix.width;
 	video->height = fmt->fmt.pix.height;
 	video->imagesize = imagesize;
-	/* Bulk mode. */
-	if (video->bulk_mode)
-		video->max_payload_size = 16 * 1024;
 
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
 	fmt->fmt.pix.bytesperline = bpl;
