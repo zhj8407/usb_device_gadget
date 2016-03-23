@@ -8,9 +8,8 @@
 #include <assert.h>
 #include <fcntl.h>           /* For O_* constants */
 
-#include "asoundlib.h"
-//#include "alsa/asoundlib.h"
-//#include "sync_shared_memory.h"
+#include <math.h>
+#include "alsa/asoundlib.h"
 
 #define DEFAULT_CHANNELS_NUM 2
 
@@ -76,6 +75,7 @@ static void sig_kill(int signo)
 
 #define RETERRIFNEG(x)	if(x<0) { printf("error at %s@%d: %s=%d\n", __func__, __LINE__, #x, x ); return x;}
 //#define DEBUG
+//#define TEST_MODE
 #define AUDIO_SAMPLING_RATE	32000
 #define PCM_NUM_CH			1
 #define FIFO_NUM_CH			2
@@ -639,6 +639,7 @@ static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, s
 	unsigned int index = 0;
 	char *wbuffers = NULL;
 	int size = 0;
+	struct timeval tps, tpsend;
 
 	/*NOTE: The size of audio buffer should be bigger than the size of snd_pcm_readi()/snd_pcm_readn() */
 	read_buffer_size =  read_periods *1 *frame_num_of_period *frame_size;
@@ -663,6 +664,9 @@ static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, s
 	{
 		if (bTerminate == 1) goto exit;
 
+#ifdef DEBUG
+		clock_gettime(CLOCK_REALTIME, &tps);
+#endif
 		if (mode == 0)
 			rc = snd_pcm_readi(handle, (void *)buffers[0], frame_num_of_period *  read_periods);
 		else
@@ -694,17 +698,40 @@ static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, s
 		if ((mode == 0) && (fps != NULL)) {
 			if (fps[0] != NULL) {
 				memset(wbuffers, 0x0, size);
-				for (i = 0, j = 0; i < read_buffer_size;){
+#ifdef TEST_MODE
+				#define TWO_PI (3.1415926 * 2)
+				int sampleRate = 32000;
+				float rate = 1;
+				short amplitude = 128;
+				float frequency = 1000;
+				int n=0;
+				int sample=0;
+				/*Here's some example code that makes a 1 kHz sample at a 32 kHz sample rate and with 16 bit samples (that is, not floating point)*/
+				for (i = 0, j = 0, n=0; i < read_buffer_size; n++){
+					sample = rate*amplitude * sin((TWO_PI * n * frequency) / sampleRate);
+					wbuffers[j+1] = (char)(sample&0xff);
+					wbuffers[j]= (char)(sample>>8&0xff);
+					i+=frame_size;
+					j+=sample_size;
+				}
+#else
+				for (i = 0,j = 0; i < read_buffer_size;){
 					wbuffers[j+1] = buffers[0][i+g_offset];
 					wbuffers[j]= buffers[0][i +1+g_offset];
 					i+=frame_size;
 					j+=sample_size;
 				}
+#endif
+
 #ifdef DEBUG
-				printf("[audio_capture]wbuffers = %d frame_size %d read_buffer_size %d chn %d\n",j,frame_size,read_buffer_size, g_offset);
+				clock_gettime(CLOCK_REALTIME, &tpsend);
+				printf("[audio_capture]wbuffers = %d wsize =%d frame_size %d read_buffer_size %d chn %d %lu s %lu ms\n",j,size,frame_size,read_buffer_size, g_offset, tpsend.tv_sec-tps.tv_sec, (tpsend.tv_usec-tps.tv_usec)/1000000);				clock_gettime(CLOCK_REALTIME, &tps);
+
 				rc = fwrite(wbuffers, sizeof(char), size, fps[0]);
 				if (rc != size) fprintf(stderr, "[audio_capture]short write: wrote %d bytes\n", rc);
 #endif
+
+#if 1
 				if (rc)    /* data ready */
 				{
 					rc = snd_pcm_writei(phandle, wbuffers, frame_num_of_period);
@@ -738,8 +765,11 @@ static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, s
 						}
 					}
 				}
-
-
+#endif
+#ifdef DEBUG
+				clock_gettime(CLOCK_REALTIME, &tpsend);
+				printf("[audio_write]wbuffers = %d frame_size %d read_buffer_size %d chn %d %lu s %lu ms\n",j,frame_size,read_buffer_size, g_offset, tpsend.tv_sec-tps.tv_sec, (tpsend.tv_usec-tps.tv_usec)/1000000);
+#endif
 			}
 		} else if ((mode == 1) && (fps != NULL)) {
 			for (i = 0; i < channel_number; i++) {
