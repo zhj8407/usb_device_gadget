@@ -60,6 +60,7 @@
 #define WEBCAM_MAXPACKET_SYS_PATH   "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
 #define WEBCAM_HEADERSIZE_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize"
 #define WEBCAM_BULKMODE_SYS_PATH    "/sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode"
+#define WEBCAM_MAXPAYLOAD_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpayload"
 
 #define JPEG_QUALITY        80
 #define COLOR_COMPONENTS    3
@@ -81,18 +82,20 @@ struct uvc_device {
     unsigned int nbufs;
     unsigned int bufsize;
 
-    int bulk;
+    unsigned int bulk;
     uint8_t color;
     unsigned int imgsize;
     void *imgdata;
 
     int v4ldevnum;
-    int maxpayloadsize;
-    int headersize;
+    unsigned int maxpacketsize;
+    unsigned int headersize;
+    unsigned int maxpayloadsize;
 };
 
 static int
 uvc_read_value_from_file(const char* filename,
+                         const char* format,
                          int *value)
 {
     int fd = 0;
@@ -116,7 +119,7 @@ uvc_read_value_from_file(const char* filename,
         return -1;
     }
 
-    len = sscanf(buf, "%d\n", value);
+    len = sscanf(buf, format, value);
 
     if (len <= 0) {
         fprintf(stderr, "Can not parse the value from %s\n", filename);
@@ -133,18 +136,24 @@ static int
 uvc_video_init(struct uvc_device *dev)
 {
     uvc_read_value_from_file(WEBCAM_DEVICE_SYS_PATH,
+                             "%d\n",
                              &dev->v4ldevnum);
 
     uvc_read_value_from_file(WEBCAM_MAXPACKET_SYS_PATH,
-                             &dev->maxpayloadsize);
+                             "%d\n",
+                             (int *)&dev->maxpacketsize);
 
     uvc_read_value_from_file(WEBCAM_HEADERSIZE_SYS_PATH,
-                             &dev->headersize);
+                             "%d\n",
+                             (int *)&dev->headersize);
 
     uvc_read_value_from_file(WEBCAM_BULKMODE_SYS_PATH,
-                             &dev->bulk);
+                             "%d\n",
+                             (int *)&dev->bulk);
 
-    printf("uvc_video_init: maxpayloadsize: %d\n", dev->maxpayloadsize);
+    uvc_read_value_from_file(WEBCAM_MAXPAYLOAD_SYS_PATH,
+                             "%x\n",
+                             (int *)&dev->maxpayloadsize);
 
     return 0;
 }
@@ -167,7 +176,7 @@ uvc_open(const char *devname)
 
     memset(dev, 0, sizeof * dev);
     dev->v4ldevnum = -1;
-    dev->maxpayloadsize = 1024;
+    dev->maxpacketsize = 1024;
     dev->headersize = 2;
     dev->bulk = 0;
 
@@ -202,9 +211,10 @@ uvc_open(const char *devname)
 
     printf("The config values are as below\n");
     printf("\t\tv4ldevnum: %d\n", dev->v4ldevnum);
-    printf("\t\tmaxpayloadsize(iso): %d\n", dev->maxpayloadsize);
+    printf("\t\tmaxpacketsize(iso): %d\n", dev->maxpacketsize);
     printf("\t\theadersize: %d\n", dev->headersize);
     printf("\t\tbulkmode: %d\n", dev->bulk);
+    printf("\t\tmaxpayloadsize: 0x%x\n", dev->maxpayloadsize);
     dev->fd = fd;
     return dev;
 }
@@ -1095,7 +1105,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
     }
 
     if (!dev->bulk)
-        ctrl->dwMaxPayloadTransferSize = dev->maxpayloadsize;   /* TODO this should be filled by the driver. */
+        ctrl->dwMaxPayloadTransferSize = dev->maxpacketsize;   /* TODO this should be filled by the driver. */
 
     ctrl->bmFramingInfo = 3;
     ctrl->bPreferedVersion = 1;
@@ -1473,8 +1483,8 @@ uvc_events_init(struct uvc_device *dev)
 
     if (dev->bulk) {
         /* FIXME Crude hack, must be negotiated with the driver. */
-        dev->probe.dwMaxPayloadTransferSize = 16 * 1024;
-        dev->commit.dwMaxPayloadTransferSize = 16 * 1024;
+        dev->probe.dwMaxPayloadTransferSize = dev->maxpayloadsize;
+        dev->commit.dwMaxPayloadTransferSize = dev->maxpayloadsize;
     }
 
     memset(&sub, 0, sizeof sub);
