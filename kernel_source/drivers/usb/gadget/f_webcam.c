@@ -52,6 +52,7 @@ struct webcam_config {
 	unsigned int maxburst;
 	unsigned char headersize;
 	unsigned char bulkmode;
+	unsigned int bulksize;
 	unsigned int maxpayload;
 };
 
@@ -996,6 +997,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	unsigned int streaming_maxburst = 0;
 	unsigned char headersize = UVC_DEFAULT_PAYLOAD_HEADER_SIZE;
 	unsigned char bulkmode = 0;
+	unsigned int bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	unsigned int maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
 
 	INFO(cdev, "uvc_function_bind\n");
@@ -1008,6 +1010,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		streaming_maxburst = min(_webcam_config->maxburst, 15U);
 		headersize = clamp(_webcam_config->headersize, (unsigned char)2U, (unsigned char)255U);
 		bulkmode = _webcam_config->bulkmode;
+		bulksize = _webcam_config->bulksize;
 		maxpayload = _webcam_config->maxpayload;
 	}
 
@@ -1146,7 +1149,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		goto error;
 
 	/* Initialise video. */
-	ret = uvc_video_init(&uvc->video, bulkmode,
+	ret = uvc_video_init(&uvc->video, bulkmode, bulksize,
 			headersize, maxpayload);
 	if (ret < 0)
 		goto error;

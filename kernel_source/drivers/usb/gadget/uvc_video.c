@@ -243,6 +243,9 @@ uvc_video_alloc_requests(struct uvc_video *video)
 		 * max_t(unsigned int, video->ep->maxburst, 1)
 		 * (video->ep->mult + 1);
 
+	if (video->bulk_mode)
+		req_size = video->bulk_req_size;
+
 	pr_debug("uvc_video_alloc_requests: req_size: %d, mult: %d, maxburst: %d\n",
 		req_size, video->ep->mult, video->ep->maxburst);
 
@@ -382,6 +385,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
 static int
 uvc_video_init(struct uvc_video *video,
 		unsigned char bulkmode,
+		unsigned int bulksize,
 		unsigned char headersize,
 		unsigned int maxpayload)
 {
@@ -395,6 +399,7 @@ uvc_video_init(struct uvc_video *video,
 	video->imagesize = 320 * 240 * 2;
 	video->payload_headsize = headersize;
 	video->bulk_mode = bulkmode;
+	video->bulk_req_size = bulksize;
 	video->max_payload_size = maxpayload;
 
 	/* Initialize the video buffers queue. */

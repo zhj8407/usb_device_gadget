@@ -856,6 +856,7 @@ webcam_function_init(struct plcm_usb_function *f,
 	config->maxburst = 0;
 	config->headersize = UVC_DEFAULT_PAYLOAD_HEADER_SIZE;
 	config->bulkmode = 0;
+	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
 
 	f->config = config;
@@ -890,6 +891,7 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 	config->maxburst = 0;
 	config->headersize = UVC_DEFAULT_PAYLOAD_HEADER_SIZE;
 	config->bulkmode = 0;
+	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
 
 	webcam_config_unbind(c);
@@ -941,6 +943,7 @@ WEBCAM_CONFIG_ATTR(maxpacket, "%d\n", 1, 3072)
 WEBCAM_CONFIG_ATTR(maxburst, "%d\n", 0, 15)
 WEBCAM_CONFIG_ATTR(headersize, "%d\n", 2, 255)
 WEBCAM_CONFIG_ATTR(bulkmode, "%d\n", 0, 1)
+WEBCAM_CONFIG_ATTR(bulksize, "%d\n", 512, 8192)
 WEBCAM_CONFIG_ATTR(maxpayload, "%x\n", 0, 0xFFFFFFFF)
 
 static struct device_attribute *webcam_function_attributes[] = {
@@ -950,6 +953,7 @@ static struct device_attribute *webcam_function_attributes[] = {
 	&dev_attr_webcam_maxburst,
 	&dev_attr_webcam_headersize,
 	&dev_attr_webcam_bulkmode,
+	&dev_attr_webcam_bulksize,
 	&dev_attr_webcam_maxpayload,
 	NULL
 };

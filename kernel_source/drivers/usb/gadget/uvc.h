@@ -74,8 +74,9 @@ struct uvc_event
 #define UVC_WARN_MINMAX				0
 #define UVC_WARN_PROBE_DEF			1
 
-#define UVC_DEFAULT_MAX_PAYLOAD_SIZE	16 * 1024
-#define UVC_DEFAULT_PAYLOAD_HEADER_SIZE	2
+#define UVC_DEFAULT_MAX_PAYLOAD_SIZE		16 * 1024
+#define UVC_DEFAULT_PAYLOAD_HEADER_SIZE		2
+#define UVC_DEFAULT_BULK_REQ_BUFFER_SIZE	512
 
 extern unsigned int uvc_gadget_trace_param;
 
@@ -138,6 +139,7 @@ struct uvc_video
 	unsigned int fid;
 	unsigned char payload_headsize;
 	unsigned char bulk_mode;
+	unsigned int bulk_req_size;
 };
 
 enum uvc_state
