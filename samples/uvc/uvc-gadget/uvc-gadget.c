@@ -65,6 +65,8 @@
 #define JPEG_QUALITY        80
 #define COLOR_COMPONENTS    3
 
+#define VISAGE_LED_NOTIFICATION 1
+
 struct uvc_device {
     int fd;
 
@@ -965,6 +967,10 @@ uvc_video_stream(struct uvc_device *dev, int enable)
     if (!enable) {
         printf("Stopping video stream.\n");
         ioctl(dev->fd, VIDIOC_STREAMOFF, &type);
+#ifdef VISAGE_LED_NOTIFICATION
+        /* Set the led to red. */
+        system("/usr/sbin/commanduC lightLed 1 1");
+#endif
         return 0;
     }
 
@@ -986,6 +992,18 @@ uvc_video_stream(struct uvc_device *dev, int enable)
     }
 
     ioctl(dev->fd, VIDIOC_STREAMON, &type);
+#ifdef VISAGE_LED_NOTIFICATION
+        /* If the host selects the I420 30fp format, we
+         * will set the led to Green, Fast blink.
+         * Else set the led to Amber, Slow blink.
+         */
+        if (dev->fcc == V4L2_PIX_FMT_YUV420 &&
+            dev->width == 1280 &&
+            dev->height == 720)
+            system("/usr/sbin/commanduC lightLed 2 3");
+        else
+            system("/usr/sbin/commanduC lightLed 4 2");
+#endif
     return ret;
 }
 
