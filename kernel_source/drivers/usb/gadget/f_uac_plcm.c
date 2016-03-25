@@ -80,6 +80,7 @@ static char *uac_suspend[2]	= { "AUDIO_SOURCE_STATE=SUSPEND", NULL };
 struct audio_dual_config {
 	int	card;
 	int	device;
+	int tmode;
 	struct device *dev;
 
 	char iad_string[MAX_STRING_NAME_LENGTH];

@@ -76,6 +76,7 @@ static void sig_kill(int signo)
 #define RETERRIFNEG(x)	if(x<0) { printf("error at %s@%d: %s=%d\n", __func__, __LINE__, #x, x ); return x;}
 //#define DEBUG
 //#define TEST_MODE
+#define SOURCE_TEST_MODE_SYS_PATH "/sys/class/plcm_usb/plcm0/f_audio_dual/audio_tmode"
 #define AUDIO_SAMPLING_RATE	32000
 #define PCM_NUM_CH			1
 #define FIFO_NUM_CH			2
@@ -103,7 +104,7 @@ static unsigned int g_offset= (unsigned int)-1;
 
 
 static int do_splite(char *filename, unsigned int period_size, unsigned int channel_num, unsigned int sample_size, unsigned int period_count);
-static int   capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, snd_pcm_uframes_t frame_num_of_period, int channel_number, unsigned int sample_size, FILE **fps, int mode);
+static int capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, snd_pcm_uframes_t frame_num_of_period, int channel_number, unsigned int sample_size, FILE **fps, int mode);
 static void gettimestamp(snd_pcm_t *handle, snd_timestamp_t *timestamp);
 
 int  print_usage(void)
@@ -623,7 +624,43 @@ static int xrun_recovery(snd_pcm_t *handle, int err) {
 	}
 	return err;
 }
-static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, snd_pcm_uframes_t frame_num_of_period, int channel_number, unsigned int sample_size, FILE **fps, int mode)
+
+static int read_value_from_file(const char* filename, const char* format, int *value)
+{
+    int fd = 0;
+    char buf[8];
+    int len;
+
+    fd = open(filename, O_RDONLY);
+
+    if (fd < 0) {
+        fprintf(stderr, "Can not open the file: %s, error: %d(%s)\n",
+                filename, errno, strerror(errno));
+        return -1;
+    }
+
+    len = read(fd, buf, sizeof(buf));
+
+    if (len <= 0) {
+        fprintf(stderr, "Can not read data from file: %s, error: %d(%s)\n",
+                filename, errno, strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    len = sscanf(buf, format, value);
+
+    if (len <= 0) {
+        fprintf(stderr, "Can not parse the value from %s\n", filename);
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+static int capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, snd_pcm_uframes_t frame_num_of_period, int channel_number, unsigned int sample_size, FILE **fps, int mode)
 {
 	char **buffers = NULL;
 	snd_timestamp_t tstamp;
@@ -706,13 +743,26 @@ static int  capture_func(snd_pcm_t *handle, unsigned int period_num_of_buffer, s
 				float frequency = 1000;
 				int n=0;
 				int sample=0;
-				/*Here's some example code that makes a 1 kHz sample at a 32 kHz sample rate and with 16 bit samples (that is, not floating point)*/
-				for (i = 0, j = 0, n=0; i < read_buffer_size; n++){
-					sample = rate*amplitude * sin((TWO_PI * n * frequency) / sampleRate);
-					wbuffers[j+1] = (char)(sample&0xff);
-					wbuffers[j]= (char)(sample>>8&0xff);
-					i+=frame_size;
-					j+=sample_size;
+				int p_mode;
+
+				read_value_from_file(SOURCE_TEST_MODE_SYS_PATH, "%d\n", &p_mode);
+				if(p_mode > 0)
+				{
+					/*Here's some example code that makes a 1 kHz sample at a 32 kHz sample rate and with 16 bit samples (that is, not floating point)*/
+					for (i = 0, j = 0, n=0; i < read_buffer_size; n++){
+						sample = rate*amplitude * sin((TWO_PI * n * frequency) / sampleRate);
+						wbuffers[j+1] = (char)(sample&0xff);
+						wbuffers[j]= (char)(sample>>8&0xff);
+						i+=frame_size;
+						j+=sample_size;
+					}
+				} else {
+					for (i = 0,j = 0; i < read_buffer_size;){
+						wbuffers[j+1] = buffers[0][i+g_offset];
+						wbuffers[j]= buffers[0][i +1+g_offset];
+						i+=frame_size;
+						j+=sample_size;
+					}
 				}
 #else
 				for (i = 0,j = 0; i < read_buffer_size;){
