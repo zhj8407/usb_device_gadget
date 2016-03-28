@@ -45,16 +45,22 @@ echo "Polycom CX5552 Micphone" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_in
 
 echo "Set Hid report"
 echo "0" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceSubClass
-echo "1" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceProtocol
-echo "8" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_length
+echo "0" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceProtocol
+echo "2" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_length
 
-if [ -f '/root/py_parse_hid_report.py' ] && [ -f '/root/keyboardHidDescriptor.txt' ]; then
-	/usr/bin/python3 /root/py_parse_hid_report.py /root/keyboardHidDescriptor.txt /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_desc
+echo "Set Lync UCQ String"
+echo "UCQ01001000001000" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_ucq_string
+
+if [ -f '/root/py_parse_hid_report.py' ] && [ -f '/root/lyncTelHidDescriptor.txt' ]; then
+	/usr/bin/python3 /root/py_parse_hid_report.py /root/lyncTelHidDescriptor.txt /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_desc
 fi
 
 echo "Set Webcam config"
 #echo "2048" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket
 #echo "15" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize
+echo "1" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode
+echo "8192" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_bulksize
+echo "100000" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpayload
 
 echo "Set function lists"
 #echo "webcam,audio_source,hidg" > /sys/class/plcm_usb/plcm0/functions

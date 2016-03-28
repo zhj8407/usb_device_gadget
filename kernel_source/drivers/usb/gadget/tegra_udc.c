@@ -657,6 +657,8 @@ static int tegra_ep_enable(struct usb_ep *_ep,
 
 	spin_lock_irqsave(&udc->lock, flags);
 	ep->ep.maxpacket = max;
+	if (mult > 0)
+		ep->ep.mult = mult - 1;
 	ep->desc = desc;
 	ep->stopped = 0;
 	ep->last_td = 0;
@@ -683,10 +685,10 @@ static int tegra_ep_enable(struct usb_ep *_ep,
 	spin_unlock_irqrestore(&udc->lock, flags);
 	retval = 0;
 
-	VDBG("enabled %s (ep%d%s) maxpacket %d", ep->ep.name,
+	VDBG("enabled %s (ep%d%s) maxpacket %d, mult %d\n", ep->ep.name,
 			ep->desc->bEndpointAddress & 0x0f,
 			(desc->bEndpointAddress & USB_DIR_IN)
-				? "in" : "out", max);
+				? "in" : "out", max, mult);
 en_done:
 	return retval;
 }

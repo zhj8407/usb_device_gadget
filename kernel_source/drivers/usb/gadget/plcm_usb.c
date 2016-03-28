@@ -439,7 +439,6 @@ static void audio_source_function_unbind_config(struct plcm_usb_function *f,
 
 	config->card = -1;
 	config->device = -1;
-	config->dev = NULL;
 }
 
 static ssize_t audio_source_pcm_show(struct device *dev,
@@ -577,7 +576,6 @@ audio_sink_function_unbind_config(struct plcm_usb_function *f,
 
 	config->card = -1;
 	config->device = -1;
-	config->dev = NULL;
 }
 
 static ssize_t audio_sink_pcm_show(struct device *dev,
@@ -689,6 +687,7 @@ audio_dual_function_init(struct plcm_usb_function *f,
 		return -ENOMEM;
 	config->card = -1;
 	config->device = -1;
+	config->tmode = -1;
 	config->dev = f->dev;
 	f->config = config;
 
@@ -717,7 +716,6 @@ audio_dual_function_unbind_config(struct plcm_usb_function *f,
 
 	config->card = -1;
 	config->device = -1;
-	config->dev = NULL;
 
 	audio_unbind_config(c);
 }
@@ -778,6 +776,33 @@ static DEVICE_ATTR(audio_control_string, S_IRUGO | S_IWUSR,
 					audio_dual_ac_show,
 					audio_dual_ac_store);
 
+static ssize_t audio_dual_test_mode_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%d\n", config->tmode);
+}
+
+static ssize_t audio_dual_test_mode_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	int value;
+	if (sscanf(buf,"%d\n",&value)==1)
+	{
+		config->tmode = value;
+		return size;
+	}
+	return -EINVAL;
+}
+
+static DEVICE_ATTR(audio_tmode, S_IRUGO | S_IWUSR,
+					audio_dual_test_mode_show,
+					audio_dual_test_mode_store);
+
+
 static ssize_t audio_dual_as_out_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -828,6 +853,7 @@ static struct device_attribute *audio_dual_function_attributes[] = {
 	&dev_attr_audio_control_string,
 	&dev_attr_audio_out_stream_string,
 	&dev_attr_audio_in_stream_string,
+	&dev_attr_audio_tmode,
 	NULL
 };
 
@@ -846,25 +872,128 @@ static int
 webcam_function_init(struct plcm_usb_function *f,
 		struct usb_composite_dev *cdev)
 {
+	struct webcam_config *config;
+
+	config = kzalloc(sizeof(struct webcam_config), GFP_KERNEL);
+	if (!config)
+		return -ENOMEM;
+	config->device = -1;
+	config->dev = f->dev;
+
+	config->interval = 1;
+	config->maxpacket = 1024;
+	config->maxburst = 0;
+	config->headersize = UVC_DEFAULT_PAYLOAD_HEADER_SIZE;
+	config->bulkmode = 0;
+	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
+	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
+
+	f->config = config;
+
 	return 0;
 }
 
 static void webcam_function_cleanup(struct plcm_usb_function *f)
 {
+	kfree(f->config);
+	f->config = NULL;
 }
 
 static int
 webcam_function_bind_config(struct plcm_usb_function *f,
 		struct usb_configuration *c)
 {
-	return webcam_config_bind(c);
+	return webcam_config_bind(c, f->config);
 }
+
+static void
+webcam_function_unbind_config(struct plcm_usb_function *f,
+		struct usb_configuration *c)
+{
+
+	struct webcam_config *config = f->config;
+
+	config->device = -1;
+
+	config->interval = 1;
+	config->maxpacket = 1024;
+	config->maxburst = 0;
+	config->headersize = UVC_DEFAULT_PAYLOAD_HEADER_SIZE;
+	config->bulkmode = 0;
+	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
+	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
+
+	webcam_config_unbind(c);
+}
+
+static ssize_t webcam_device_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct webcam_config *config = f->config;
+
+	/* print webcam device numbers */
+	return sprintf(buf, "%d\n", config->device);
+}
+
+static DEVICE_ATTR(webcam_device, S_IRUGO, webcam_device_show, NULL);
+
+#define WEBCAM_CONFIG_ATTR(field, format_string, min_value, max_value)				\
+static ssize_t								\
+webcam_ ## field ## _show(struct device *dev, struct device_attribute *attr,	\
+		char *buf)						\
+{	struct plcm_usb_function *f = dev_get_drvdata(dev);			\
+	struct webcam_config *config = f->config;				\
+	return sprintf(buf, format_string, config->field);		\
+}									\
+static ssize_t								\
+webcam_ ## field ## _store(struct device *dev, struct device_attribute *attr,	\
+		const char *buf, size_t size)				\
+{									\
+	struct plcm_usb_function *f = dev_get_drvdata(dev);			\
+	struct webcam_config *config = f->config;				\
+	int value;							\
+	if ((sscanf(buf, format_string, &value) == 1) && 			\
+			value >= min_value &&								\
+			value <= max_value) {								\
+		config->field = value;				\
+		return size;						\
+	}								\
+	return -EINVAL;							\
+}									\
+static DEVICE_ATTR(webcam_ ## field,	\
+	S_IRUGO | S_IWUSR,				\
+	webcam_ ## field ## _show,		\
+	webcam_ ## field ## _store		\
+	);
+
+WEBCAM_CONFIG_ATTR(interval, "%d\n", 1, 16)
+WEBCAM_CONFIG_ATTR(maxpacket, "%d\n", 1, 3072)
+WEBCAM_CONFIG_ATTR(maxburst, "%d\n", 0, 15)
+WEBCAM_CONFIG_ATTR(headersize, "%d\n", 2, 255)
+WEBCAM_CONFIG_ATTR(bulkmode, "%d\n", 0, 1)
+WEBCAM_CONFIG_ATTR(bulksize, "%d\n", 512, 8192)
+WEBCAM_CONFIG_ATTR(maxpayload, "%x\n", 0, 0xFFFFFFFF)
+
+static struct device_attribute *webcam_function_attributes[] = {
+	&dev_attr_webcam_device,
+	&dev_attr_webcam_interval,
+	&dev_attr_webcam_maxpacket,
+	&dev_attr_webcam_maxburst,
+	&dev_attr_webcam_headersize,
+	&dev_attr_webcam_bulkmode,
+	&dev_attr_webcam_bulksize,
+	&dev_attr_webcam_maxpayload,
+	NULL
+};
 
 static struct plcm_usb_function webcam_function = {
 	.name		= "webcam",
 	.init		= webcam_function_init,
 	.cleanup	= webcam_function_cleanup,
 	.bind_config	= webcam_function_bind_config,
+	.unbind_config	= webcam_function_unbind_config,
+	.attributes	= webcam_function_attributes,
 };
 
 static int

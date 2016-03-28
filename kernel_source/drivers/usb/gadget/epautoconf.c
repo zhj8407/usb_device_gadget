@@ -176,6 +176,7 @@ ep_matches (
 		desc->bEndpointAddress |= gadget->out_epnum;
 	}
 
+#if 0
 	/* report (variable) full speed bulk maxpacket */
 	if ((USB_ENDPOINT_XFER_BULK == type) && !ep_comp) {
 		int size = ep->maxpacket;
@@ -185,6 +186,7 @@ ep_matches (
 			size = 64;
 		desc->wMaxPacketSize = cpu_to_le16(size);
 	}
+#endif
 	ep->address = desc->bEndpointAddress;
 	return 1;
 }
