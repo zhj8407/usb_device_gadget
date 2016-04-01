@@ -42,6 +42,7 @@ struct f_hidg_req_list {
 	struct usb_request	*req;
 	unsigned int		pos;
 	struct list_head	list;
+	unsigned int		ctl_ep;
 };
 
 struct f_hidg {
@@ -232,10 +233,12 @@ static ssize_t f_hidg_read(struct file *file, char __user *buffer,
 		kfree(list);
 		spin_unlock_irqrestore(&hidg->spinlock, flags);
 
-		req->length = hidg->report_length;
-		ret = usb_ep_queue(hidg->out_ep, req, GFP_KERNEL);
-		if (ret < 0)
-			return ret;
+		if (!list->ctl_ep) {
+			req->length = hidg->report_length;
+			ret = usb_ep_queue(hidg->out_ep, req, GFP_KERNEL);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	return count;
@@ -285,6 +288,7 @@ static ssize_t f_hidg_write(struct file *file, const char __user *buffer,
 		ERROR(hidg->func.config->cdev,
 			"copy_from_user error\n");
 		mutex_unlock(&hidg->lock);
+		return -EINVAL;
 	}
 
 	hidg->req->status = 0;
@@ -368,6 +372,7 @@ static struct usb_request *hidg_alloc_ep_req(struct usb_ep *ep, unsigned length)
 static void hidg_set_report_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_hidg *hidg = (struct f_hidg *) req->context;
+	struct usb_composite_dev *cdev = hidg->func.config->cdev;
 	struct f_hidg_req_list *req_list;
 	unsigned long flags;
 
@@ -376,6 +381,9 @@ static void hidg_set_report_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 
 	req_list->req = req;
+	/* Check if it is control ep0. */
+	if (ep == cdev->gadget->ep0)
+		req_list->ctl_ep = 1;
 
 	spin_lock_irqsave(&hidg->spinlock, flags);
 	list_add_tail(&req_list->list, &hidg->completed_out_req);
@@ -420,7 +428,9 @@ static int hidg_setup(struct usb_function *f,
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
 		  | HID_REQ_SET_REPORT):
 		VDBG(cdev, "set_report | wLenght=%d\n", ctrl->wLength);
-		goto stall;
+		req->context  = hidg;
+		req->complete = hidg_set_report_complete;
+		goto respond;
 		break;
 
 	case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
@@ -470,7 +480,7 @@ respond:
 	req->length = length;
 	status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 	if (status < 0)
-		ERROR(cdev, "usb_ep_queue error on ep0 %d\n", value);
+		ERROR(cdev, "usb_ep_queue error on ep0 %d\n", status);
 	return status;
 }
 
