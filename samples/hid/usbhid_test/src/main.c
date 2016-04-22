@@ -1,18 +1,20 @@
-#include <pthread.h>
-#include <string.h>
 #include <stdio.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <libudev.h>
+#include <linux/fs.h>
+#include <fcntl.h>
 
+#ifdef ENABLE_CALL_DISPLAY
+#include <ctype.h>
+#include "hid_lync_display.h"
+#endif
 
-#include "drvUsbHidDevice.h"
 #define BUF_LEN 512
-
-static drvUsbHidHandle g_handle = NULL;
-
 struct options {
     const char    *opt;
     unsigned char val;
@@ -301,17 +303,8 @@ void print_options(char c)
     }
 }
 
-void usbHidAppCallback(bool isOffHook, bool isRinging, bool isOnHold, bool isMute)
-{
-    printf("usbHidStateCb off hook(%d) ringing(%d) on hold(%d) mute(%d)",
-           isOffHook, isRinging, isOnHold, isMute);
-
-}
-
 int main(int argc, const char *argv[])
 {
-    //struct timeval tv;
-
     const char *filename = NULL;
     int fd = 0;
     char buf[BUF_LEN];
@@ -321,10 +314,7 @@ int main(int argc, const char *argv[])
     int hold = 0;
     fd_set rfds;
     int retval, i;
-
-    drvUsbHidDeviceInit(&g_handle);
-    drvUsbHidDeviceCallbackInstall(g_handle, usbHidAppCallback);
-    drvUsbHidBootUp(g_handle);
+    int fd_max = 0;
 
     if (argc < 3) {
         fprintf(stderr, "Usage: %s devname mouse|keyboard|joystick|lynchid\n",
@@ -335,36 +325,162 @@ int main(int argc, const char *argv[])
     if (argv[2][0] != 'k' && argv[2][0] != 'm' && argv[2][0] != 'j' && argv[2][0] != 'l')
         return 2;
 
+    filename = argv[1];
+
+    if ((fd = open(filename, O_RDWR, 0666)) == -1) {
+        perror(filename);
+        return 3;
+    }
+
     print_options(argv[2][0]);
 
-    while (1) {
-        memset(report, 0x0, sizeof(report));
-        cmd_len = read(STDIN_FILENO, buf, BUF_LEN - 1);
+#ifdef ENABLE_CALL_DISPLAY
+    struct udev *udev;
+    struct udev_device *dev;
+    struct udev_list_entry *properties, *props_list_entry;
+    struct udev_monitor *mon;
+    int fd_dev;
+    char hid_cmd[8];
+    int status = 0;
+    udev = udev_new();
 
-        if (cmd_len == 0)
-            break;
+    if (!udev) {
+        printf("Can't create udev\n");
+        exit(1);
+    }
 
-        buf[cmd_len - 1] = '\0';
-        hold = 0;
-        memset(report, 0x0, sizeof(report));
+    mon = udev_monitor_new_from_netlink(udev, "udev");
+    udev_monitor_filter_add_match_subsystem_devtype(mon, "plcm_usb", NULL);
+    udev_monitor_enable_receiving(mon);
+    fd_dev = udev_monitor_get_fd(mon);
+#endif
 
-        if (argv[2][0] == 'k')
-            to_send = keyboard_fill_report(report, buf, &hold);
-        else if (argv[2][0] == 'm')
-            to_send = mouse_fill_report(report, buf, &hold);
-        else if (argv[2][0] == 'j')
-            to_send = joystick_fill_report(report, buf, &hold);
-        else if (argv[2][0] == 'l')
-            to_send = lync_hid_fill_report(report, buf, &hold);
+    while (42) {
+        FD_ZERO(&rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        FD_SET(fd, &rfds);
+        fd_max = (fd + 1 > STDIN_FILENO + 1) ? fd + 1 : STDIN_FILENO + 1;
+#ifdef ENABLE_CALL_DISPLAY
+        FD_SET(fd_dev, &rfds);
+        fd_max = (fd_max > fd_dev + 1) ? fd_max : fd_dev + 1;
+#endif
+        retval = select(fd_max, &rfds, NULL, NULL, NULL);
 
-        if (to_send == -1)
-            break;
+        if (retval == -1 && errno == EINTR)
+            continue;
 
-        printf("report =%x %x\n", report[0], report[1]);
+        if (retval < 0) {
+            perror("select()");
+            return 4;
+        }
 
-        drvUsbHidDeviceSendControlCommand(g_handle, report[0], report[1]);
+#ifdef ENABLE_CALL_DISPLAY
+
+        if (FD_ISSET(fd_dev, &rfds)) {
+            /* Make the call to receive the device.
+               select() ensured that this will not block. */
+            dev = udev_monitor_receive_device(mon);
+
+            if (dev) {
+
+                if (strcmp(udev_device_get_subsystem(dev), "plcm_usb") ||
+                        strcmp(udev_device_get_syspath(dev), "/sys/devices/virtual/plcm_usb/plcm0/f_hidg") ||
+                        strcmp(udev_device_get_action(dev), "change")) {
+                    udev_device_unref(dev);
+                    continue;
+                }
+
+                properties = udev_device_get_properties_list_entry(dev);
+                udev_list_entry_foreach(props_list_entry, properties) {
+                    if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT1")) {
+                        if (!strcmp(udev_list_entry_get_value(props_list_entry), "HID_VENDOR_EXT")) {
+                            hid_cmd[0] = USBHID_VENDOR_EXT_REPORT_ID;
+                            hid_cmd[1] = USBHID_VENDOR_EXT_REPORT_VENDOR_ID & 0xff;
+                            hid_cmd[2] = (USBHID_VENDOR_EXT_REPORT_VENDOR_ID >> 8) & 0xff;
+                            hid_cmd[3] = USBHID_VENDOR_EXT_REPORT_VERSION & 0xff;
+                            hid_cmd[4] = (USBHID_VENDOR_EXT_REPORT_VERSION >> 8) & 0xff;
+
+                            status = ioctl(fd, &hid_cmd, 5);
+                            printf("\n HID uEVENT IS RECEIVED status=%d\n", status);
+                        }
+                    }
+
+                    if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT2")) {
+                        if (!strcmp(udev_list_entry_get_value(props_list_entry), "HID_DISP_ATTR")) {
+                            hid_cmd[0] = USBHID_DISP_ATTR_REPORT_ID;
+                            hid_cmd[1] = USBHID_DISP_ATTR_REPORT_ROWS;
+                            hid_cmd[2] = USBHID_DISP_ATTR_REPORT_COLS;
+                            hid_cmd[3] = USBHID_DISP_ATTR_REPORT_DFSI & 0xff;
+                            hid_cmd[4] = (USBHID_DISP_ATTR_REPORT_DFSI >> 8) & 0xff;
+                            status = ioctl(fd, &hid_cmd, 5);
+                            printf("\n HID uEVENT IS RECEIVED status=%d\n", status);
+                        }
+                    }
+                }
+                udev_device_unref(dev);
+            } else {
+                printf("No Device from receive_device(). An error occured.\n");
+            }
+        } else {
+            printf(".");
+            fflush(stdout);
+        }
+
+#endif
+
+        if (FD_ISSET(fd, &rfds)) {
+            cmd_len = read(fd, buf, BUF_LEN - 1);
+            printf("\nrecv report:");
+
+            for (i = 0; i < cmd_len; i++)
+                printf(" %02x", buf[i]);
+
+            printf("\n");
+
+            if (argv[2][0] == 'l' && cmd_len > 0)
+                lync_display_process_set_report((unsigned char *)buf, (unsigned int)cmd_len);
+        }
+
+        if (FD_ISSET(STDIN_FILENO, &rfds)) {
+            memset(report, 0x0, sizeof(report));
+            cmd_len = read(STDIN_FILENO, buf, BUF_LEN - 1);
+
+            if (cmd_len == 0)
+                break;
+
+            buf[cmd_len - 1] = '\0';
+            hold = 0;
+            memset(report, 0x0, sizeof(report));
+
+            if (argv[2][0] == 'k')
+                to_send = keyboard_fill_report(report, buf, &hold);
+            else if (argv[2][0] == 'm')
+                to_send = mouse_fill_report(report, buf, &hold);
+            else if (argv[2][0] == 'j')
+                to_send = joystick_fill_report(report, buf, &hold);
+            else if (argv[2][0] == 'l')
+                to_send = lync_hid_fill_report(report, buf, &hold);
+
+            if (to_send == -1)
+                break;
+
+            if (write(fd, report, to_send) != to_send) {
+                perror(filename);
+                return 5;
+            }
+
+            if (!hold) {
+                memset(report + 1, 0x0, sizeof(report) - 1);
+
+                if (write(fd, report, to_send) != to_send) {
+                    perror(filename);
+                    return 6;
+                }
+            }
+        }
     }
 
     close(fd);
     return 0;
 }
+
