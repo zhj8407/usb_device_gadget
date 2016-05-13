@@ -10,15 +10,17 @@ KERNEL_INCLUDE	:= -I$(ALSA_IDIR)
 CFLAGS		:= -g $(KERNEL_INCLUDE)
 LDFLAGS		?= -g -L$(CROSS_LIB_PATH) -ludev -L$(ALSA_DIR) -lasound -lm -lpthread
 
-all: audiolinx audiolinxed 
+all: audiolinx audiolinxed
 
-audiolinx: audio_playback.o audiolinx.o
+#audiolinx: audio_playback.o audiolinx.o
+audiolinx: audio_playback.o audiofifoc.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-audiolinxed: audiolinxed.o audioutils.o audiosource.o audioevent.o
+#audiolinxed: audiolinxed.o audioutils.o audiosource.o audioevent.o
+audiolinxed: audiofifos.o audioutils.o audiosource.o audioevent.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -f *.o
-	rm -f audiolinx 
-	rm -f audiolinxed 
+	rm -f audiolinx
+	rm -f audiolinxed

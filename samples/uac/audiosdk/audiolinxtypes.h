@@ -29,6 +29,7 @@ extern "C" {
 #define PCM_STALL_MAX			100	// 2 second
 
 #define RETERRIFNEG(x)	if(x<0) { printf("error at %s@%d: %s=%d\n", __func__, __LINE__, #x, x ); return x;}
+#define DEFAULT_FIFO_NAME "/tmp/musicfifo"
 
 typedef int bool;
 #define TRUE  1
