@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
-#include <libudev.h>
+#include "libudev.h"
 
 void sig_child(int sig)
 {
@@ -24,7 +24,7 @@ pid_t start_audio_in()
     if ((child = fork()) == 0) {
         //Child process
         execlp("audio_capture", "audio_capture", "-m 0", "-n 16",
-               "-t2", "-d4", "-r32000", "-b 1", "-c -1","-o 1", NULL);
+               "-t2", "-d2", "-r32000", "-b 1", "-c -1","-o 1", NULL);
         perror("audio_capture");
         exit(errno);
     } else {

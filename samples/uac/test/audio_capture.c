@@ -19,7 +19,7 @@
 #define NON_INTERLEAVED_MODE 0x1
 
 //The device file of alsa could be checked through : /proc/asound/cards .
-#define DEVFILE "hw:2,0"
+#define DEVFILE "hw:1,0"
 
 static int bTerminate = 0;
 static int bSleep = 0;
@@ -379,7 +379,7 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-	pcm_name = strdup("hw:3,0");
+	pcm_name = strdup("hw:2,0");
 	rc = snd_pcm_open(&phandle, pcm_name, SND_PCM_STREAM_PLAYBACK, 0);
 	if (rc < 0)
 	{
