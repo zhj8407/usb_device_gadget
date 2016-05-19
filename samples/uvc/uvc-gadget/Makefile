@@ -1,7 +1,7 @@
 CROSS_COMPILE	?= arm-linux-gnueabihf-
 ARCH		?= arm
 KERNEL_DIR	?= ../../../kernel_source
-VISAGE_SOURCE_DIR ?= /home/jiezhang/Dev/visage/platform/l4t_21_3
+VISAGE_SOURCE_DIR ?= /home/rdeng/code/usb_byoc/l4t_21_3
 CROSS_INC_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/include/
 CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/lib/
 
