@@ -1,0 +1,19 @@
+#CROSS_COMPILE	?= arm-linux-gnueabihf-
+ARCH		?= x86
+KERNEL_DIR	?= /home/jiezhang/Dev/visage/platform/l4t_21_3/sources/kernel_source
+#KERNEL_DIR ?= /usr/src/linux
+
+CC		:= $(CROSS_COMPILE)gcc
+#KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
+KERNEL_INCLUDE	:=
+CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE)
+LDFLAGS		:= -g -ludev
+
+all: uac_udev_sample
+
+uac_udev_sample: uac_udev_sample.o
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+clean:
+	rm -f *.o
+	rm -f uac_udev_sample

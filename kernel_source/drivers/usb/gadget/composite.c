@@ -92,6 +92,7 @@ int config_ep_by_speed(struct usb_gadget *g,
 
 	struct usb_ss_ep_comp_descriptor *comp_desc = NULL;
 	int want_comp_desc = 0;
+	int want_update_mult = 0;
 
 	struct usb_descriptor_header **d_spd; /* cursor for speed desc */
 
@@ -110,6 +111,7 @@ int config_ep_by_speed(struct usb_gadget *g,
 	case USB_SPEED_HIGH:
 		if (gadget_is_dualspeed(g)) {
 			speed_desc = f->hs_descriptors;
+			want_update_mult = 1;
 			break;
 		}
 		/* else: fall through */
@@ -126,11 +128,15 @@ int config_ep_by_speed(struct usb_gadget *g,
 
 ep_found:
 	/* commit results */
-	_ep->maxpacket = usb_endpoint_maxp(chosen_desc);
+	_ep->maxpacket = 0x7FF & usb_endpoint_maxp(chosen_desc);
 	_ep->desc = chosen_desc;
 	_ep->comp_desc = NULL;
 	_ep->maxburst = 0;
 	_ep->mult = 0;
+	if (want_update_mult)
+		_ep->mult = (usb_endpoint_maxp(chosen_desc) >> 11) & 0x03;
+	DBG(cdev, "config_ep_by_speed: _ep->maxpacket: %d, _ep->mult: %d\n",
+		_ep->maxpacket, _ep->mult);
 	if (!want_comp_desc)
 		return 0;
 
@@ -871,6 +877,7 @@ void usb_remove_config(struct usb_composite_dev *cdev,
 
 	unbind_config(cdev, config);
 }
+EXPORT_SYMBOL_GPL(usb_remove_config);
 
 /*-------------------------------------------------------------------------*/
 
