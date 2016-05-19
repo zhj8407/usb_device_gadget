@@ -470,11 +470,11 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
 
         if (ret < 0) {
             if (errno == EAGAIN && bSelectIO) {
-                printf("[%d]Got EAGAIN!!\n", __LINE__);
+                //printf("[%d]Got EAGAIN!!\n", __LINE__);
             }
 
             if (errno != EIO) {
-                printf("Unable to dequeue buffer (%d) (%s).\n", errno, strerror(errno));
+                //printf("Unable to dequeue buffer (%d) (%s).\n", errno, strerror(errno));
             }
 
             buf.type = buftype;
