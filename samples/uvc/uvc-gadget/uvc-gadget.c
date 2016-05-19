@@ -232,7 +232,9 @@ unsigned int nbufs = 10;
 unsigned char *pattern = NULL;
 unsigned int bSelectIO = 1;
 enum v4l2_buf_type buftype = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-unsigned int pixelformat = V4L2_PIX_FMT_YUV420;
+//unsigned int pixelformat = V4L2_PIX_FMT_YUV420;
+unsigned int pixelformat = V4L2_PIX_FMT_NV12;
+
 //unsigned int pixelformat = V4L2_PIX_FMT_YUYV;
 enum v4l2_memory memtype = V4L2_MEMORY_MMAP ;
 unsigned int width = 1280; //640;
@@ -483,7 +485,7 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
                 printf("ERROR! buffer not enough: len=%u, need %u\n", bufferLen, buf.bytesused);
                 ret = -1;
             } else {
-                printf("Successfully read from camera: len=%u, need %u\n", bufferLen, buf.bytesused);
+                //printf("Successfully read from camera: len=%u, need %u\n", bufferLen, buf.bytesused);
                 memcpy(buffer, buffers[buf.index].mem, buf.bytesused);
                 *readLen = buf.bytesused;
             }
@@ -791,7 +793,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 buf->bytesused = 0;
             }
 
-            printf("sending data for YUY2: len=%u, ret=%u\n", buf->bytesused, ret);
+            //printf("sending data for YUY2: len=%u, ret=%u\n", buf->bytesused, ret);
             break;
 
         case V4L2_PIX_FMT_YUV420:
@@ -811,7 +813,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 buf->bytesused = 0;
             }
 
-            printf("sending data for YUV420: len=%u, ret=%u\n", buf->bytesused, ret);
+            //printf("sending data for YUV420: len=%u, ret=%u\n", buf->bytesused, ret);
             break;
 
         case V4L2_PIX_FMT_NV12:
@@ -820,7 +822,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
             if (ret)
                 buf->bytesused = 0;
 
-            printf("sending data for NV12: len=%u, ret=%u\n", buf->bytesused, ret);
+            //printf("sending data for NV12: len=%u, ret=%u\n", buf->bytesused, ret);
             break;
 
         case V4L2_PIX_FMT_MJPEG:
@@ -1452,12 +1454,12 @@ uvc_events_process(struct uvc_device *dev)
             printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x wLength %04x [intf=]\n",
                    ctrl_req->bRequestType, ctrl_req->bRequest,
                    ctrl_req->wValue, ctrl_req->wIndex, ctrl_req->wLength);
-            printHexData((char *)ctrl_req, sizeof(*ctrl_req), getUVCEventStr(v4l2_event.type));
+            //printHexData((char *)ctrl_req, sizeof(*ctrl_req), getUVCEventStr(v4l2_event.type));
             uvc_events_process_setup(dev, ctrl_req, &resp);
             break;
 
         case UVC_EVENT_DATA:
-            printHexData((char *)&uvc_event->data, sizeof(uvc_event->data), getUVCEventStr(v4l2_event.type));
+            //printHexData((char *)&uvc_event->data, sizeof(uvc_event->data), getUVCEventStr(v4l2_event.type));
             uvc_events_process_data(dev, &uvc_event->data);
             return;
 
@@ -1488,7 +1490,7 @@ uvc_events_process(struct uvc_device *dev)
         }
     }
 
-    printHexData((char *)(&resp), sizeof(resp), "REPLY");
+    //printHexData((char *)(&resp), sizeof(resp), "REPLY");
     printf("[END]uvc_events_process: DONE with V4L2 event [0x%x] %s\n", v4l2_event.type, getUVCEventStr(v4l2_event.type));
 }
 
