@@ -23,11 +23,12 @@
               moved to before enumeration.
 *******************************************/
 
-#include <libudev.h>
+//#include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
 #include <unistd.h>
+#include "libudev.h"
 
 int main(void)
 {
