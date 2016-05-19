@@ -60,6 +60,12 @@ module_param(en_video_control, int, 0644);
 unsigned int en_diagnostic = 1;
 module_param(en_diagnostic, int, 0644);
 
+unsigned int en_er_board = 0;
+module_param(en_er_board, int, 0644);
+
+unsigned int en_no_subdev = 0;
+module_param(en_no_subdev, int, 0644);
+
 static DEFINE_PCI_DEVICE_TABLE(zynq_pci_tbl) = {
     {PCI_DEVICE(PCI_VENDOR_ID_ZYNQ, PCI_DEVICE_ID_ZYNQ)},
     {0,}

@@ -2015,6 +2015,20 @@ static int v4l_scaler_crop(const struct v4l2_ioctl_ops *ops, struct file *file, 
 	return -EINVAL;
 }
 
+static void v4l_print_vout_osd(const void *arg, bool write_only) {
+	return;
+}
+
+static int v4l_vout_osd(const struct v4l2_ioctl_ops *ops, struct file *file, void *fh, void *arg) {
+	
+	struct v4l2_vout_osd *p = (struct v4l2_vout_osd *) arg;	
+	
+	if (ops->vidioc_vout_osd)
+		return ops->vidioc_vout_osd(file, fh, p);
+	
+	return -EINVAL;
+}
+
 
 ///////////////////////////////////////////////////////
 struct v4l2_ioctl_info {
@@ -2146,6 +2160,7 @@ static struct v4l2_ioctl_info v4l2_ioctls[] = {
 	IOCTL_INFO_FNC(VIDIOC_DBG_G_CHIP_INFO, v4l_dbg_g_chip_info, v4l_print_dbg_chip_info, INFO_FL_CLEAR(v4l2_dbg_chip_info, match)),
 	IOCTL_INFO_FNC(VIDIOC_S_VOUT_PIPELINE, v4l_vout_pipeline, v4l_print_vout_pipeline, 0),
 	IOCTL_INFO_FNC(	VIDIOC_S_SCALER_CROP, v4l_scaler_crop, v4l_print_scaler_crop,0),
+	IOCTL_INFO_FNC(VIDIOC_S_VOUT_OSD, v4l_vout_osd, v4l_print_vout_osd, 0)
 
 };
 #define V4L2_IOCTLS ARRAY_SIZE(v4l2_ioctls)

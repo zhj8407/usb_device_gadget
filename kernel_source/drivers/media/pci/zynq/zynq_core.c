@@ -49,6 +49,10 @@ static u8 is_sucessful_reseverve_video_input_window_mem = 0;
 
 static u8 bIsReleasePCI = 0;
 
+unsigned int g_video_cap_nr[VPIF_CAPTURE_NUM_CHANNELS] = {0, 1, 2, 3, 6, 7};
+unsigned int g_video_display_nr[VPIF_DISPLAY_NUM_CHANNELS] = {4};
+unsigned int g_video_control_nr[1] = {5};
+
 const struct vpif_channel_config_params vpif_ch_params[] = {
     /* HDTV formats */
     {

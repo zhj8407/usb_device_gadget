@@ -20,4 +20,6 @@ int vpif_control_release_pipeline(struct pci_dev *pdev);
 
 int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable);
 
+int vpif_control_config_reset(unsigned int enable);
+
 #endif

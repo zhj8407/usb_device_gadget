@@ -16,7 +16,11 @@
 #include "modules/zynq_resampler.h"
 #include "modules/zynq_vdma.h"
 
+extern unsigned int en_er_board;
+extern unsigned int en_video_display;
+extern unsigned int en_video_input_window ;
 extern unsigned int zynq_fpga_dma_interrupt_gpio_pin0;
+extern unsigned int en_polling_dma_mode;
 ////////////////////////////////////////////////////////////////////////////////////
 /*Video capture specific setting*/
 
@@ -111,50 +115,76 @@ static struct resource zynq_interrupt_resources[] = {
         .flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
         //.start = gpio_to_irq(GPIO_PU3),
         //.end = gpio_to_irq(GPIO_PU3)
+    },
+    [4] = {
+        .name = "interrupt4",
+        .flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
+        //.start = gpio_to_irq(GPIO_PU3),
+        //.end = gpio_to_irq(GPIO_PU3)
+    },
+    [5] = {
+        .name = "interrupt5",
+        .flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
+        //.start = gpio_to_irq(GPIO_PU3),
+        //.end = gpio_to_irq(GPIO_PU3)
     }
 };
 
 void zynq_setup_interrupt(void)
 {
-#if 1
+	//for VIN0
     zynq_interrupt_resources[0].start =  gpio_to_irq(GPIO_PU0);
     zynq_interrupt_resources[0].end =  gpio_to_irq(GPIO_PU0);
 
+	//for VIN1
     zynq_interrupt_resources[1].start =  gpio_to_irq(GPIO_PU1);
     zynq_interrupt_resources[1].end =  gpio_to_irq(GPIO_PU1);
-#endif
-
-#if 0
-    //For adv7611 0x98
-    zynq_interrupt_resources[0].start =  gpio_to_irq(GPIO_PU1);
-    zynq_interrupt_resources[0].end =  gpio_to_irq(GPIO_PU1);
-
-    //For adv7611 0x9a
-    zynq_interrupt_resources[1].start =  gpio_to_irq(GPIO_PU0);
-    zynq_interrupt_resources[1].end =  gpio_to_irq(GPIO_PU0);
-#endif
-    //For MIPI
+    
+	//For VIN2 (web cam)
     zynq_interrupt_resources[2].start =  gpio_to_irq(GPIO_PU2);
     zynq_interrupt_resources[2].end =  gpio_to_irq(GPIO_PU2);
 
-    //For Other video out
+    //For Color bar on the ER board,  For FPGA DMA read or 4th video capture on the SR board.
     zynq_interrupt_resources[3].start =  gpio_to_irq(GPIO_PU3);
     zynq_interrupt_resources[3].end =  gpio_to_irq(GPIO_PU3);
+	
+	
+	//For 4th video capture on the ER board.
+    zynq_interrupt_resources[4].start =  gpio_to_irq(GPIO_PBB5);
+    zynq_interrupt_resources[4].end =  gpio_to_irq(GPIO_PBB5);
 
-    return;
+/*	
+	//For 4th video capture on the ER board.
+    zynq_interrupt_resources[4].start =  gpio_to_irq(GPIO_PBB0);
+    zynq_interrupt_resources[4].end =  gpio_to_irq(GPIO_PBB0);
+	*/
+	
+	//For USB video capture on the ER board.
+    zynq_interrupt_resources[5].start =  gpio_to_irq(GPIO_PBB6);
+    zynq_interrupt_resources[5].end =  gpio_to_irq(GPIO_PBB6);
+	
+	/*
+	//For USB video capture on the ER board.
+    zynq_interrupt_resources[5].start =  gpio_to_irq(GPIO_PBB3);
+    zynq_interrupt_resources[5].end =  gpio_to_irq(GPIO_PBB3);
+    */
+	return;
 }
 
 unsigned  zynq_get_irq(int channel_id)
 {
     if (channel_id >= VPIF_CAPTURE_NUM_CHANNELS) return (unsigned) -1;
-
-	if (zynq_fpga_dma_interrupt_gpio_pin0 != -1) {
-		if (gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0) == zynq_interrupt_resources[channel_id].start) {
-			zynq_printk(0, "[zynq_board] The interrupt irq %u is equal to irq %u for FPGA DMA. So do not assign the irq to capure channel %u!!\n", zynq_interrupt_resources[channel_id].start, gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0), channel_id);
-			return  -1;
+	
+	if (en_er_board == 0) {
+		if (en_video_display == 0) goto exit;
+		if ((zynq_fpga_dma_interrupt_gpio_pin0 != -1)&&(en_video_input_window == 0)&&(en_polling_dma_mode == 0)) {
+			if (gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0) == zynq_interrupt_resources[channel_id].start) {
+				zynq_printk(0, "[zynq_board] The interrupt irq %u is equal to irq %u for FPGA DMA. So do not assign the irq to capure channel %u!!\n", zynq_interrupt_resources[channel_id].start, gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0), channel_id);
+				return  -1;
+			}
 		}
 	}
-	
+exit:	
     return (unsigned) zynq_interrupt_resources[channel_id].start;
 }
 

@@ -562,9 +562,9 @@ static void determine_valid_ioctls(struct video_device *vdev)
 	/* vfl_type and vfl_dir independent ioctls */
 
 	////////////////////////////////////////////////////////////////////////
-	
 	SET_VALID_IOCTL(ops, VIDIOC_S_VOUT_PIPELINE, vidioc_vout_pipeline);
 	SET_VALID_IOCTL(ops, VIDIOC_S_SCALER_CROP, vidioc_scaler_crop);	
+	SET_VALID_IOCTL(ops, VIDIOC_S_VOUT_OSD, vidioc_vout_osd);	
 	//////////////////////////////////////////////////////////////////////////
 	
 	SET_VALID_IOCTL(ops, VIDIOC_QUERYCAP, vidioc_querycap);

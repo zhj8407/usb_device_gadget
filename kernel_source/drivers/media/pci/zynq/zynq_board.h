@@ -35,6 +35,7 @@
 #define SUBDEV_CH4		"adv7511-1"
 #define SUBDEV_CH5 	TC358746A_ID
 
+
 #define ADV7611_I2C_ID_NAME "adv761x"
 #define M10MO_I2C_ID_NAME  "FujistuM10MO"
 #define ADV7511_I2C_ID_NAME "adv7511"

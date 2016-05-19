@@ -24,6 +24,8 @@
 
 #include "zynq_fpga_verify.h"
 
+extern unsigned int en_er_board;
+
 unsigned int uart_interrupt_mode  = 0; //0: single interrupt, 1: four interrupt
 module_param(uart_interrupt_mode, int, 0644);
 
@@ -642,6 +644,8 @@ static int init_uart_ports( struct pci_dev *pdev)
     check_endianess(&zynq_uarts[1].port);
     zynq_uarts[1].irq =  gpio_to_irq(ZYNQ_UART1_IRQ_PIN);
 
+	//NOTE:For the ER board, the U67 has been removed. So the UART2 should  be disabled.
+	if (en_er_board) zynq_uarts[2].enable = 0;
     zynq_uarts[2].card = zynq_card;
     zynq_uarts[2].base = (void __iomem *)ZYNQ_UART2_PORT_START;
     zynq_uarts[2].port.membase = 	(void __iomem *)ZYNQ_UART2_PORT_START;

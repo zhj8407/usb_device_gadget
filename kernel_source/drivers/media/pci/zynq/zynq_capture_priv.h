@@ -15,8 +15,7 @@
 	(((V4L2_FIELD_INTERLACED == field) || \
 	(V4L2_FIELD_SEQ_TB == field)) || \
 	(V4L2_FIELD_SEQ_BT == field)))
-
-#define VPIF_CAPTURE_MAX_DEVICES	4
+	
 #define VPIF_VIDEO_INDEX		0
 #define VPIF_NUMBER_OF_OBJECTS		1
 /* Enumerated data type to give id to each device per channel */
@@ -24,7 +23,9 @@ enum vpif_channel_id {
     VPIF_CHANNEL0_VIDEO = 0,
     VPIF_CHANNEL1_VIDEO = 1,
     VPIF_CHANNEL2_VIDEO = 2,
-    VPIF_CHANNEL3_VIDEO = 3
+    VPIF_CHANNEL3_VIDEO = 3,
+	VPIF_CHANNEL4_VIDEO = 4,
+	VPIF_CHANNEL5_VIDEO = 5,
 };
 
 struct video_obj {
@@ -85,12 +86,8 @@ struct common_obj {
     char *dummy_buffer;
     unsigned int dummy_buffer_size;
 
-
     u8 is_start_streaming;
     u8 is_stop_streaming;
-
-    u8 is_completed_one_intr;
-    u8 is_enter_suspend;
 
     atomic_t refcount;
 };
@@ -228,6 +225,42 @@ const struct vpif_input dm6467_ch3_inputs[] = {
 #endif
 };
 
+
+const struct vpif_input dm6467_ch4_inputs[] = {
+#if 1
+    {
+        .input = {
+            .index = 0,
+            .name = "HDMI",
+            .type = V4L2_INPUT_TYPE_CAMERA,
+            .capabilities = V4L2_IN_CAP_DV_TIMINGS,
+            .std =  V4L2_STD_UNKNOWN,
+        },
+        .subdev_name =NULL,
+        .input_route = 0,
+        .output_route = 0
+    },
+#endif
+};
+
+
+const struct vpif_input dm6467_ch5_inputs[] = {
+#if 1
+    {
+        .input = {
+            .index = 0,
+            .name = "HDMI",
+            .type = V4L2_INPUT_TYPE_CAMERA,
+            .capabilities = V4L2_IN_CAP_DV_TIMINGS,
+            .std =  V4L2_STD_UNKNOWN,
+        },
+        .subdev_name = NULL,
+        .input_route = 0,
+        .output_route = 0
+    },
+#endif
+};
+
 int setup_vpif_input_path(int channel, const char *sub_dev_name)
 {
 
@@ -285,6 +318,26 @@ struct vpif_capture_config  vpif_capture_cfg = {
     .chan_config[3] = {
         .inputs = dm6467_ch3_inputs,
         .input_count = ARRAY_SIZE(dm6467_ch3_inputs),
+        .vpif_if = {
+            .if_type = VPIF_IF_BT1120,
+            .hd_pol = 1,
+            .vd_pol = 1,
+            .fid_pol = 0,
+        },
+    },
+	.chan_config[4] = {
+        .inputs = dm6467_ch4_inputs,
+        .input_count = ARRAY_SIZE(dm6467_ch4_inputs),
+        .vpif_if = {
+            .if_type = VPIF_IF_BT1120,
+            .hd_pol = 1,
+            .vd_pol = 1,
+            .fid_pol = 0,
+        },
+    },
+	.chan_config[5] = {
+        .inputs = dm6467_ch5_inputs,
+        .input_count = ARRAY_SIZE(dm6467_ch5_inputs),
         .vpif_if = {
             .if_type = VPIF_IF_BT1120,
             .hd_pol = 1,

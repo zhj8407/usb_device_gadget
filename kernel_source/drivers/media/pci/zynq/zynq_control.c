@@ -21,6 +21,9 @@
 
 //#define FPGA_MODULE_SUPPORT_DATE (0x20151027)
 #define FPGA_MODULE_SUPPORT_DATE (0x20151125)
+#define FPGA_MODULE_SUPPORT_DATE_1 (0x20151127)
+
+extern unsigned int en_er_board;
 
 /////////////////////////////////////////////////////////////////////////////
 unsigned int en_modules = 1;
@@ -42,6 +45,8 @@ static atomic_t g_is_vin1_valid;
 static atomic_t g_is_vin2_valid;
 static atomic_t g_is_cpuin_valid;
 
+
+static atomic_t  g_is_should_reset;
 
 static u32 fpga_release_date = 0;
 static int config_all_video_pipeline_entities(void __iomem *pci_reg_base);
@@ -65,6 +70,7 @@ static int vpif_g_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl)
 static int vpif_s_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl);
 static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipeline *a);
 static int vpif_scaler_crop(struct file *file, void *fh, struct v4l2_scaler_crop *a);
+static int vpif_vout_osd(struct file *file, void *fh, struct v4l2_vout_osd *a);
 
 static int vpif_mmap(struct file *filep, struct vm_area_struct *vma);
 static int vpif_open(struct file *filep) ;
@@ -81,7 +87,8 @@ static const struct v4l2_ioctl_ops vpif_ioctl_ops = {
     .vidioc_s_ctrl                      =  vpif_s_ctrl,
     .vidioc_g_ctrl                      = vpif_g_ctrl,
     .vidioc_vout_pipeline = vpif_vout_pipline,
-    .vidioc_scaler_crop = vpif_scaler_crop
+    .vidioc_scaler_crop = vpif_scaler_crop,
+	.vidioc_vout_osd = vpif_vout_osd
 };
 
 static const struct v4l2_file_operations vpif_fops = {
@@ -127,14 +134,11 @@ static int vpif_control_config_out_clock(eVideoFormat format)
 
 static int vpif_control_enable_video_stream_by_id(ePIPEPORTID id, unsigned int enable)
 {
-
     u32 val = 0;
-
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
-
-        val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+		val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
         switch (id) {
             case EVIN0:
                 if (enable)
@@ -224,10 +228,25 @@ int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable)
     return 0;
 }
 
+int vpif_control_config_reset(unsigned int enable) {
+	if (enable) {
+		atomic_set(&g_is_should_reset, 0);
+	} else {
+		atomic_set(&g_is_should_reset, -1);
+	}
+	return 0;
+}
+
+static unsigned int vpif_control_is_should_reset(void) {
+	if (atomic_read(&g_is_should_reset) == -1){
+         return 0;
+	} else {
+		return 1;
+	}
+}
+
 static unsigned int vpif_control_is_valid(ePIPEPORTID id)
 {
-
-
     switch (id) {
         case EVIN0:
             if (atomic_read(&g_is_vin0_valid) == -1)
@@ -248,19 +267,17 @@ static unsigned int vpif_control_is_valid(ePIPEPORTID id)
             		return 1;*/
             return 1;
         case ECPU:
-            //TODO: The cpu input  always invalid. Because the FPGA function is not implemented now.
-            /*	if (atomic_read(&g_is_cpuin_valid) == -1)
+            //TODO: The cpu input  always valid. Because the FPGA function is  implemented now.
+            if (atomic_read(&g_is_cpuin_valid) == -1)
             		return 0;
-            	else
-            		return 1;*/
-            return 0;
+            else
+            		return 1;
+         //   return 1;
         default:
             return 0;
     }
 
 }
-
-
 
 int vpif_control_init_pipeline(struct pci_dev *pdev)
 {
@@ -287,6 +304,7 @@ int vpif_control_init_pipeline(struct pci_dev *pdev)
         atomic_set(&g_is_vin0_valid, -1);
         atomic_set(&g_is_vin1_valid, -1);
         atomic_set(&g_is_vin2_valid, -1);
+		atomic_set(&g_is_should_reset, -1);
 
     } else {
         zynq_printk(1, "[zynq_control] Disable FPGA modules. Because 0x%x > 0x%x\n", FPGA_MODULE_SUPPORT_DATE, fpga_release_date);
@@ -335,7 +353,7 @@ int vpif_control_init(struct pci_dev *pdev)
     vfd->v4l2_dev = &vpif_obj.v4l2_dev;
     vfd->release = video_device_release;
 
-    register_device_err = video_register_device(vfd,  VFL_TYPE_GRABBER, 0);
+    register_device_err = video_register_device(vfd,  VFL_TYPE_GRABBER, g_video_control_nr[0]);
 
     if (register_device_err) goto exit;
 
@@ -468,6 +486,35 @@ static char  *videofmt_to_string(eVideoFormat fmt)
     }
 }
 
+/*
+struct v4l2_vout_osd {
+	__u32 osd_id; // 0: for VOUT_0, 1: for VOUT_1
+	__u32 is_config_layer0;
+	__u32 is_config_layer1;
+	__u32 layer0_enable; //0: disable layer0 (full view), 1: enable layer0 (full view)
+	__u32 layer1_enable; //0 : disable layer1 (osd view), 1: enable layer1 (osd view)
+};
+ */
+static int vpif_vout_osd(struct file *file, void *fh, struct v4l2_vout_osd *a) {
+	osd_enable_t full_enable;
+	osd_enable_t osd_enable;
+	
+	if (!a) goto exit;
+	
+	if (a->is_config_layer0) {
+		full_enable.value = a->layer0_enable;
+		osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )a->osd_id);	
+	}
+	
+	if (a->is_config_layer1) {
+		osd_enable.value = a->layer1_enable;
+		osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )a->osd_id);	
+	}
+	
+exit:	
+	return 0;
+}
+
 static void vpif_print_vout_pipeline(struct v4l2_vout_pipeline *a) {
 	zynq_printk(1, "[zynq_control] configure format: %s \n", videofmt_to_string(a->format));
 	zynq_printk(1, "[zynq_control] configure vout_0:  (full, osd) -> (%u,%u) \n", a->pipes[0].full, a->pipes[0].osd);
@@ -485,12 +532,11 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     vselector_source_t  src;
     vselector_vout_frame_size_t size;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
-
     unsigned int is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
     unsigned int is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
     unsigned int is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
     unsigned int is_valid_cpu = vpif_control_is_valid(ECPU) ;
-
+	
     entity = board_find_video_pipeline_entity(VSELECTOR);
 
     if ((fpga_release_date < FPGA_MODULE_SUPPORT_DATE) || (en_modules == 0)) return -1;
@@ -500,13 +546,25 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
 	vpif_print_vout_pipeline(a) ;
 	zynq_printk(1, "[zynq_control] configure: %s -> %s \n", videofmt_to_string(g_vout_pipeline_config.format), videofmt_to_string(a->format));
     zynq_printk(1, "[zynq_control]  valid status: (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", is_valid_vin0, is_valid_vin1, is_valid_vin2, is_valid_cpu);
-
+#if 0
    if ((is_valid_vin0  == 0) && (is_valid_vin1 == 0)){
 	   zynq_printk(0, "[zynq_control] Because (vin0, vin1)==(%u, %u),  could not configure the VOUT !! \n", is_valid_vin0, is_valid_vin1);
 	   return 0;
    }
+#endif
+	
+	if ((en_er_board == 0) && (fpga_release_date == 0x20160322)) {
+		if ((a->reset == 1) || vpif_control_is_should_reset() ) {
+			if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)){
+				zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+	   			vselector_sw_reset();
+				if (vpif_control_is_should_reset()) vpif_control_config_reset(0);
+			}
+		}
+	}
 
-    if (g_vout_pipeline_config.format != a->format) {
+
+   if (g_vout_pipeline_config.format != a->format) {
         
 		zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
 
@@ -553,7 +611,11 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     }
     
     for (i = 0; i < vout_num; i++) {
-        p = &(a->pipes[i]);
+		
+		osd_enable_t full_enable;
+		osd_enable_t osd_enable;   
+		
+		p = &(a->pipes[i]);
 
         if (p->is_config == 0) continue;
 
@@ -564,70 +626,104 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
             continue;
 
         is_config = 1;
-
-        //zynq_printk(0, "[zynq_control][%d] (full, osd, config)---->(%s, %s, %d) \n",i,  pipeid_to_string(p->full), pipeid_to_string(p->osd), p->is_config);
+		
+		if (a->pipes[i].full == ENONE) {
+			full_enable.value = 0;
+		} else {
+			full_enable.value = 1;
+		}
+		osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )i);	
+		
+		if (a->pipes[i].osd == ENONE) {
+			osd_enable.value = 0;
+		} else {
+			osd_enable.value = 1;
+		}
+		osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )i);
+		
+		//zynq_printk(0, "[zynq_control][%d] (full, osd, config)---->(%s, %s, %d) \n",i,  pipeid_to_string(p->full), pipeid_to_string(p->osd), p->is_config);
         if (i == 0) {
-            config.flag = VSELECTOR_OPTION_SET_VOUT0_FULL_SRC;
-            src.vin0	= (p->full == EVIN0 &&  is_valid_vin0)?1:0;
-            src.vin1	=	(p->full == EVIN1 &&  is_valid_vin1)?1:0;
-            src.vin2	=	(p->full == EVIN2 &&  is_valid_vin2)?1:0;
-            src.cpu	=	(p->full == ECPU &&  is_valid_cpu)?1:0;
-            config.data = &src;
-            entity->config(entity,  &config);
-
-            config.flag = VSELECTOR_OPTION_SET_VOUT0_1_16_SRC;
-            src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
-            src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
-            src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
-            src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
-            config.data = &src;
-            entity->config(entity,  &config);
+			
+			if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT0_FULL_SRC;
+            	src.vin0	= (p->full == EVIN0 &&  is_valid_vin0)?1:0;
+            	src.vin1	=	(p->full == EVIN1 &&  is_valid_vin1)?1:0;
+            	src.vin2	=	(p->full == EVIN2 &&  is_valid_vin2)?1:0;
+            	src.cpu	=	(p->full == ECPU &&  is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			 }
+		
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT0_1_16_SRC;
+            	src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
+            	src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
 
         } else if (i ==1) {
-            config.flag = VSELECTOR_OPTION_SET_VOUT1_FULL_SRC;
-            src.vin0	= (p->full == EVIN0 && is_valid_vin0)?1:0;
-            src.vin1	=	(p->full == EVIN1&& is_valid_vin1)?1:0;
-            src.vin2	=	(p->full == EVIN2 && is_valid_vin2)?1:0;
-            src.cpu	=	(p->full == ECPU && is_valid_cpu)?1:0;
-            config.data = &src;
-            entity->config(entity,  &config);
-
-            config.flag = VSELECTOR_OPTION_SET_VOUT1_1_16_SRC;
-            src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
-            src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
-            src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
-            src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
-            config.data = &src;
-            entity->config(entity,  &config);
+			
+			if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT1_FULL_SRC;
+            	src.vin0	= (p->full == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->full == EVIN1&& is_valid_vin1)?1:0;
+            	src.vin2	=	(p->full == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->full == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
+			
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT1_1_16_SRC;
+            	src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
+            	src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
         }
 
-        if (is_config) {
-            mutex_lock(&g_config_lock);
-            if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu))
-                g_vout_pipeline_config.pipes[i].full = a->pipes[i].full;
-            else
-                g_vout_pipeline_config.pipes[i].full = ENONE;
 
-            if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu))
+	if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322))){
+		if ((a->reset == 1) || vpif_control_is_should_reset() ) {
+			if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)){
+				zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+	   			vselector_sw_reset();
+				if (vpif_control_is_should_reset()) vpif_control_config_reset(0);	
+			}
+		}
+	}
+   
+   if (is_config) {
+            mutex_lock(&g_config_lock);
+          	 if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)){
+				 g_vout_pipeline_config.pipes[i].full = a->pipes[i].full;
+			 } else {
+               g_vout_pipeline_config.pipes[i].full = ENONE;
+			 }
+            
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
                 g_vout_pipeline_config.pipes[i].osd = a->pipes[i].osd;
-            else
-                g_vout_pipeline_config.pipes[i].osd = ENONE;
-            mutex_unlock(&g_config_lock);
+			 } else {
+				g_vout_pipeline_config.pipes[i].osd = ENONE;
+			}
+			mutex_unlock(&g_config_lock);
         }
     }
 
     if (is_config) {
         int  i = 0;
-
         //vpif_control_enable_video_streams(0);
-
         for (i = 0; i < 2; i++) {
             if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {
                 vpif_control_enable_video_stream_by_id(EVIN0, 1);
                 break;
             }
         }
-
         for (i = 0; i < 2; i++) {
             if ((g_vout_pipeline_config.pipes[i].full  == EVIN1) || (g_vout_pipeline_config.pipes[i].osd == EVIN1)) {
                 vpif_control_enable_video_stream_by_id(EVIN1,  1);
@@ -642,7 +738,6 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
             }
         }
     }
-
     return 0;
 }
 
@@ -967,13 +1062,23 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     vselector_vout_frame_size_t size;
 
     if (b_firstconfig_vout_pipeline == 1) {
-        b_firstconfig_vout_pipeline = 0;
+		if ((en_er_board == 0) &&  (fpga_release_date == 0x20160322)){
+				b_firstconfig_vout_pipeline = 0;
+				vselector_sw_reset();
+		}
         mutex_lock(&g_config_lock);
-        g_vout_pipeline_config.pipes[0].full = EVIN0;
-        g_vout_pipeline_config.pipes[0].osd = EVIN2;
-        g_vout_pipeline_config.pipes[1].full = EVIN1;
-        g_vout_pipeline_config.pipes[1].osd = EVIN2;
-        mutex_unlock(&g_config_lock);
+		if (en_er_board) {
+        	g_vout_pipeline_config.pipes[0].full = ENONE;
+        	g_vout_pipeline_config.pipes[0].osd = ENONE;
+        	g_vout_pipeline_config.pipes[1].full = EVIN2;
+        	g_vout_pipeline_config.pipes[1].osd = EVIN2;
+		} else {
+			g_vout_pipeline_config.pipes[0].full = EVIN0;
+        	g_vout_pipeline_config.pipes[0].osd = EVIN2;
+        	g_vout_pipeline_config.pipes[1].full = EVIN1;
+        	g_vout_pipeline_config.pipes[1].osd = EVIN2;
+		}
+		mutex_unlock(&g_config_lock);
     }
 
     if ((default_in_width == 1920) && (default_in_height == 1080)) {
@@ -1027,6 +1132,13 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
 	
     //vpif_control_enable_video_streams(0);
 
+	  if (b_firstconfig_vout_pipeline == 1) { 
+		   b_firstconfig_vout_pipeline = 0;
+		   zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+			if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322)))
+				vselector_sw_reset();	
+	  }
+	
     for (i = 0; i < 2; i++) {
         if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {
             vpif_control_enable_video_stream_by_id(EVIN0, 1);

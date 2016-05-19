@@ -2132,6 +2132,7 @@ typedef struct vout_pipe{
 struct v4l2_vout_pipeline {
 	vout_pipe_t pipes[2]; //0: VOUT_0, 1: VOUT_1
 	eVideoFormat format;
+	__u32 reset;
 } ;
 #define VIDIOC_S_VOUT_PIPELINE   _IOWR('V', 103, struct v4l2_vout_pipeline)
 
@@ -2142,8 +2143,17 @@ struct v4l2_scaler_crop{
 	__u32		crop_width;
 	__u32		crop_height;
 };
-
 #define VIDIOC_S_SCALER_CROP   _IOWR('V', 104, struct v4l2_scaler_crop)
+
+struct v4l2_vout_osd {
+	__u32 osd_id; // 0: for VOUT_0, 1: for VOUT_1
+	__u32 is_config_layer0;
+	__u32 is_config_layer1;
+	__u32 layer0_enable; //0: disable layer0 (full view), 1: enable layer0 (full view)
+	__u32 layer1_enable; //0 : disable layer1 (osd view), 1: enable layer1 (osd view)
+};
+#define VIDIOC_S_VOUT_OSD   _IOWR('V', 105, struct v4l2_vout_osd)
+
 ///////////////////////////////////////////////////////////////////////////////////
 
 

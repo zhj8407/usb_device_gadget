@@ -109,7 +109,7 @@ int scaler_initial_by_index(void __iomem *pci_base_addr, unsigned index)
 
     if(is_initialized[i] == 1) return  0;
 
-    if ( i ==3) return 0;
+   // if ( i ==3) return 0;
 
     if (i == 0)
         handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER0_REG);
@@ -194,7 +194,7 @@ int scaler_initial(void __iomem *pci_base_addr)
         if(is_initialized[i] == 1) continue;
         zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
         //NOTE:The scaler 2 and scaler 3 is not workable for 1029 FPGA image.
-        if (i== 2 || i ==3) continue;
+        //if (i== 2 || i ==3) continue;
 
         if (i == 0)
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER0_REG);

@@ -38,6 +38,8 @@ int vselector_setoption(EVSelectorOptionFlags flag, void *userdata);
 
 int vselector_reset(void);
 
+int vselector_sw_reset(void);
+
 int vselector_start(void);
 
 int vselector_stop(void);

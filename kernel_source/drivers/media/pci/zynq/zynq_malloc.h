@@ -18,9 +18,12 @@
 
 struct zynq_malloc_conf {
     unsigned int is_always_get_first_memory; //0: increase getting, 1: always get the first memory
-    void *pool_start_address;
-    unsigned int pool_size;
-	u32  phy_pool_start_address;
+	void *buffer_virt_addr_list;
+	void *buffer_phy_addr_list;
+	unsigned int buffer_num;
+	unsigned int channel_id;
+	unsigned int available_buffer_size;
+	void *context;
 };
 
 typedef struct zynq_malloc_conf  zynq_malloc_conf_t;

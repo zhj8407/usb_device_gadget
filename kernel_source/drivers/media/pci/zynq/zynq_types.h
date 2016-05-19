@@ -3,8 +3,8 @@
 
 #include <linux/i2c.h>
 #include <linux/videodev2.h>
-#define VPIF_CAPTURE_MAX_CHANNELS	4
-#define VPIF_DISPLAY_MAX_CHANNELS	2
+#define VPIF_CAPTURE_MAX_CHANNELS	6
+#define VPIF_DISPLAY_MAX_CHANNELS	1
 
 enum vpif_if_type {
     VPIF_IF_BT656,

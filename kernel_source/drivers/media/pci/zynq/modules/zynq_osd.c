@@ -39,6 +39,8 @@ static int set_update_change(osd_enable_t *userdata, unsigned int index);
 static int set_enable(osd_enable_t *userdata, unsigned int index);
 static int set_active_output_size(osd_size_t *size, unsigned int index);
 static int set_layer(osd_layer_paramter_t *p, unsigned int index);
+static void set_layer0_enable(osd_enable_t *enable, unsigned int index);
+static void set_layer1_enable(osd_enable_t *enable, unsigned int index);
 
 static void set_layer_ctrl(unsigned int index,  EOSDLayerID id, unsigned int enable, unsigned int global_alpha_enable, unsigned int priority, unsigned int alpha_value);
 static 	void set_layer_position(unsigned int index,  EOSDLayerID id, unsigned int position_x,  unsigned int position_y);
@@ -128,13 +130,11 @@ int osd_initial_by_index(void __iomem *pci_base_addr, unsigned index)
 
 int osd_initial(void __iomem *pci_base_addr)
 {
-
     int i = 0;
-
     for (i = 0; i < OSD_MAX_NUM; i++) {
 
         if (is_initialized[i] == 1) continue;
-        zynq_printk(1, "[zynq_osd](%d)%d \n", __LINE__,i);
+		
         if (i == 0)
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_OSD0_REG);
         else if (i == 1)
@@ -169,7 +169,6 @@ int osd_initial(void __iomem *pci_base_addr)
 
         is_initialized[i] = 1;
         is_reset[i] = 1;
-        zynq_printk(1, "[zynq_osd](%d)%d \n", __LINE__,i);
         //zynq_printk(1, "[zynq_osd] Register base address for osd %d : 0x%8lx \n", i,   (unsigned long)handles[i].base);
     }
 
@@ -199,11 +198,18 @@ int osd_setoption( EOSDOptionFlags flag, void *userdata, unsigned  index)
         case OSD_OPTION_SET_LAYER:
             set_layer((osd_layer_paramter_t *)userdata, index);
             break;
-        default:
+		case OSD_OPTION_ENABLE_LAYER0:
+			set_layer0_enable((osd_enable_t *)userdata, index);
+			break;
+		case OSD_OPTION_ENABLE_LAYER1:
+			set_layer1_enable((osd_enable_t *)userdata, index);
+        	break;
+		default:
             break;
     }
     return 0;
 }
+
 
 int osd_reset(unsigned index)
 {
@@ -468,6 +474,41 @@ static int set_layer(osd_layer_paramter_t *p, unsigned int index)
 
     return  0;
 }
+
+static void set_layer0_enable(osd_enable_t *enable, unsigned int index) {
+	u32 value = 0x0;
+	u16 reg = handles[index].layer_0_ctrl;
+	unsigned int enable_val = 0;
+	
+	if (enable) {
+		enable_val = enable->value;
+		value = get_cached_registers(index, reg) & ~(0x1);
+		value = value  | enable_val;
+		mutex_lock(&locks[index]);
+		fpga_reg_write(handles[index].base, reg, value);
+		set_cached_registers(index, reg, value);
+		mutex_unlock(&locks[index]);
+	}
+	return;
+}
+static void set_layer1_enable(osd_enable_t *enable, unsigned int  index) {
+	u32 value = 0x0;
+	u16 reg = handles[index].layer_1_ctrl;
+	unsigned int enable_val = 0;
+
+	if (enable) {
+		enable_val = enable->value;
+		value = get_cached_registers(index, reg) & ~(0x1);
+		value = value  | enable_val;
+		mutex_lock(&locks[index]);
+		fpga_reg_write(handles[index].base, reg, value);
+		set_cached_registers(index, reg, value);
+		mutex_unlock(&locks[index]);
+	}
+	return ;
+	
+}
+
 
 static void set_layer_ctrl(unsigned int index,  EOSDLayerID id, unsigned int enable, unsigned int global_alpha_enable, unsigned int priority, unsigned int alpha_value)
 {

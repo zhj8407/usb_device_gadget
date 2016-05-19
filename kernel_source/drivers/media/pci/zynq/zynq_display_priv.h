@@ -90,6 +90,7 @@ struct common_obj {
     void (*set_addr) (unsigned long);
     void (*set_res) (unsigned long, unsigned long);
     void (*enable_read) (unsigned int);
+	void (*enable_channel_intr)(int);
 	
     u32 height;
     u32 width;

@@ -10,7 +10,7 @@ typedef struct {
     u32 value;
 } vselector_cfg_reg;
 
-#define VSELECTOR_REG_NUM  (6)
+#define VSELECTOR_REG_NUM  (7)
 extern vselector_cfg_reg  vselector_cached_registers[];
 
 typedef struct {
@@ -21,6 +21,7 @@ typedef struct {
     u16 vout0_1_16_src;//0x000c
     u16 vout1_1_16_src;//0x0010
     u16 version;//0x0014
+    u16 soft_reset;//0x0018
 } vselector_handle_t;
 
 static vselector_handle_t handle;
@@ -62,6 +63,21 @@ void vselector_get_status(vselector_status_t *st)
     st->is_started = is_started;
 }
 
+int vselector_sw_reset(void) {
+	
+	u32 value = 0x00000001;
+    u16 reg = handle.soft_reset;
+
+    mutex_lock(&lock);
+#if 1
+    fpga_reg_write(handle.base, reg, value);
+#endif
+//	zynq_printk(0, "[zynq_video_selector](%d) (reg, vlaue)--->(0x%08x, 0x%08x)\n", __LINE__, reg, value);
+   // set_cached_registers(reg, value);
+    mutex_unlock(&lock);
+    return 0;
+}
+
 int vselector_initial(void __iomem *pci_base_addr)
 {
 
@@ -74,6 +90,7 @@ int vselector_initial(void __iomem *pci_base_addr)
     handle.vout0_1_16_src = 0x000c;
     handle.vout1_1_16_src = 0x0010;
     handle.version = 0x0014;
+	handle.soft_reset = 0x0018;
     mutex_init(&lock);
 
     sw_reset();
@@ -217,7 +234,7 @@ int vselector_set_reg(u16 offset, u32 value)
 #if 1
     fpga_reg_write(handle.base, offset, value);
 #endif
-    zynq_printk(0, "[zynq_video_selector](%d) (reg, vlaue)--->(0x%08x, 0x%08x)\n", __LINE__, offset, value);
+   // zynq_printk(0, "[zynq_video_selector](%d) (reg, vlaue)--->(0x%08x, 0x%08x)\n", __LINE__, offset, value);
     set_cached_registers(offset, value);
     mutex_unlock(&lock);
 
