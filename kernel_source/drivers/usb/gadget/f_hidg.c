@@ -53,6 +53,8 @@
 #define HID_REPORT_DESC_MAX_LENGTH	2048
 #define USB_STRING_MAX_LENGTH 126
 
+#define XFER_INT_OUT_REQ_MAX_COUNT		4
+
 /*                            HID gadget struct                            */
 struct hidg_device_config {
 	int	device;
@@ -100,6 +102,7 @@ struct f_hidg {
 
 	struct usb_ep			*in_ep;
 	struct usb_ep			*out_ep;
+	struct usb_request		*out_reqs[XFER_INT_OUT_REQ_MAX_COUNT];
 };
 
 static inline struct f_hidg *func_to_hidg(struct usb_function *f)
@@ -431,6 +434,17 @@ static void hidg_set_report_complete(struct usb_ep *ep, struct usb_request *req)
 	struct usb_composite_dev *cdev = hidg->func.config->cdev;
 	struct f_hidg_req_list *req_list;
 	unsigned long flags;
+	int status = req->status;
+
+	if (status == -ECONNRESET || status == -ESHUTDOWN) {
+		/* Probably caused by the usb_ep_dequeue. */
+		/* Do not enqueue the req again. */
+		WARNING(cdev, "error in usb request: %d\n", status);
+		return;
+	} else if (status) {
+		ERROR(cdev, "hidg_set_report_complete: status(%d), %d/%d\n",
+			status, req->actual, req->length);
+	}
 
 	req_list = kzalloc(sizeof(*req_list), GFP_ATOMIC);
 	if (!req_list)
@@ -579,6 +593,7 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct usb_composite_dev		*cdev = f->config->cdev;
 	struct f_hidg				*hidg = func_to_hidg(f);
+	struct usb_request			*req = NULL;
 	int i, status = 0;
 
 	VDBG(cdev, "hidg_set_alt intf:%d alt:%d\n", intf, alt);
@@ -625,9 +640,11 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		 * allocate a bunch of read buffers and queue them all at once.
 		 */
 		for (i = 0; i < hidg->qlen && status == 0; i++) {
-			struct usb_request *req =
-					hidg_alloc_ep_req(hidg->out_ep,
-							  hidg->report_length);
+			if (!hidg->out_reqs[i])
+				hidg->out_reqs[i] =
+						hidg_alloc_ep_req(hidg->out_ep, hidg->report_length);
+
+			req = hidg->out_reqs[i];
 			if (req) {
 				req->complete = hidg_set_report_complete;
 				req->context  = hidg;
@@ -753,6 +770,7 @@ fail:
 static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_hidg *hidg = func_to_hidg(f);
+	int i = 0;
 
 	device_destroy(hidg_class, MKDEV(major, hidg->minor));
 	cdev_del(&hidg->cdev);
@@ -762,6 +780,15 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 	usb_ep_dequeue(hidg->in_ep, hidg->req);
 	kfree(hidg->req->buf);
 	usb_ep_free_request(hidg->in_ep, hidg->req);
+
+	usb_ep_disable(hidg->out_ep);
+	for(i = 0; i < hidg->qlen; i++) {
+		if (hidg->out_reqs[i]) {
+			usb_ep_dequeue(hidg->out_ep, hidg->out_reqs[i]);
+			kfree(hidg->out_reqs[i]->buf);
+			usb_ep_free_request(hidg->out_ep, hidg->out_reqs[i]);
+		}
+	}
 
 	/* usb_free_all_descriptors(f); */
 
