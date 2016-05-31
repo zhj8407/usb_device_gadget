@@ -281,6 +281,7 @@ struct v4l2_ioctl_ops {
 	int (*vidioc_vout_pipeline)       	(struct file *file, void *fh, struct v4l2_vout_pipeline *a);
 	int (*vidioc_scaler_crop)       	(struct file *file, void *fh, struct v4l2_scaler_crop *a);
 	int (*vidioc_vout_osd)       	(struct file *file, void *fh, struct v4l2_vout_osd *a);
+	int (*vidioc_uart_mode)       	(struct file *file, void *fh, struct v4l2_uart_mode *a);
 	////////////////////////////////////////////
 };
 

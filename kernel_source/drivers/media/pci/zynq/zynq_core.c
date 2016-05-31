@@ -28,6 +28,9 @@ module_param(en_use_fb_mem, int, 0644);
 unsigned int en_use_dev_mem_map = 0;
 module_param(en_use_dev_mem_map, int, 0644);
 
+unsigned int en_non_cache_map = 0;
+module_param(en_non_cache_map, int, 0644);
+
 spinlock_t vpif_lock;
 
 void __iomem *zynq_reg_base = NULL;
@@ -50,7 +53,10 @@ static u8 is_sucessful_reseverve_video_input_window_mem = 0;
 static u8 bIsReleasePCI = 0;
 
 unsigned int g_video_cap_nr[VPIF_CAPTURE_NUM_CHANNELS] = {0, 1, 2, 3, 6, 7};
+unsigned int g_video_cap_en[VPIF_CAPTURE_NUM_CHANNELS] = {1, 1, 1, 1, 1, 1};
+
 unsigned int g_video_display_nr[VPIF_DISPLAY_NUM_CHANNELS] = {4};
+unsigned int g_video_display_en[VPIF_DISPLAY_NUM_CHANNELS] = {1};
 unsigned int g_video_control_nr[1] = {5};
 
 const struct vpif_channel_config_params vpif_ch_params[] = {

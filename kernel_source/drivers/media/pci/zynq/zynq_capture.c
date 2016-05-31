@@ -3399,30 +3399,36 @@ int vpif_capture_init(struct pci_dev *pdev)
                 goto rls_sd_obj;
             }
         }
-
-        vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &subdevdata->board_info, NULL);
-
-        if (!vpif_obj.sd[i]) {
+        
+		vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &subdevdata->board_info, NULL);
+		
+		if (!vpif_obj.sd[i]) {
             zynq_printk(0, "[zynq_capture]Error registering v4l2 subdevice %s !!\n",  subdevdata->name);
-            err = -EBUSY;
-            goto rls_sd_obj;
-        }
-
-        if ((err = v4l2_device_register_subdev_nodes(&vpif_obj.v4l2_dev)) != 0) {
-            zynq_printk(0, "[zynq_capture]%s failed to call v4l2_device_register_subdev_nodes()!!\n",  subdevdata->name);
-            goto rls_sd_obj;
-        }
-
+            g_video_cap_en[i] = 0;
+			continue;
+			// err = -EBUSY;
+           // goto rls_sd_obj;
+		}
         actual_subdev_count++;
-
         //zynq_printk(1, "[zynq_capture]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  subdevdata->name, bus_num, subdevdata->board_info.addr);
     }
-
+    
+    if ((err = v4l2_device_register_subdev_nodes(&vpif_obj.v4l2_dev)) != 0) {
+           zynq_printk(0, "[zynq_capture]Failed to call v4l2_device_register_subdev_nodes()!!\n");
+           err = -EBUSY;
+           goto rls_sd_obj;
+	} else {
+		zynq_printk(0, "[zynq_capture]Successful to call v4l2_device_register_subdev_nodes()!!\n");
+	}
+	
     config->subdev_count = subdev_count = actual_subdev_count;
-    //	zynq_printk(1, "[zynq_capture]subdev number : %u\n", subdev_count);
+    zynq_printk(1, "[zynq_capture]Subdev number : %u\n", subdev_count);
 
     for (j = 0; j < video_cap_dev_num; j++) {
-        ch = vpif_obj.dev[j];
+       
+		if ( g_video_cap_en[j] == 0) continue;
+		
+		ch = vpif_obj.dev[j];
         ch->usrs  = 0;
         ch->channel_id = j;
         mutex_init(&ch->chan_lock);

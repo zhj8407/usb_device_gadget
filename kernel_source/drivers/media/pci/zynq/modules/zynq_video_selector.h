@@ -11,6 +11,13 @@ typedef enum vselector_option_flags {
     VSELECTOR_OPTION_SET_VOUT1_1_16_SRC = 6,
 } EVSelectorOptionFlags;
 
+typedef enum vselector_video_src {
+	VSELECTOR_VIN0 = 0,
+	VSELECTOR_VIN1 = 1,
+	VSELECTOR_VIN2 =2,
+	VSELECTOR_CPU=3
+} EVSelectorVideoSrc;
+
 typedef struct {
     unsigned int width;
     unsigned int height;
@@ -37,6 +44,10 @@ int vselector_initial(void __iomem *pci_base_addr);
 int vselector_setoption(EVSelectorOptionFlags flag, void *userdata);
 
 int vselector_reset(void);
+
+int vselector_get_frame_rate (EVSelectorVideoSrc src);
+
+int vselector_frame_is_valid (EVSelectorVideoSrc src); 
 
 int vselector_sw_reset(void);
 

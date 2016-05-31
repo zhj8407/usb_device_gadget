@@ -21,7 +21,9 @@
 #define VPIF_DISPLAY_NUM_CHANNELS	(1)
 
 extern unsigned int g_video_cap_nr[VPIF_CAPTURE_NUM_CHANNELS];
+extern unsigned int g_video_cap_en[VPIF_CAPTURE_NUM_CHANNELS];
 extern unsigned int g_video_display_nr[VPIF_DISPLAY_NUM_CHANNELS];
+extern unsigned int g_video_display_en[VPIF_DISPLAY_NUM_CHANNELS];
 extern unsigned int g_video_control_nr[1];
 
 /* Macros to read/write registers */

@@ -192,7 +192,7 @@ int scaler_initial(void __iomem *pci_base_addr)
     for (i = 0; i < SCALER_MAX_NUM; i++) {
 
         if(is_initialized[i] == 1) continue;
-        zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
+      //  zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
         //NOTE:The scaler 2 and scaler 3 is not workable for 1029 FPGA image.
         //if (i== 2 || i ==3) continue;
 
@@ -271,7 +271,7 @@ int scaler_initial(void __iomem *pci_base_addr)
         set_cached_registers(i, handles[i]. coef_mem_output, fpga_reg_read(handles[i].base , handles[i]. coef_mem_output));
 
         is_initialized[i] = 1;
-        zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
+        //zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
         //zynq_printk(1, "[zynq_scaler] Register base address for scaler %d : 0x%8lx \n", i,   (unsigned long)handles[i].base);
     }
 

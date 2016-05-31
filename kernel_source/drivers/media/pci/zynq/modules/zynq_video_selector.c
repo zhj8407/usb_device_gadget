@@ -22,6 +22,11 @@ typedef struct {
     u16 vout1_1_16_src;//0x0010
     u16 version;//0x0014
     u16 soft_reset;//0x0018
+    u16 frame_valid;//0x001c
+    u16 framerate_of_vin0;//0x0020
+    u16 framerate_of_vin1;//0x0024
+    u16 framerate_of_vin2;//0x0028
+    u16 frameraet_of_cpu;//0x002c
 } vselector_handle_t;
 
 static vselector_handle_t handle;
@@ -63,6 +68,63 @@ void vselector_get_status(vselector_status_t *st)
     st->is_started = is_started;
 }
 
+int vselector_get_frame_rate (EVSelectorVideoSrc src) {
+	
+	u32 frame_rate = 0;
+	u16 reg = (u16)-1;
+	switch (src) { 
+		case VSELECTOR_VIN0:
+			reg =  handle.framerate_of_vin0;
+			break;
+		case VSELECTOR_VIN1:
+			reg = handle.framerate_of_vin1;
+			break;
+		case VSELECTOR_VIN2:
+			reg = handle.framerate_of_vin2;
+			break;
+		case VSELECTOR_CPU:
+			reg = handle.frameraet_of_cpu;
+			break;
+		default:
+				return  0;
+	}
+	if (reg  !=  ((u16)-1)) {
+		frame_rate = fpga_reg_read(handle.base, reg);
+	}
+	
+	return frame_rate;
+}
+
+int vselector_frame_is_valid (EVSelectorVideoSrc src) {
+	
+	int is_valid = 0;
+	u32 mask = 0;
+	u32 value = 0;
+	
+	switch (src) { 
+		case VSELECTOR_VIN0:
+			mask = 0x1;
+			break;
+		case VSELECTOR_VIN1:
+			mask = 0x2;
+			break;
+		case VSELECTOR_VIN2:
+			mask = 0x4;
+			break;
+		case VSELECTOR_CPU:
+			mask = 0x8;
+			break;
+		default:
+				return  0;
+	}
+	
+	value =  fpga_reg_read(handle.base, handle.frame_valid);
+	
+	is_valid = (value & mask)?1:0;
+	
+	return is_valid;
+}
+
 int vselector_sw_reset(void) {
 	
 	u32 value = 0x00000001;
@@ -91,6 +153,11 @@ int vselector_initial(void __iomem *pci_base_addr)
     handle.vout1_1_16_src = 0x0010;
     handle.version = 0x0014;
 	handle.soft_reset = 0x0018;
+	handle.frame_valid = 0x001c;
+	handle.framerate_of_vin0 = 0x0020;
+	handle.framerate_of_vin1 = 0x0024;
+	handle.framerate_of_vin2 = 0x0028;
+	handle.frameraet_of_cpu = 0x002c;
     mutex_init(&lock);
 
     sw_reset();

@@ -16,7 +16,7 @@
 #include "zynq_malloc.h"
 
 extern unsigned int en_use_dev_mem_map;
-
+extern unsigned int en_non_cache_map;
 //static struct vm_area_struct  g_vma;
 
 ///////////////////////////////////////////////////////////////////////
@@ -242,6 +242,10 @@ static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma) {
 			}
 #endif	
   
+  if (en_non_cache_map) {
+	printk(KERN_INFO"[zynq_malloc] map  the vma pages as non cached!!\n");
+  	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+  }
   // invoke kernel function that sets up the page-table entries
   if ( remap_pfn_range( vma, 
 			user_virtaddr, 

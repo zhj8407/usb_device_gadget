@@ -2154,6 +2154,18 @@ struct v4l2_vout_osd {
 };
 #define VIDIOC_S_VOUT_OSD   _IOWR('V', 105, struct v4l2_vout_osd)
 
+typedef enum {
+	EUARTNORMALMODE = 0,
+	EUARTBYPASSMODE = 1,
+	EUARTUNKNOWNMODE =2
+} eUARTMODE;
+
+struct v4l2_uart_mode {
+	eUARTMODE mode_ee0;
+	eUARTMODE mode_ee1;
+} ;
+#define VIDIOC_S_UART_MODE   _IOWR('V', 106, struct v4l2_uart_mode)
+
 ///////////////////////////////////////////////////////////////////////////////////
 
 
