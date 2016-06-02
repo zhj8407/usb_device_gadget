@@ -106,6 +106,8 @@ extern "C"
 #define USB_HID_ReportType_Feature  0x03
 void lync_display_process_set_report(unsigned char *report, unsigned int length);
 
+int lync_display_get_mic_mute();
+
 #ifdef __cplusplus
 }
 #endif

@@ -12,6 +12,9 @@
 #include "hid_lync_display.h"
 
 #define DEBUG
+
+static int micMute = 0;
+
 static void usbhidStatus_hostSetLed(unsigned char status)
 {
 #ifdef DEBUG
@@ -26,6 +29,7 @@ static void usbhidStatus_hostSetIcon(unsigned char status1, unsigned char status
 #endif
 
     if ((status2 & USBHID_ICON_BIT_MUTE)) {
+        micMute = ((status2 & USBHID_ICON_BIT_MUTE) == USBHID_ICON_BIT_MUTE) ? 0 : 1;
         printf("Set Mic: %s\n",
                ((status2 & USBHID_ICON_BIT_MUTE) == USBHID_ICON_BIT_MUTE) ? "MUTE_NOTMUTE" : "MUTE_MUTED");
     }
@@ -223,3 +227,9 @@ void lync_display_process_set_report(unsigned char *pReport, unsigned int repLen
     printf("\n-lync_display_process_set_report: Done\n\n");
 #endif
 }
+
+int lync_display_get_mic_mute()
+{
+    return micMute;
+}
+
