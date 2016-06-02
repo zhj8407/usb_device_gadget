@@ -20,35 +20,6 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 
-// DFSI: Display Field Support Index
-#define USBHID_DFSI_LOCAL_NAME         1
-#define USBHID_DFSI_LOCAL_STATUS       2
-#define USBHID_DFSI_DATE               3
-#define USBHID_DFSI_TIME               4
-#define USBHID_DFSI_CALL_STATUS        5
-#define USBHID_DFSI_OTHER_NAME         6
-#define USBHID_DFSI_OTHER_TITIL        7
-#define USBHID_DFSI_SUBJECT            8
-#define USBHID_DFSI_DURATION           9
-#define USBHID_DFSI_NUMBER             10
-#define USBHID_DFSI_OTHER_NUMBER       11
-#define USBHID_DFSI_CONV_ID            12
-
-// based on usbhidDescriptor.txt
-#define USBHID_TEL_REPORT_ID           0x02
-#define USBHID_LED_REPORT_ID           0x03
-#define USBHID_VENDOR_EXT_REPORT_ID    0x11
-#define USBHID_DISP_ATTR_REPORT_ID     0x12
-#define USBHID_DISP_CTRL_REPORT_ID     0x13
-#define USBHID_CHAR_ATTR_REPORT_ID     0x14
-#define USBHID_CHAR_REPORT_ID          0x15
-#define USBHID_ICON_REPORT_ID          0x16
-
-#define USB_HID_ReportType_NULL     0x00
-#define USB_HID_ReportType_Input    0x01
-#define USB_HID_ReportType_Output   0x02
-#define USB_HID_ReportType_Feature  0x03
-
 /*-------------------------------------------------------------------------*/
 #define HID_REPORT_DESC_MAX_LENGTH	2048
 #define USB_STRING_MAX_LENGTH 126
@@ -304,9 +275,6 @@ static ssize_t f_hidg_ioctl(struct file *file, const char __user *buffer,
 			"copy_from_user error\n");
 		return -EINVAL;
 	}
-
-	printk("buf[0]=%d,buf[1]=%d\n",buf[0],buf[1]);
-
 	req->zero = 0;
 	req->length = count;
 	status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
@@ -472,8 +440,8 @@ static int hidg_setup(struct usb_function *f,
 	__u16 value, index, length;
 	unsigned char *buf = (unsigned char *)req->buf;
 	char **uevent_envp = NULL;
-	char *hidevent1[2]   = { "HID_EVENT1=HID_VENDOR_EXT", NULL };
-	char *hidevent2[2]   = { "HID_EVENT2=HID_DISP_ATTR", NULL };
+	char hidevent[32];
+	char *hid_uevent[2] = {hidevent, NULL};
 
 	value	= __le16_to_cpu(ctrl->wValue);
 	index	= __le16_to_cpu(ctrl->wIndex);
@@ -487,19 +455,9 @@ static int hidg_setup(struct usb_function *f,
 	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
 		  | HID_REQ_GET_REPORT):
 		length = min_t(unsigned, length, hidg->report_length);
-		/*TODO: we can send the whole get_report request to the app side to let the app check the content of the request. */
-		if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature &&
-			(value & 0xFF) == USBHID_VENDOR_EXT_REPORT_ID) {
-			VDBG(cdev, "USBHID_VENDOR_EXT_REPORT_ID, length: %d\n", length);
-			uevent_envp = hidevent1;
-		} else if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature &&
-			(value & 0xFF) == USBHID_DISP_ATTR_REPORT_ID) {
-			VDBG(cdev, "USBHID_DISP_ATTR_REPORT_ID, length: %d\n", length);
-			uevent_envp = hidevent2;
-		} else {
-			/* send an empty report */
-			memset(req->buf, 0x0, length);
-		}
+		memset(hidevent,0,sizeof(hidevent));
+		snprintf(hidevent, sizeof(hidevent), "HID_EVENT=%d",(value << 8 | length));
+		uevent_envp = hid_uevent;
 		if (uevent_envp) {
 			kobject_uevent_env(&hidg_config->dev->kobj, KOBJ_CHANGE, uevent_envp);
 		} else {

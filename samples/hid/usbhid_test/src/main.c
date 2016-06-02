@@ -343,6 +343,8 @@ int main(int argc, const char *argv[])
     char hid_cmd[8];
     int status = 0;
     udev = udev_new();
+    int value;
+    int length = 0;
 
     if (!udev) {
         printf("Can't create udev\n");
@@ -392,29 +394,37 @@ int main(int argc, const char *argv[])
 
                 properties = udev_device_get_properties_list_entry(dev);
                 udev_list_entry_foreach(props_list_entry, properties) {
-                    if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT1")) {
-                        if (!strcmp(udev_list_entry_get_value(props_list_entry), "HID_VENDOR_EXT")) {
+                    if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT")) {
+                        memset(hid_cmd, 0, sizeof(hid_cmd));
+                        value = atoi(udev_list_entry_get_value(props_list_entry));
+                        length = value & 0xFF;
+                        value = value >> 8;
+
+                        if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature &&
+                                (value & 0xFF) == USBHID_VENDOR_EXT_REPORT_ID) {
                             hid_cmd[0] = USBHID_VENDOR_EXT_REPORT_ID;
                             hid_cmd[1] = USBHID_VENDOR_EXT_REPORT_VENDOR_ID & 0xff;
                             hid_cmd[2] = (USBHID_VENDOR_EXT_REPORT_VENDOR_ID >> 8) & 0xff;
                             hid_cmd[3] = USBHID_VENDOR_EXT_REPORT_VERSION & 0xff;
                             hid_cmd[4] = (USBHID_VENDOR_EXT_REPORT_VERSION >> 8) & 0xff;
-
-                            status = ioctl(fd, &hid_cmd, 5);
-                            printf("\n HID uEVENT IS RECEIVED status=%d\n", status);
-                        }
-                    }
-
-                    if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT2")) {
-                        if (!strcmp(udev_list_entry_get_value(props_list_entry), "HID_DISP_ATTR")) {
+                        } else if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature
+                                   && (value & 0xFF) == USBHID_DISP_ATTR_REPORT_ID) {
                             hid_cmd[0] = USBHID_DISP_ATTR_REPORT_ID;
                             hid_cmd[1] = USBHID_DISP_ATTR_REPORT_ROWS;
                             hid_cmd[2] = USBHID_DISP_ATTR_REPORT_COLS;
                             hid_cmd[3] = USBHID_DISP_ATTR_REPORT_DFSI & 0xff;
                             hid_cmd[4] = (USBHID_DISP_ATTR_REPORT_DFSI >> 8) & 0xff;
-                            status = ioctl(fd, &hid_cmd, 5);
-                            printf("\n HID uEVENT IS RECEIVED status=%d\n", status);
+                        } else {
+                            printf("WARNING:The HID_EVENT is not processed yet!\n");
                         }
+
+                        status = ioctl(fd, &hid_cmd, length);
+
+                        if (status != 0) {
+                            printf("sent ioctl message failed! status=%d\n", status);
+                        }
+
+                        printf("HID uevent value=0x%x,length=%d, response status=%d\n", value, length, status);
                     }
                 }
                 udev_device_unref(dev);
