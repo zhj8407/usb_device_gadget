@@ -43,6 +43,10 @@
 
 unsigned int uvc_gadget_trace_param;
 
+#ifndef MAX_STRING_NAME_LENGTH
+#define MAX_STRING_NAME_LENGTH		64
+#endif
+
 struct webcam_config {
 	int	device;
 	struct device *dev;
@@ -54,16 +58,22 @@ struct webcam_config {
 	unsigned char bulkmode;
 	unsigned int bulksize;
 	unsigned int maxpayload;
+
+	char video_iad_string[MAX_STRING_NAME_LENGTH];
+	char video_control_string[MAX_STRING_NAME_LENGTH];
+	char video_stream_string[MAX_STRING_NAME_LENGTH];
 };
 
 static struct webcam_config *_webcam_config = NULL;
 
 /* string IDs are assigned dynamically */
 
-#define UVC_STRING_CONTROL_IDX			0
-#define UVC_STRING_STREAMING_IDX		1
+#define UVC_STRING_IAD_IDX				0
+#define UVC_STRING_CONTROL_IDX			1
+#define UVC_STRING_STREAMING_IDX		2
 
 static struct usb_string uvc_en_us_strings[] = {
+	[UVC_STRING_IAD_IDX].s = "UVC_Camera",
 	[UVC_STRING_CONTROL_IDX].s = "UVC Camera",
 	[UVC_STRING_STREAMING_IDX].s = "Video Streaming",
 	{  }
@@ -1245,16 +1255,29 @@ uvc_bind_config(struct usb_configuration *c,
 	uvc->desc.hs_streaming = hs_streaming;
 	uvc->desc.ss_streaming = ss_streaming;
 
+	/* Update the strings. */
+	if (_webcam_config) {
+		if (strlen(_webcam_config->video_iad_string) > 0)
+			uvc_en_us_strings[UVC_STRING_IAD_IDX].s =
+				_webcam_config->video_iad_string;
+		if (strlen(_webcam_config->video_control_string) > 0)
+			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].s =
+				_webcam_config->video_control_string;
+		if (strlen(_webcam_config->video_stream_string) > 0)
+			uvc_en_us_strings[UVC_STRING_STREAMING_IDX].s =
+				_webcam_config->video_stream_string;
+	}
 	/* String descriptors are global, we only need to allocate string IDs
 	 * for the first UVC function. UVC functions beyond the first (if any)
 	 * will reuse the same IDs.
 	 */
-	if (uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id == 0) {
+
+	if (uvc_en_us_strings[UVC_STRING_IAD_IDX].id == 0) {
 		ret = usb_string_ids_tab(c->cdev, uvc_en_us_strings);
 		if (ret)
 			goto error;
 		uvc_iad.iFunction =
-			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id;
+			uvc_en_us_strings[UVC_STRING_IAD_IDX].id;
 		uvc_control_intf.iInterface =
 			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id;
 		ret = uvc_en_us_strings[UVC_STRING_STREAMING_IDX].id;

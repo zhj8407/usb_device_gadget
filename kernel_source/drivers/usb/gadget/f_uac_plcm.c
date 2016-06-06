@@ -75,7 +75,9 @@ static char *uac_source_active[2]    = { "AUDIO_SOURCE_STATE=ACTIVE", NULL };
 static char *uac_source_deactive[2]   = { "AUDIO_SOURCE_STATE=DEACTIVE", NULL };
 static char *uac_suspend[2]	= { "AUDIO_SOURCE_STATE=SUSPEND", NULL };
 
+#ifndef MAX_STRING_NAME_LENGTH
 #define MAX_STRING_NAME_LENGTH		64
+#endif
 
 struct audio_dual_config {
 	int	card;
