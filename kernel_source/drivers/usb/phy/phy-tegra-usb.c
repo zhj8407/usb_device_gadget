@@ -254,7 +254,7 @@ static int tegra_usb_phy_get_clocks(struct tegra_usb_phy *phy)
 		err = PTR_ERR(phy->sys_clk);
 		goto fail_sclk;
 	}
-	clk_set_rate(phy->sys_clk, 80000000);
+	clk_set_rate(phy->sys_clk, 408000000);
 
 	phy->emc_clk = clk_get(&phy->pdev->dev, "emc");
 	if (IS_ERR(phy->emc_clk)) {
@@ -264,7 +264,7 @@ static int tegra_usb_phy_get_clocks(struct tegra_usb_phy *phy)
 	}
 
 	if(phy->pdata->has_hostpc)
-		clk_set_rate(phy->emc_clk, 12750000);
+		clk_set_rate(phy->emc_clk, 300000000);
 	else
 		clk_set_rate(phy->emc_clk, 300000000);
 
