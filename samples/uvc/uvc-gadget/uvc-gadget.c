@@ -23,6 +23,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -32,16 +34,21 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
-
+#include <math.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
-
+#include <time.h>
 #include <turbojpeg.h>
+#include <stdio.h>
 
 #include "uvc.h"
 
 #include "log_str.h"
+#include "scale.h"
+#include "visage_shared_mem.h"
+#include "plcm_usb_intf.h"
+
 #define clamp(val, min, max) ({                 \
         typeof(val) __val = (val);              \
         typeof(min) __min = (min);              \
@@ -95,6 +102,69 @@ struct uvc_device {
     unsigned int maxpayloadsize;
 };
 
+//==========for GStreamer usage=======//
+struct CommandBuffer {
+    unsigned int type;
+    int area_id;
+
+    union {
+        struct {
+            size_t size;
+            unsigned int path_size;
+            /* Followed by path */
+        } new_shm_area;
+        struct {
+            unsigned long offset;
+            unsigned long size;
+        } buffer;
+        struct {
+            unsigned long offset;
+        } ack_buffer;
+    } payload;
+};
+//========for GStreamer usage end=====//
+
+
+unsigned long jpeg_size = 0;
+unsigned long jpeg_offset = 0;
+
+
+#define P_COUNT 100
+
+fd_set fds;
+int main_socket = -1;
+int max_fd = -1;
+static int stream_on = 0;
+uint8_t * pSharedMem;
+int app2stack;
+char * fifo_in_name = "/tmp/to_usb_stack";
+int stack2app;
+char * fifo_out_name = "/tmp/from_usb_stack";
+
+pthread_mutex_t * shm_lock = NULL;
+
+
+inline long GetTimeInMicroSec()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    long ret = tv.tv_sec * 1000 * 1000 + tv.tv_usec;
+    return ret;
+}
+inline unsigned long GetTimeInMilliSec()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+inline unsigned long GetTimeInUSec()
+{
+    struct timespec tv;
+    clock_gettime(CLOCK_REALTIME, &tv);
+    return (tv.tv_sec * 1000 * 1000) + (tv.tv_nsec);
+}
+
+
 static int
 uvc_read_value_from_file(const char* filename,
                          const char* format,
@@ -132,7 +202,6 @@ uvc_read_value_from_file(const char* filename,
     close(fd);
     return 0;
 }
-
 
 static int
 uvc_video_init(struct uvc_device *dev)
@@ -221,252 +290,101 @@ uvc_open(const char *devname)
     return dev;
 }
 
-/*******************for camera capture begin*********/
-struct cam_buffer {
-    unsigned int size;
-    void *mem;
-};
-struct cam_buffer *buffers = NULL;
-int fd = -1;
-unsigned int nbufs = 10;
-unsigned char *pattern = NULL;
-unsigned int bSelectIO = 1;
-enum v4l2_buf_type buftype = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-//unsigned int pixelformat = V4L2_PIX_FMT_YUV420;
-unsigned int pixelformat = V4L2_PIX_FMT_NV12;
-
-//unsigned int pixelformat = V4L2_PIX_FMT_YUYV;
-enum v4l2_memory memtype = V4L2_MEMORY_MMAP ;
-unsigned int width = 1280; //640;
-unsigned int height = 720; //360;
-unsigned int bytesperline = 1280; //640;
-unsigned int imagesize = 1280 * 720; //640*360;
-#define VISAGE_CAM_DEV "/dev/video2"
-
-int video_queue_buffer(int index)
+static void
+uvc_close(struct uvc_device *dev)
 {
-    struct v4l2_buffer buf;
-    int ret = 0;
-    memset(&buf, 0, sizeof buf);
-    buf.index = index;
-    buf.type = buftype;
-    buf.memory = memtype;
-    buf.length = buffers[index].size;
-
-    if (buftype == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-        buf.bytesused = buf.length;
-
-        if (pattern != NULL) {
-            //if(bUseOptimizedMemcpy)
-            //  my_memcpy(buffers[buf.index].mem, pattern, buf.bytesused);
-            //else
-            memcpy(buffers[buf.index].mem, pattern, buf.bytesused);
-        } else {
-            memset(buffers[buf.index].mem, 0x0, buf.bytesused);
-        }
-    } else {
-        //memset(buffers[buf.index].mem, 0x55, buf.length);
-    }
-
-    ret = ioctl(fd, VIDIOC_QBUF, &buf);
-
-    if (ret < 0)
-        printf("Unable to queue buffer (%d).\n", errno);
-
-    return ret;
+    close(dev->fd);
+    free(dev->imgdata);
+    free(dev->mem);
+    free(dev);
 }
 
-int  video_dequeue_buffer(struct v4l2_buffer *buf)
-{
-    int ret = 0;
-    memset(buf, 0, sizeof(struct v4l2_buffer));
-    buf->type = buftype;
-    buf->memory = memtype;
-    ret = ioctl(fd, VIDIOC_DQBUF, buf);
-    return ret;
-}
+/********read one frame from shared memory *****/
 
-void video_int_capture(const char * devname)
-{
-    struct v4l2_capability cap;
-    memset(&cap, 0, sizeof(struct v4l2_capability));
+static uint32_t frame_count = 0;
+#define CAM_MAX_WIDTH 1920
+#define CAM_MAX_HEIGHT 1080
+#define CAM_DEF_WIDTH 1280
+#define CAM_DEF_HEIGHT 720
+unsigned int camera_width = CAM_DEF_WIDTH;
+unsigned int camera_height = CAM_DEF_HEIGHT;
+unsigned int frame_size = CAM_DEF_WIDTH * CAM_DEF_HEIGHT * 2;
+#define VBUF_LEN (CAM_MAX_WIDTH*CAM_MAX_HEIGHT*2)
+uint8_t vBuf[VBUF_LEN];
+#define MSG_2_APP "message to app"
+uint32_t shm_index = 0;
 
-    if (bSelectIO)
-        fd = open(devname, O_RDWR | O_NONBLOCK);
-    else
-        fd = open(devname, O_RDWR);
 
-    ioctl(fd, VIDIOC_QUERYCAP, &cap);
-
-    if (cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) {
-        buftype = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        printf("buf type is V4L2_BUF_TYPE_VIDEO_CAPTURE\n");
-    } else if (cap.capabilities & V4L2_CAP_VIDEO_OUTPUT) {
-        buftype = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-        printf("buf type is V4L2_BUF_TYPE_VIDEO_CAPTURE\n");
-    } else {
-        printf("unknown buf type:%u\n", cap.capabilities);
-    }
-
-#if 0
-
-    if (bDump && (buftype == V4L2_BUF_TYPE_VIDEO_CAPTURE))
-        fpDump = fopen(szDump, "wb");
-    else if (bDump && (buftype == V4L2_CAP_VIDEO_OUTPUT))
-        fpDump = fopen(szDump, "rb");
-
-#endif
-    return;
-}
-
-int  video_set_format(unsigned int width, unsigned int height)
-{
-    int ret = 0;
-    struct v4l2_format fmt;
-    memset(&fmt, 0, sizeof fmt);
-    fmt.type = buftype;
-    fmt.fmt.pix.width = width;
-    fmt.fmt.pix.height = height;
-    fmt.fmt.pix.pixelformat = pixelformat;
-    fmt.fmt.pix.field = V4L2_FIELD_NONE;
-    ret =  ioctl(fd, VIDIOC_S_FMT, &fmt);
-
-    if (ret < 0) {
-        printf("Unable to set format: %s (%d).\n", strerror(errno), errno);
-        return ret;
-    }
-
-    printf("Video format set: width: %u height: %u buffer size: %u\n",
-           fmt.fmt.pix.width, fmt.fmt.pix.height, fmt.fmt.pix.sizeimage);
-    return ret;
-}
-int video_get_format()
-{
-    struct v4l2_format fmt;
-    int ret;
-    memset(&fmt, 0, sizeof fmt);
-    fmt.type = buftype;
-    ret = ioctl(fd, VIDIOC_G_FMT, &fmt);
-
-    if (ret < 0) {
-        printf("Unable to get format: %s (%d).\n", strerror(errno),
-               errno);
-        return ret;
-    }
-
-    width = fmt.fmt.pix.width;
-    height = fmt.fmt.pix.height;
-    bytesperline = fmt.fmt.pix.bytesperline;
-    imagesize =  fmt.fmt.pix.sizeimage ;
-    printf("Video format: %c%c%c%c (%08x) , wxh - ->%ux%u, stride --> %u, imgesize--->%u\n",
-           (fmt.fmt.pix.pixelformat >> 0) & 0xff,
-           (fmt.fmt.pix.pixelformat >> 8) & 0xff,
-           (fmt.fmt.pix.pixelformat >> 16) & 0xff,
-           (fmt.fmt.pix.pixelformat >> 24) & 0xff,
-           fmt.fmt.pix.pixelformat,
-           fmt.fmt.pix.width, fmt.fmt.pix.height, bytesperline, imagesize);
-    return 0;
-}
-
-int video_prepare_capture()
-{
-    struct v4l2_requestbuffers rb;
-    struct v4l2_buffer buf;
-    int i  = 0;
-    int ret = 0;
-    memset(&rb, 0, sizeof rb);
-    rb.count = nbufs;
-    rb.type = buftype;
-    rb.memory = memtype;
-    ret = ioctl(fd, VIDIOC_REQBUFS, &rb);
-    buffers = malloc(rb.count * sizeof(struct cam_buffer));
-    memset(buffers, 0x0, rb.count * sizeof(struct cam_buffer));
-
-    for (i = 0; i < (int)rb.count; ++i) {
-        memset(&buf, 0, sizeof buf);
-        buf.index = i;
-        buf.type = buftype;
-        buf.memory = memtype;
-        ioctl(fd, VIDIOC_QUERYBUF, &buf);
-        printf("length: %u offset: %u\n", buf.length, buf.m.offset);
-        buffers[i].mem = mmap(0,  buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, buf.m.offset);
-
-        if (buffers[i].mem == MAP_FAILED) {
-            printf("Unable to map buffer %u (%d)\n", i, errno);
-            return ret;
-        }
-
-        buffers[i].size = buf.length;
-        printf("Buffer %u mapped at address %p size %u\n", i, buffers[i].mem, buffers[i].size);
-        memset(buffers[i].mem, 0x0, buffers[i].size);
-    }
-
-    nbufs = rb.count;
-
-    /*if (buftype == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-    ret = video_allocate_display_buffer(buffers[0].size);
-    if (ret < 0)
-       return ret;
-    }*/
-    for (i = 0; i < (int)nbufs; ++i) {
-        ret = video_queue_buffer(i);
-
-        if (ret  != 0) break;
-    }
-
-    return ret;
-}
-
-void video_enable(int enable)
-{
-    ioctl(fd, enable ? VIDIOC_STREAMON : VIDIOC_STREAMOFF, &buftype);
-    return;
-}
-
-int start_camera()
-{
-    int ret = 0;
-    video_int_capture(VISAGE_CAM_DEV);
-    ret = video_set_format(width, height);
-
-    if (ret != 0) {
-        printf("[start_camera]: set format failed: %d\n", ret);
-        return ret;
-    } else
-        printf("[start_camera]: set format success: %d\n", ret);
-
-    ret = video_get_format();
-
-    if (ret != 0) {
-        printf("[start_camera]: get format failed: %d\n", ret);
-        return ret;
-    } else
-        printf("[start_camera]: get format success: %d\n", ret);
-
-    ret = video_prepare_capture();
-
-    if (ret != 0) {
-        printf("[start_camera]: prepare capture failed: %d\n", ret);
-        return ret;
-    } else
-        printf("[start_camera]: prepare capture success: %d\n", ret);
-
-    video_enable(1);
-    return 0;
-}
-
-void stop_camera()
-{
-    video_enable(0);
-}
-static unsigned int count = 0;
 int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * readLen)
 {
+
+#if 1
+
+    if (bufferLen == 0) {
+        printf("[read_one_camera_frame]: bufferlen=0\n");
+        return -1;
+    }
+
+    //while(jpeg_size==0) {
+    //*readLen=0;
+    //printf("[read_one_camera_frame]: data not ready\n");
+    //return -2;
+    //usleep(1000);
+    //}
+
+    //memset(buffer, (frame_count*4)&0xff, bufferLen);
+    //printf("[read_one_camera_frame]:buffer=%p bufferlen=%u\n", buffer, bufferLen);
+    //*readLen=bufferLen;
+
+    /*uint8_t buf[1024];
+    memset(buf, 0, sizeof(buf));
+    sprintf(buf, "%s=%d\n", MSG_2_APP, frame_count++);
+    int retv=write(stack2app, buf, sizeof(buf));
+    printf("write data return %d, errno %d, %s\n", retv, errno, strerror(errno)); */
+
+    /*retv=read(app2stack, buf, sizeof(buf));
+    if (retv>0) {
+        printf("read back data return %d, errno %d, %s, buf=%s shared mem=%p\n", retv, errno, strerror(errno), buf, pSharedMem);
+        memcpy(buffer, pSharedMem, bufferLen);
+    }*/
+    //if (shm_index>=USB_SHM_MAX_NUM) {
+    //  shm_index=0;
+    //}
+
+    //uint32_t frame_size=camera_width*camera_height*3/2;
+    //printf("getting video frame [%u]\n", shm_index);
+    //pthread_mutex_lock(shm_lock);
+    //memcpy(buffer, pSharedMem+shm_index*frame_size, frame_size);
+    memcpy(buffer, pSharedMem + jpeg_offset, jpeg_size);
+    /*{
+        uint32_t i=0;
+        uint8_t* p=buffer;
+        for (i=0;i<frame_size-1;i++) {
+            if (p[i]==0xff) {
+                if (p[i+1]==0xD9)
+                    //printf("Found end of image: i=%u\n", i);
+                *readLen=i;
+            }
+        }
+        //printf("[%x][%x][%x][%x]\n", p[0],p[1],p[2],p[3]);
+    }*/
+    *readLen = jpeg_size;
+    jpeg_size = 0;
+    //printf("[read_one_camera_frame]: data is ready!!!!!!! len=%u, set jpeg_size =%lu\n", *readLen, jpeg_size);
+
+    //pthread_mutex_unlock(shm_lock);
+    //printf("getting video frame [%u] done\n", shm_index);
+    shm_index++;
+    return 0;
+#else
     struct v4l2_buffer buf;
     int ret = 0;
-    //while(count <30)
+    int op_ret = 0;
+    unsigned int count = 0;
+
+    //do
     {
-        ret = video_dequeue_buffer(&buf);
+        op_ret = video_dequeue_buffer(&buf);
 
         if (ret < 0) {
             if (errno == EAGAIN && bSelectIO) {
@@ -479,7 +397,7 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
 
             buf.type = buftype;
             buf.memory = memtype;
-            //sleep(1);
+            ret = -1;
         } else {
             if (buf.bytesused > bufferLen) {
                 printf("ERROR! buffer not enough: len=%u, need %u\n", bufferLen, buf.bytesused);
@@ -490,343 +408,138 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
                 *readLen = buf.bytesused;
             }
 
-            ret = video_queue_buffer(buf.index);
+            op_ret = video_queue_buffer(buf.index);
+
+            if (op_ret < 0) {
+                printf("Unable to queue buffer (%d) (%s).count=%u [%u]\n", errno, strerror(errno), count, buf.index);
+            }
+
+            count = 30;
         }
 
         count++;
-        //sleep(1);
-    }
+    }//while(count <30);
+    count = 0;
     return ret;
+#endif
 }
 
-void NV12toI420(char * inBuffer, unsigned int width, unsigned int height)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int img_size = width * height * 3 >> 1;
-    unsigned int index = 0;
-    char *tempBuf = malloc(width * height / 2);
-    unsigned int uvIndex = 0;
-
-    for (index = width * height; index < img_size; index += 2) {
-        tempBuf[uvIndex++] = inBuffer[index];
-    }
-
-    for (index = width * height + 1; index < img_size; index += 2) {
-        tempBuf[uvIndex++] = inBuffer[index];
-    }
-
-    memcpy(inBuffer + width * height, tempBuf, width * height / 2);
-    free(tempBuf);
-}
-void NV12toI420scale(char * inBuffer, unsigned int width, unsigned int height)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int buf_size = width * height * 3 / 2;
-    unsigned int img_size = width * height;
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    char *tempBuf = malloc(buf_size / 4);
-    unsigned int outIndex = 0;
-    unsigned int outImg_size = img_size / 4;
-    unsigned int outUIndex = outImg_size;
-    unsigned int outVIndex = outImg_size + outImg_size / 4;
-
-    for (hindex = 0; hindex < height; hindex += 2) {
-        for (windex = 0; windex < width; windex += 2) {
-            tempBuf[outIndex++] = inBuffer[hindex * width + windex];
-        }
-    }
-
-    //printf("NV12toI420scale: windex=%u, hindex=%u, outIndex=%u, buf_size=%u\n", windex, hindex, outIndex, buf_size);
-    for (hindex = 0; hindex < height; hindex += 4) {
-        for (windex = 0; windex < width; windex += 4) {
-            tempBuf[outUIndex++] = (inBuffer[img_size + hindex * width / 2 + windex] + inBuffer[img_size + hindex * width / 2 + windex + 2]) / 2;
-            tempBuf[outVIndex++] = (inBuffer[img_size + hindex * width / 2 + windex + 1] + inBuffer[img_size + hindex * width / 2 + windex + 3]) / 2;
-        }
-    }
-
-    //printf("NV12toI420scale:finish: windex=%u, hindex=%u, outUIndex=%u, outVIndex=%u\n", windex, hindex, outUIndex, outVIndex);
-    memcpy(inBuffer, tempBuf, buf_size / 4);
-    free(tempBuf);
-}
-
-void NV12toYUY2(char * inBuffer, unsigned int inWidth, unsigned int inHeight)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int img_size = inWidth * inHeight;
-    unsigned int out_img_size = img_size;
-    unsigned int out_buf_size = out_img_size * 2;
-    char *tempBuf = malloc(out_buf_size);
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    unsigned int outIndex = 0;
-    unsigned int uvIndex = img_size;
-
-    for (hindex = 0; hindex < inHeight; hindex++) {
-        if (hindex % 2 == 1) {
-            uvIndex -= inWidth;
-        }
-
-        for (windex = 0; windex < inWidth; windex++) {
-            //printf("NV12toI420scale:outIndex=%u, uvIndex=%u, hindex[%u] x inWidth[%u]+windex[%u]=%u\n", outIndex,  uvIndex, hindex, inWidth, windex, hindex*inWidth+windex);
-            tempBuf[outIndex] = inBuffer[hindex * inWidth + windex];
-            outIndex++;
-            tempBuf[outIndex] = inBuffer[uvIndex];
-            outIndex++;
-            uvIndex++;
-        }
-    }
-
-    //printf("NV12toYUY2:finish: uvIndex=%u, outIndex=%u, out_img_size=%u\n", uvIndex,  outIndex, out_img_size);
-    memcpy(inBuffer, tempBuf, out_buf_size);
-    free(tempBuf);
-}
-
-void NV12toYUY2scale(char * inBuffer, unsigned int inWidth, unsigned int inHeight)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int img_size = inWidth * inHeight;
-    unsigned int out_img_size = img_size / 4;
-    unsigned int out_buf_size = out_img_size * 2;
-    char *tempBuf = malloc(out_buf_size);
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    unsigned int outIndex = 0;
-    unsigned int uvIndex = img_size;
-
-    for (hindex = 0; hindex < inHeight; hindex += 2) {
-        for (windex = 0; windex < inWidth; windex += 2) {
-            //printf("NV12toI420scale:outIndex=%u, uvIndex=%u, hindex[%u] x inWidth[%u]+windex[%u]=%u\n", outIndex,  uvIndex, hindex, inWidth, windex, hindex*inWidth+windex);
-            tempBuf[outIndex] = inBuffer[hindex * inWidth + windex];
-            outIndex++;
-            tempBuf[outIndex] = inBuffer[uvIndex];
-            outIndex++;
-
-            if (windex % 4 == 0)
-                uvIndex++;
-            else
-                uvIndex += 3;
-        }
-    }
-
-    //printf("NV12toYUY2scale:finish: uvIndex=%u, outIndex=%u, out_img_size=%u\n", uvIndex,  outIndex, out_img_size);
-    memcpy(inBuffer, tempBuf, out_buf_size);
-    free(tempBuf);
-}
-
-/* convert a YUV set to a rgb set - thanks to MartinS and
-   http://www.efg2.com/lab/Graphics/Colors/YUV.htm */
-static void yuvtorgb(unsigned int Y, unsigned int U, unsigned int V, unsigned int *r_ptr, unsigned int *g_ptr, unsigned int *b_ptr)
-{
-    int r, g, b;
-    static short L1[256], L2[256], L3[256], L4[256], L5[256];
-    static int initialised = 0;
-
-    if (!initialised) {
-        int i;
-        initialised = 1;
-
-        for (i = 0; i < 256; i++) {
-            L1[i] = 1.164 * (i - 16);
-            L2[i] = 1.596 * (i - 128);
-            L3[i] = -0.813 * (i - 128);
-            L4[i] = 2.018 * (i - 128);
-            L5[i] = -0.391 * (i - 128);
-        }
-    }
-
-    r = L1[Y] + L2[V];
-    g = L1[Y] + L3[U] + L5[V];
-    b = L1[Y] + L4[U];
-
-    if (r < 0) r = 0;
-
-    if (g < 0) g = 0;
-
-    if (b < 0) b = 0;
-
-    if (r > 255) r = 255;
-
-    if (g > 255) g = 255;
-
-    if (b > 255) b = 255;
-
-    *r_ptr = r;
-    *g_ptr = g;
-    *b_ptr = b;
-
-    return;
-}
-
-static void get_rgb(unsigned char *src,
-                    unsigned int x,
-                    unsigned int  y,
-                    unsigned int width,
-                    unsigned int height,
-                    unsigned int *r_value,
-                    unsigned int *g_value,
-                    unsigned int *b_value,
-                    unsigned int format)
-{
-    unsigned int y_value = 0;
-    unsigned int u_value = 0;
-    unsigned int v_value = 0;
-    unsigned char *y_buffer = src;
-    unsigned char *uv_buffer = (unsigned char *)(src + (width * height));
-    unsigned int yOffset = y * width + x ;
-    unsigned int uvOffset = (y >> 1) * (width >> 1) + (x >> 1) ;
-    y_value = *(y_buffer +  yOffset);
-
-    //0:NV12, 1:YUV422 Planar
-    if (format == 0) {
-        u_value = *(uv_buffer + 2 * uvOffset);
-        v_value =  *(uv_buffer + 2 * uvOffset  + 1);
-    } else if (format == 1) {
-        //TODO:Support YUV422 Planar
-    }
-
-    yuvtorgb(y_value, u_value, v_value, r_value, g_value, b_value);
-
-    return ;
-}
-
-static int NV12toRGBA(unsigned char *yuv_buffer,
-                      unsigned int width, unsigned int height,
-                      unsigned char *rgb_buffer)
-{
-    unsigned int _width = width;
-    unsigned int _height = height;
-    unsigned int x = 0, y = 0;
-    unsigned int r_value = 0, g_value = 0, b_value = 0;
-    unsigned long location = 0;
-
-    if (!yuv_buffer || !rgb_buffer)
-        return -1;
-
-    for (y = 0; y < _height; y++) {
-        for (x = 0; x < _width; x++) {
-            /* Figure out where in memory to put the pixel */
-
-            location = (x) * (COLOR_COMPONENTS) + (y) * (_width * COLOR_COMPONENTS);
-
-            get_rgb(yuv_buffer, x, y, _width, _height, &r_value, &g_value, &b_value, 0);
-
-            *(rgb_buffer + location) = r_value; //Paint a black pixel.
-            *(rgb_buffer + location + 1) = g_value;
-            *(rgb_buffer + location + 2) = b_value;
-        }
-    }
-
-    return 0;
-}
-
-/*******************for camera capture end*********/
-
-static void
-uvc_close(struct uvc_device *dev)
-{
-    close(dev->fd);
-    free(dev->imgdata);
-    free(dev->mem);
-    free(dev);
-}
+/*******************read one frame from shared memory end*********/
 
 /* ---------------------------------------------------------------------------
  * Video streaming
  */
-#define LEN_720P_I420 (1280*720*3/2)
-#define LEN_720P_YUYV (1280*720*2)
-
-char vBuf[LEN_720P_YUYV];
+unsigned long capTime1 = 0;
+unsigned long capDelta = 0;
+unsigned long imgTime1 = 0;
+unsigned long imgDelta = 0;
 static void
 uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 {
     //unsigned int bpl;
     //unsigned int i;
     int ret;
-    unsigned int cam_read_len = 0;
-    unsigned int act_len = 0;
-    unsigned char *rgbraw;
-    long unsigned int jpegSize = 0;
-    tjhandle _jpegCompressor;
-    unsigned char *jpegBuffer = NULL;
+    //unsigned int cam_read_len = 0;
+    //unsigned int act_len = 0;
+    //unsigned char *rgbraw;
+    ///long unsigned int jpegSize = 0;
+    //tjhandle _jpegCompressor;
+    //unsigned char *jpegBuffer = NULL;
 
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
-            /* Fill the buffer with video data. */
-            /*bpl = dev->width * 2;
-            for (i = 0; i < dev->height; ++i)
-                memset(dev->mem[buf->index] + i * bpl, dev->color++, bpl);
-
-            buf->bytesused = bpl * dev->height;
-
-            break;*/
-            ret = read_one_camera_frame(vBuf, LEN_720P_I420, &cam_read_len);
+            //ret = read_one_camera_frame(vBuf, frame_size, &cam_read_len);
+            ret = read_one_camera_frame(dev->mem[buf->index], buf->length, &(buf->bytesused));
+#if 0
 
             if (ret == 0) {
-                if (dev->width == 1280) {
-                    NV12toYUY2(vBuf, dev->width, dev->height);
-                } else if (dev->width == 640) {
-                    NV12toYUY2scale(vBuf, 1280, 720);
+                act_len = (dev->width) * (dev->height) * 2;
+
+                if (dev->width == camera_width) {
+                    //NV12toYUY2(vBuf, dev->width, dev->height, dev->mem[buf->index], dev->width, dev->height);
+                } else {
+                    // NV12toYUY2scale(vBuf, camera_width, camera_height, (uint8_t*)(dev->mem[buf->index]), dev->width, dev->height);
                 }
 
-                act_len = (dev->width) * (dev->height) * 2;
-                memcpy(dev->mem[buf->index], vBuf, act_len);
+                memcpy((uint8_t*)(dev->mem[buf->index]), vBuf, frame_size);
                 buf->bytesused = act_len;
             } else {
+                //printf("fill_buffer[YUYV]: failed to get image from camera\n");
                 buf->bytesused = 0;
             }
 
-            //printf("sending data for YUY2: len=%u, ret=%u\n", buf->bytesused, ret);
+            if (frame_count % (30 * 100) == 0)
+                printf("sending data for YUYV: len=%u, ret=%u, %u x %u framecount=%u\n", buf->bytesused, ret, dev->width, dev->height, frame_count);
+
+            //frame_count++;
+#endif
             break;
 
         case V4L2_PIX_FMT_YUV420:
-            ret = read_one_camera_frame(vBuf, LEN_720P_I420, &cam_read_len);
+            //capTime1 = GetTimeInMicroSec();
+            ret = read_one_camera_frame(dev->mem[buf->index], buf->length, &(buf->bytesused));
+#if 0
+            ret = read_one_camera_frame(vBuf, frame_size, &cam_read_len);
+
+            //capDelta+=GetTimeInMicroSec()-capTime1;
+            //if (frame_count%P_COUNT==0) {
+            //  printf("capture %u frames take %lu ms\n", frame_count, capDelta/1000);
+            //  capDelta=0;
+            //}
+            //imgTime1=GetTimeInMicroSec();
 
             if (ret == 0) {
-                if (dev->width == 1280) {
-                    NV12toI420(vBuf, dev->width, dev->height);
-                } else if (dev->width == 640) {
-                    NV12toI420scale(vBuf, 1280, 720);
+                act_len = (dev->width) * (dev->height) * 3 / 2;
+
+                if (dev->width == camera_width) {
+                    NV12toI420(vBuf, dev->width, dev->height, dev->mem[buf->index], dev->width, dev->height);
+                    //NV12toI420NonCpy(dev->mem[buf->index], dev->width, dev->height, dev->width, dev->height);
+                } else {
+                    NV12toI420scale(vBuf, camera_width, camera_height, (uint8_t*)(dev->mem[buf->index]), dev->width, dev->height);
                 }
 
-                act_len = (dev->width) * (dev->height) * 3 / 2;
-                memcpy(dev->mem[buf->index], vBuf, act_len);
                 buf->bytesused = act_len;
             } else {
+                //printf("fill_bufferp[I420]: failed to get image from camera\n");
                 buf->bytesused = 0;
             }
 
-            //printf("sending data for YUV420: len=%u, ret=%u\n", buf->bytesused, ret);
+            //imgDelta+=GetTimeInMicroSec()-imgTime1;
+            //if (frame_count%P_COUNT==0) {
+            //  printf("imaging %u frames take %lu ms\n", frame_count, imgDelta/1000);
+            //  imgDelta=0;
+            //}
+
+            if (frame_count % (30 * 1000) == 0)
+                printf("sending data for YUV420: len=%u, ret=%u, %u x %u framecount=%u\n", buf->bytesused, ret, dev->width, dev->height, frame_count);
+
+            //ret=video_queue_buffer(v4l2_buf.index);
+            //if (ret < 0) {
+            //  printf("Unable to queue buffer (%d) (%s) [%u]\n", errno, strerror(errno), buf->index);
+            //}
+#endif
             break;
 
         case V4L2_PIX_FMT_NV12:
             ret = read_one_camera_frame(dev->mem[buf->index], buf->length, &(buf->bytesused));
+            /*ret = read_one_camera_frame(vBuf, frame_size, &cam_read_len);
+            NV12toI420(vBuf, dev->width, dev->height, dev->mem[buf->index], dev->width, dev->height);
+            buf->bytesused=(dev->width) * (dev->height) * 3 / 2;*/
 
             if (ret)
                 buf->bytesused = 0;
 
-            //printf("sending data for NV12: len=%u, ret=%u\n", buf->bytesused, ret);
+            if (frame_count % (30 * 100) == 0)
+                printf("sending data for NV12: len=%u, ret=%u\n", buf->bytesused, ret);
+
+            //frame_count++;
             break;
 
         case V4L2_PIX_FMT_MJPEG:
-            ret = read_one_camera_frame(vBuf, LEN_720P_I420, &cam_read_len);
+            ret = read_one_camera_frame(dev->mem[buf->index], buf->length, &(buf->bytesused));
+			//if (frame_count % (30 * 100) == 0)
+                printf("sending [%u]data for MJPEG: len=%u, ret=%u\n",frame_count, buf->bytesused, ret);
+#if 0
 
             if (ret != 0) {
                 buf->bytesused = 0;
@@ -841,7 +554,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 return;
             }
 
-            NV12toRGBA((unsigned char *)vBuf, dev->width, dev->height, rgbraw);
+            NV12toRGBA(vBuf, dev->width, dev->height, rgbraw);
 
             /* Start to compress */
             _jpegCompressor = tjInitCompress();
@@ -860,9 +573,19 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 
             tjFree(jpegBuffer);
 
+            if (frame_count % (30 * 100) == 0)
+                printf("sending data for MJPEG: len=%u, ret=%u, %u x %u\n", buf->bytesused, ret, dev->width, dev->height);
+
+            //frame_count++;
+#endif
             break;
     }
 }
+unsigned long frameTime1 = 0;
+unsigned long frameDelta = 0;
+unsigned long frameTime2 = 0;
+unsigned long frameDelta2 = 0;
+int framePrintFlag = 0;
 
 static int
 uvc_video_process(struct uvc_device *dev)
@@ -874,22 +597,23 @@ uvc_video_process(struct uvc_device *dev)
     buf.memory = V4L2_MEMORY_MMAP;
 
     if ((ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf)) < 0) {
-#if 0
-        printf("Unable to dequeue buffer: %s (%d).\n", strerror(errno),
-               errno);
-#endif
+        if (stream_on)
+          printf("frame[%u]Unable to dequeue buffer: %s (%d).\n",frame_count, strerror(errno), errno);
         return ret;
     }
+	else
+		printf("frame[%u] successfully Dequeue buffer %p\n", frame_count, &buf);
 
     uvc_video_fill_buffer(dev, &buf);
+    frame_count++;
 
     if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
-#if 0
-        printf("Unable to requeue buffer: %s (%d).\n", strerror(errno),
-               errno);
-#endif
+        if (stream_on)
+          printf("frame[%u]Unable to requeue buffer: %s (%d).\n",frame_count, strerror(errno), errno);
         return ret;
     }
+	else
+		printf("frame[%u] successfully Requeue buffer %p\n", frame_count, &buf);
 
     return 0;
 }
@@ -973,8 +697,25 @@ uvc_video_stream(struct uvc_device *dev, int enable)
         /* Set the led to red. */
         system("/usr/sbin/commanduC lightLed 1 1");
 #endif
+        frame_count = 0;
+        stream_on = 0;
+        ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
+        FD_CLR(main_socket, &fds);
+        close(main_socket);
+        main_socket = -1;
+        max_fd = dev->fd > app2stack ? dev->fd : app2stack;
+
+        if (ret < 0)
+            printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
+
         return 0;
     }
+
+    stream_on = 1;
+    ret = sendEvent2Fifo(stack2app, e_start_stream, dev->fcc, camera_width, camera_height);
+
+    if (ret < 0)
+        printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_start_stream), camera_width, camera_height, errno, strerror(errno));
 
     printf("Starting video stream.\n");
 
@@ -995,16 +736,18 @@ uvc_video_stream(struct uvc_device *dev, int enable)
 
     ioctl(dev->fd, VIDIOC_STREAMON, &type);
 #ifdef VISAGE_LED_NOTIFICATION
-        /* If the host selects the I420 30fp format, we
-         * will set the led to Green, Fast blink.
-         * Else set the led to Amber, Slow blink.
-         */
-        if (dev->fcc == V4L2_PIX_FMT_YUV420 &&
+
+    /* If the host selects the I420 30fp format, we
+     * will set the led to Green, Fast blink.
+     * Else set the led to Amber, Slow blink.
+     */
+    if (dev->fcc == V4L2_PIX_FMT_YUV420 &&
             dev->width == 1280 &&
             dev->height == 720)
-            system("/usr/sbin/commanduC lightLed 2 3");
-        else
-            system("/usr/sbin/commanduC lightLed 4 2");
+        system("/usr/sbin/commanduC lightLed 2 3");
+    else
+        system("/usr/sbin/commanduC lightLed 4 2");
+
 #endif
     return ret;
 }
@@ -1014,8 +757,8 @@ uvc_video_set_format(struct uvc_device *dev)
 {
     struct v4l2_format fmt;
     int ret;
-    printf("Setting format to 0x%08x[%s] %ux%u\n",
-           dev->fcc, getV4L2FormatStr(dev->fcc), dev->width, dev->height);
+    printf("Setting format to 0x%08x[%s] %ux%u [%s]\n",
+           dev->fcc, getV4L2FormatStr(dev->fcc), dev->width, dev->height, (char*)(&(dev->fcc)));
     memset(&fmt, 0, sizeof fmt);
     fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
     fmt.fmt.pix.width = dev->width;
@@ -1051,26 +794,34 @@ struct uvc_format_info {
 
 static const struct uvc_frame_info uvc_frames_yuyv[] = {
     {  640, 360, { 666666, 10000000, 50000000, 0 }, },
-    { 1280, 720, { 50000000, 0 }, },
+    { 1280, 720, { 10000000, 50000000, 0 }, },
     { 0, 0, { 0, }, },
 };
 
 static const struct uvc_frame_info uvc_frames_i420[] = {
     {  640, 360, { 333333, 666666, 10000000, 50000000, 0 }, },
-    { 1280, 720, { 333333, 666666, 10000000, 50000000, 0 }, },
+    { 1280, 720, { 10000000, 50000000, 0 }, },
     { 0, 0, { 0, }, },
 };
 
+static const struct uvc_frame_info uvc_frames_nv12[] = {
+    { 1280, 720, { 333333, 666666, 10000000, 50000000, 0 }, },
+    { 1920, 1080, { 10000000, 50000000, 0 }, },
+    { 0, 0, { 0, }, },
+};
+
+
 static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-    {  640, 360, { 666666, 10000000, 50000000, 0 }, },
-    { 1280, 720, { 50000000, 0 }, },
+    {  640, 360, { 333333, 666666, 50000000, 0 }, },
+    { 1280, 720, { 333333, 666666, 0 }, },
+    { 1920, 1080, { 333333, 666666, 50000000, 0 }, },
     { 0, 0, { 0, }, },
 };
 
 static const struct uvc_format_info uvc_formats[] = {
     { V4L2_PIX_FMT_YUYV, uvc_frames_yuyv },
     { V4L2_PIX_FMT_YUV420, uvc_frames_i420 },
-    //{ V4L2_PIX_FMT_NV12, uvc_frames_i420 },
+    //{ V4L2_PIX_FMT_NV12, uvc_frames_nv12 },
     { V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg },
 };
 
@@ -1222,6 +973,7 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
                              struct uvc_request_data *resp)
 {
     struct uvc_streaming_control *ctrl;
+    int ret = -1;
     printf("streaming request (req 0x%02x cs 0x%02x, ) %s\n", req, cs,  getVSIntfControlSelectorStr(cs));
 
     if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
@@ -1243,6 +995,11 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
                 memcpy(ctrl, &dev->probe, sizeof * ctrl);
             else
                 memcpy(ctrl, &dev->commit, sizeof * ctrl);
+
+            ret = sendEvent2Fifo(stack2app, e_get_format, dev->fcc, camera_width, camera_height);
+
+            if (ret < 0)
+                printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_get_format), camera_width, camera_height, errno, strerror(errno));
 
             break;
 
@@ -1404,6 +1161,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         dev->width = frame->width;
         dev->height = frame->height;
         uvc_video_set_format(dev);
+        printf("[COMMIT]: set format=%u, %ux%u\n", dev->fcc, dev->width, dev->height);
+        sendEvent2Fifo(stack2app, e_set_format, dev->fcc, dev->width, dev->height);
 
         if (dev->bulk) {
             /* In bulk mode, we can receive the set_alt
@@ -1519,7 +1278,7 @@ uvc_events_init(struct uvc_device *dev)
 }
 
 /* ---------------------------------------------------------------------------
- * main
+ * util
  */
 
 static void image_load(struct uvc_device *dev, const char *img)
@@ -1575,15 +1334,44 @@ void sig_handle(int sig)
     }
 }
 
+int connect_socket_block(const char * so_path)
+{
+    struct sockaddr_un sock_un;
+    int main_socket = socket(PF_UNIX, SOCK_STREAM, 0);
+
+    if (main_socket < 0) {
+        printf("open socket failed %d %s\n", errno, strerror(errno));
+    }
+
+    sock_un.sun_family = AF_UNIX;
+    strncpy(sock_un.sun_path, so_path, sizeof(sock_un.sun_path) - 1);
+
+    while (connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un)) < 0) {
+        //printf("connect socket failed %d %s\n", errno, strerror(errno));
+        usleep(1000);
+    }
+
+    printf("connect socket success!\n");
+    return main_socket;
+}
+
+void close_gst_socket(int gst_socket)
+{
+    if (gst_socket >= 0) {
+        close(gst_socket);
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
     struct uvc_device *dev;
     char *mjpeg_image = NULL;
-    fd_set fds;
+
     int ret, opt;
 
-    while ((opt = getopt(argc, argv, "d:hi:")) != -1) {
+    while ((opt = getopt(argc, argv, "d:hi:k:g:")) != -1) {
         switch (opt) {
             case 'd':
                 device = optarg;
@@ -1597,6 +1385,14 @@ int main(int argc, char *argv[])
                 mjpeg_image = optarg;
                 break;
 
+            case 'k':
+                camera_width = atoi(optarg);
+                break;
+
+            case 'g':
+                camera_height = atoi(optarg);
+                break;
+
             default:
                 fprintf(stderr, "Invalid option '-%c'\n", opt);
                 usage(argv[0]);
@@ -1604,6 +1400,21 @@ int main(int argc, char *argv[])
         }
     }
 
+    frame_size = camera_width * camera_height * 3 / 2;
+    printf("=========start with width=%u height=%u======\n", camera_width, camera_height);
+
+    /*****image processing init begin*****/
+    create_scaler_thread(ROW_NUM, COLUMN_NUM);
+    printf("=========scaler init done======\n");
+    /*****image processing init end *****/
+
+    /*****uvc device init begin*****/
+    dev = uvc_open(device);
+
+    if (dev == NULL)
+        return 1;
+
+    global_uvc = dev;
     /*
      * Setup the signal handler for SIGALRM. It is used
      * for the bulk transfer mode. Because in bulk mode,
@@ -1613,52 +1424,172 @@ int main(int argc, char *argv[])
      * transfer done event in 1 second. We will stop the
      * video and clean the buffer.
      */
-
     signal(SIGALRM, sig_handle);
-
-    /* load camera */
-    start_camera();
-    //read_camera();
-    //stop_camera();
-    //return 0;
-    /* load camera end */
-    dev = uvc_open(device);
-
-    if (dev == NULL)
-        return 1;
-
-    global_uvc = dev;
 
     image_load(dev, mjpeg_image);
     uvc_events_init(dev);
+    printf("=========uvc init done======\n");
+    /*****uvc device init end*****/
+
+    /*****inter process communication init*****/
+    //connect_socket_block("/tmp/mjpeg_socket");
+
+    //pSharedMem = allocSharedMem(USB_SHM_VIDEO_IN_BUFFER, camera_height*camera_width*3/2*USB_SHM_MAX_NUM);
+
+    /*************control pipe from/to app*********/
+    ret = mkfifo(fifo_in_name, 0666);
+
+    if (ret == -1) {
+        printf("mkfifo[%s]: %d %s\n", fifo_in_name, errno, strerror(errno));
+    }
+
+    //printf("=========fifo init 1======\n");
+    ret = mkfifo(fifo_out_name, 0666);
+
+    if (ret == -1) {
+        printf("mkfifo[%s]: %d %s\n", fifo_out_name, errno, strerror(errno));
+    }
+
+    //printf("=========fifo init 2======\n");
+    app2stack = open(fifo_in_name, O_RDWR | O_NONBLOCK);
+    //printf("=========fifo init 3======\n");
+    stack2app = open(fifo_out_name, O_RDWR | O_NONBLOCK);
+
+    if (app2stack == 0 || stack2app == 0) {
+        printf("open fifo file faiedl app2stack[%d], stack2app[%d]\n", app2stack, stack2app);
+    }
+
+    /*****inter process communication end *****/
+    //printf("=========fifo init done======\n");
+
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
+    FD_SET(app2stack, &fds);
+
+    max_fd = dev->fd > app2stack ? dev->fd : app2stack;
+    max_fd = max_fd > main_socket ? max_fd : main_socket;
+    //int maxfd = dev->fd;
+    //FD_SET(main_socket, &fds);
+    printf("=========stack shim init done======\n");
+    unsigned long getFrameTime = 0; //GetTimeInMilliSec();
+    unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
 
     while (1) {
         fd_set efds = fds;
         fd_set wfds = fds;
-        ret = select(dev->fd + 1, NULL, &wfds, &efds, NULL);
+        fd_set rfds = fds;
+        max_fd = max_fd > main_socket ? max_fd : main_socket;
+        ret = select(max_fd + 1, &rfds, &wfds, &efds, NULL);
 
         if (ret == -1) {
             if (errno != EINTR) {
-                printf("Error in select\n");
+                printf("Error in select : %u %s\n", errno, strerror(errno));
                 break;
             }
         } else {
-            if (FD_ISSET(dev->fd, &efds))
+            if (FD_ISSET(dev->fd, &efds)) {
                 uvc_events_process(dev);
+            }
 
             if (FD_ISSET(dev->fd, &wfds)) {
-                uvc_video_process(dev);
+                /*if (jpeg_size!=0 && stream_on) {
+                    printf("fetch one frame, jpeg_size=%lu\n", jpeg_size);
+                    uvc_video_process(dev);
+                }*/
                 if (dev->bulk) {
                     // Reset the alarm.
                     alarm(1);
+                }
+            }
+
+            if (FD_ISSET(app2stack, &rfds)) {
+                char buf[256];
+                memset(buf, 0, sizeof(buf));
+                int len = read(app2stack, buf, sizeof(buf));
+
+                if (len > 0) {
+                    struct plcm_uvc_event_msg_t *event = (struct plcm_uvc_event_msg_t*)(buf);
+
+                    if (event != NULL)
+                        printf("a message from app 2 stack: event=%u[%s], format=[%ux%u]\n", event->m_event, plcm_usb_video_event_str[event->m_event], event->m_format.m_width, event->m_format.m_height);
+                    else
+                        printf("a message from app 2 stack: wrong format!\n");
+
+                    if (event->m_event == e_app_ready) {
+                        sendEvent2Fifo(stack2app, e_stack_ready, dev->fcc, camera_width, camera_height);
+                    }
+
+                    if (event->m_event == e_stream_ready) {
+                        main_socket = connect_socket_block("/tmp/v_in_sock");
+                        FD_SET(main_socket, &fds);
+                    }
+                }
+            } else if (FD_ISSET(main_socket, &rfds)) {
+
+                struct CommandBuffer recvCB;
+                memset(&recvCB, 0, sizeof(struct CommandBuffer));
+                ret = recv(main_socket, &recvCB, sizeof(recvCB), MSG_DONTWAIT);
+
+                if (ret > 0) {
+                    if (recvCB.type == 1) {
+                        printf("receive shm cmd: new shm area id=%d\n", recvCB.area_id);
+                        char shmName[64];
+                        ret = recv(main_socket, shmName, 64, MSG_DONTWAIT);
+                        printf("path=%s\n", shmName);
+                        pSharedMem = allocSharedMem(shmName, recvCB.payload.new_shm_area.size);
+
+                        if (pSharedMem == NULL) {
+                            printf("Cannot alloc shared memory\n");
+                            return -1;
+                        }
+
+                        shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
+
+                        if (shm_lock == NULL) {
+                            printf("Cannot alloc shared memory mutex\n");
+                            return -1;
+                        }
+
+                        printf("=========share memory init done %p, size=%u======\n", pSharedMem, recvCB.payload.new_shm_area.size);
+                    } else if (recvCB.type == 3) {
+                        jpeg_size = recvCB.payload.buffer.size;
+                        jpeg_offset = recvCB.payload.buffer.offset;
+                        struct CommandBuffer cb;
+                        cb.type = 4;
+                        cb.area_id = recvCB.area_id;
+                        cb.payload.ack_buffer.offset = recvCB.payload.buffer.offset;
+
+                        if (getFrameTime == 0) {
+                            getFrameTime = GetTimeInMilliSec();
+                        }
+
+                        getNextFrameTime = GetTimeInMilliSec();
+                        //printf("one image size=%lu, offset=%lu, delta time=%lu\n", jpeg_size, jpeg_offset, getNextFrameTime-getFrameTime);
+                        getFrameTime = getNextFrameTime;
+                        ret = send(main_socket, &cb, sizeof(struct CommandBuffer), MSG_NOSIGNAL);
+
+                        if (ret == -1) {
+                            printf("send ACK[size=%u] to socket failed %d %s\n", sizeof(struct CommandBuffer), errno, strerror(errno));
+                        }
+
+                        uvc_video_process(dev);
+
+                        if (dev->bulk) {
+                            // Reset the alarm.
+                            //alarm(1);
+                        }
+
+                        //printf("done with one image\n");
+                    } else
+                        printf("Receive a cmd from gst ret[%d]: msg.type=%u areaid=%u\n",
+                               ret, recvCB.type, recvCB.area_id);
                 }
             }
         }
     }
 
     uvc_close(dev);
-    stop_camera();
+    freeSharedMem(USB_SHM_VIDEO_IN_BUFFER, pSharedMem, VBUF_LEN);
+    freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
     return 0;
 }

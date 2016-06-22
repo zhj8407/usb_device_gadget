@@ -43,6 +43,10 @@
 
 unsigned int uvc_gadget_trace_param;
 
+#ifndef MAX_STRING_NAME_LENGTH
+#define MAX_STRING_NAME_LENGTH		64
+#endif
+
 struct webcam_config {
 	int	device;
 	struct device *dev;
@@ -54,16 +58,23 @@ struct webcam_config {
 	unsigned char bulkmode;
 	unsigned int bulksize;
 	unsigned int maxpayload;
+	unsigned int usbreqnums;
+
+	char video_iad_string[MAX_STRING_NAME_LENGTH];
+	char video_control_string[MAX_STRING_NAME_LENGTH];
+	char video_stream_string[MAX_STRING_NAME_LENGTH];
 };
 
 static struct webcam_config *_webcam_config = NULL;
 
 /* string IDs are assigned dynamically */
 
-#define UVC_STRING_CONTROL_IDX			0
-#define UVC_STRING_STREAMING_IDX		1
+#define UVC_STRING_IAD_IDX				0
+#define UVC_STRING_CONTROL_IDX			1
+#define UVC_STRING_STREAMING_IDX		2
 
 static struct usb_string uvc_en_us_strings[] = {
+	[UVC_STRING_IAD_IDX].s = "UVC_Camera",
 	[UVC_STRING_CONTROL_IDX].s = "UVC Camera",
 	[UVC_STRING_STREAMING_IDX].s = "Video Streaming",
 	{  }
@@ -173,6 +184,7 @@ static const struct uvc_format_uncompressed uvc_format_yuv = {
 };
 
 DECLARE_UVC_FRAME_UNCOMPRESSED(1);
+DECLARE_UVC_FRAME_UNCOMPRESSED(2);
 DECLARE_UVC_FRAME_UNCOMPRESSED(3);
 
 static const struct UVC_FRAME_UNCOMPRESSED(3) uvc_frame_yuv_360p = {
@@ -247,11 +259,46 @@ static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_i420_360p = {
 	.dwFrameInterval[3]	= cpu_to_le32(5000000),
 };
 
-static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_i420_720p = {
-	.bLength		= UVC_DT_FRAME_UNCOMPRESSED_SIZE(4),
+static const struct UVC_FRAME_UNCOMPRESSED(2) uvc_frame_i420_720p = {
+	.bLength		= UVC_DT_FRAME_UNCOMPRESSED_SIZE(2),
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VS_FRAME_UNCOMPRESSED,
 	.bFrameIndex		= 2,
+	.bmCapabilities		= 0,
+	.wWidth			= cpu_to_le16(1280),
+	.wHeight		= cpu_to_le16(720),
+	.dwMinBitRate		= cpu_to_le32(29491200),
+	.dwMaxBitRate		= cpu_to_le32(29491200),
+	.dwMaxVideoFrameBufferSize	= cpu_to_le32(1382400),
+	.dwDefaultFrameInterval	= cpu_to_le32(5000000),
+	.bFrameIntervalType	= 2,
+	.dwFrameInterval[0] = cpu_to_le32(1000000),
+	.dwFrameInterval[1]	= cpu_to_le32(5000000),
+};
+
+/*for test only
+static const struct uvc_format_uncompressed uvc_format_nv12 = {
+	.bLength		= UVC_DT_FORMAT_UNCOMPRESSED_SIZE,
+	.bDescriptorType	= USB_DT_CS_INTERFACE,
+	.bDescriptorSubType	= UVC_VS_FORMAT_UNCOMPRESSED,
+	.bFormatIndex		= 3,
+	.bNumFrameDescriptors	= 2,
+	.guidFormat		=
+		{ 'N',  'V',  '1',  '2', 0x00, 0x00, 0x10, 0x00,
+		 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71},
+	.bBitsPerPixel		= 12,
+	.bDefaultFrameIndex	= 1,
+	.bAspectRatioX		= 0,
+	.bAspectRatioY		= 0,
+	.bmInterfaceFlags	= 1,
+	.bCopyProtect		= 0,
+};
+
+static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_nv12_720p = {
+	.bLength		= UVC_DT_FRAME_UNCOMPRESSED_SIZE(4),
+	.bDescriptorType	= USB_DT_CS_INTERFACE,
+	.bDescriptorSubType	= UVC_VS_FRAME_UNCOMPRESSED,
+	.bFrameIndex		= 1,
 	.bmCapabilities		= 0,
 	.wWidth			= cpu_to_le16(1280),
 	.wHeight		= cpu_to_le16(720),
@@ -266,12 +313,32 @@ static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_i420_720p = {
 	.dwFrameInterval[3]	= cpu_to_le32(5000000),
 };
 
+
+static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_nv12_1080p = {
+	.bLength		= UVC_DT_FRAME_UNCOMPRESSED_SIZE(4),
+	.bDescriptorType	= USB_DT_CS_INTERFACE,
+	.bDescriptorSubType	= UVC_VS_FRAME_UNCOMPRESSED,
+	.bFrameIndex		= 2,
+	.bmCapabilities		= 0,
+	.wWidth			= cpu_to_le16(1920),
+	.wHeight		= cpu_to_le16(1080),
+	.dwMinBitRate		= cpu_to_le32(29491200),
+	.dwMaxBitRate		= cpu_to_le32(55296000),
+	.dwMaxVideoFrameBufferSize	= cpu_to_le32(3110400),
+	.dwDefaultFrameInterval	= cpu_to_le32(333333),
+	.bFrameIntervalType	= 4,
+	.dwFrameInterval[0] = cpu_to_le32(333333),
+	.dwFrameInterval[1]	= cpu_to_le32(666666),
+	.dwFrameInterval[2]	= cpu_to_le32(1000000),
+	.dwFrameInterval[3]	= cpu_to_le32(5000000),
+};*/
+
 static const struct uvc_format_mjpeg uvc_format_mjpg = {
 	.bLength		= UVC_DT_FORMAT_MJPEG_SIZE,
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VS_FORMAT_MJPEG,
-	.bFormatIndex		= 3,
-	.bNumFrameDescriptors	= 2,
+	.bFormatIndex		= 4,
+	.bNumFrameDescriptors	= 3,
 	.bmFlags		= 0,
 	.bDefaultFrameIndex	= 1,
 	.bAspectRatioX		= 0,
@@ -280,7 +347,9 @@ static const struct uvc_format_mjpeg uvc_format_mjpg = {
 	.bCopyProtect		= 0,
 };
 
+
 DECLARE_UVC_FRAME_MJPEG(1);
+DECLARE_UVC_FRAME_MJPEG(2);
 DECLARE_UVC_FRAME_MJPEG(3);
 
 static const struct UVC_FRAME_MJPEG(3) uvc_frame_mjpg_360p = {
@@ -294,15 +363,15 @@ static const struct UVC_FRAME_MJPEG(3) uvc_frame_mjpg_360p = {
 	.dwMinBitRate		= cpu_to_le32(18432000),
 	.dwMaxBitRate		= cpu_to_le32(55296000),
 	.dwMaxVideoFrameBufferSize	= cpu_to_le32(460800),
-	.dwDefaultFrameInterval	= cpu_to_le32(666666),
+	.dwDefaultFrameInterval	= cpu_to_le32(333333),
 	.bFrameIntervalType	= 3,
-	.dwFrameInterval[0]	= cpu_to_le32(666666),
-	.dwFrameInterval[1]	= cpu_to_le32(1000000),
-	.dwFrameInterval[2]	= cpu_to_le32(5000000),
+	.dwFrameInterval[0]	= cpu_to_le32(333333),
+	.dwFrameInterval[1]	= cpu_to_le32(666666),
+	.dwFrameInterval[2]	= cpu_to_le32(1000000),
 };
 
-static const struct UVC_FRAME_MJPEG(1) uvc_frame_mjpg_720p = {
-	.bLength		= UVC_DT_FRAME_MJPEG_SIZE(1),
+static const struct UVC_FRAME_MJPEG(2) uvc_frame_mjpg_720p = {
+	.bLength		= UVC_DT_FRAME_MJPEG_SIZE(2),
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VS_FRAME_MJPEG,
 	.bFrameIndex		= 2,
@@ -312,10 +381,29 @@ static const struct UVC_FRAME_MJPEG(1) uvc_frame_mjpg_720p = {
 	.dwMinBitRate		= cpu_to_le32(29491200),
 	.dwMaxBitRate		= cpu_to_le32(29491200),
 	.dwMaxVideoFrameBufferSize	= cpu_to_le32(1843200),
-	.dwDefaultFrameInterval	= cpu_to_le32(5000000),
-	.bFrameIntervalType	= 1,
-	.dwFrameInterval[0]	= cpu_to_le32(5000000),
+	.dwDefaultFrameInterval	= cpu_to_le32(333333),
+	.bFrameIntervalType	= 2,
+	.dwFrameInterval[0]	= cpu_to_le32(333333),
+	.dwFrameInterval[1]	= cpu_to_le32(666666),
 };
+
+static const struct UVC_FRAME_MJPEG(2) uvc_frame_mjpg_1080p = {
+	.bLength		= UVC_DT_FRAME_MJPEG_SIZE(2),
+	.bDescriptorType	= USB_DT_CS_INTERFACE,
+	.bDescriptorSubType	= UVC_VS_FRAME_MJPEG,
+	.bFrameIndex		= 2,
+	.bmCapabilities		= 0,
+	.wWidth			= cpu_to_le16(1920),
+	.wHeight		= cpu_to_le16(1080),
+	.dwMinBitRate		= cpu_to_le32(29491200),
+	.dwMaxBitRate		= cpu_to_le32(29491200),
+	.dwMaxVideoFrameBufferSize	= cpu_to_le32(1843200),
+	.dwDefaultFrameInterval	= cpu_to_le32(333333),
+	.bFrameIntervalType	= 2,
+	.dwFrameInterval[0]	= cpu_to_le32(333333),
+	.dwFrameInterval[1]	= cpu_to_le32(666666),
+};
+
 
 static const struct uvc_color_matching_descriptor uvc_color_matching = {
 	.bLength		= UVC_DT_COLOR_MATCHING_SIZE,
@@ -353,6 +441,7 @@ static const struct uvc_descriptor_header * const uvc_fs_streaming_cls[] = {
 	(const struct uvc_descriptor_header *) &uvc_format_mjpg,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_360p,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_720p,
+	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_1080p,
 	(const struct uvc_descriptor_header *) &uvc_color_matching,
 	NULL,
 };
@@ -368,6 +457,7 @@ static const struct uvc_descriptor_header * const uvc_hs_streaming_cls[] = {
 	(const struct uvc_descriptor_header *) &uvc_format_mjpg,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_360p,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_720p,
+	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_1080p,
 	(const struct uvc_descriptor_header *) &uvc_color_matching,
 	NULL,
 };
@@ -383,6 +473,7 @@ static const struct uvc_descriptor_header * const uvc_ss_streaming_cls[] = {
 	(const struct uvc_descriptor_header *) &uvc_format_mjpg,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_360p,
 	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_720p,
+	(const struct uvc_descriptor_header *) &uvc_frame_mjpg_1080p,
 	(const struct uvc_descriptor_header *) &uvc_color_matching,
 	NULL,
 };
@@ -999,6 +1090,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	unsigned char bulkmode = 0;
 	unsigned int bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	unsigned int maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
+	unsigned int usbreqnums = UVC_MAX_REQUEST_SIZE;
 
 	INFO(cdev, "uvc_function_bind\n");
 
@@ -1012,6 +1104,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		bulkmode = _webcam_config->bulkmode;
 		bulksize = _webcam_config->bulksize;
 		maxpayload = _webcam_config->maxpayload;
+		usbreqnums = _webcam_config->usbreqnums;
 	}
 
 	/* Fill in the FS/HS/SS Video Streaming specific descriptors from the
@@ -1150,7 +1243,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 
 	/* Initialise video. */
 	ret = uvc_video_init(&uvc->video, bulkmode, bulksize,
-			headersize, maxpayload);
+			headersize, maxpayload, usbreqnums);
 	if (ret < 0)
 		goto error;
 
@@ -1245,16 +1338,29 @@ uvc_bind_config(struct usb_configuration *c,
 	uvc->desc.hs_streaming = hs_streaming;
 	uvc->desc.ss_streaming = ss_streaming;
 
+	/* Update the strings. */
+	if (_webcam_config) {
+		if (strlen(_webcam_config->video_iad_string) > 0)
+			uvc_en_us_strings[UVC_STRING_IAD_IDX].s =
+				_webcam_config->video_iad_string;
+		if (strlen(_webcam_config->video_control_string) > 0)
+			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].s =
+				_webcam_config->video_control_string;
+		if (strlen(_webcam_config->video_stream_string) > 0)
+			uvc_en_us_strings[UVC_STRING_STREAMING_IDX].s =
+				_webcam_config->video_stream_string;
+	}
 	/* String descriptors are global, we only need to allocate string IDs
 	 * for the first UVC function. UVC functions beyond the first (if any)
 	 * will reuse the same IDs.
 	 */
-	if (uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id == 0) {
+
+	if (uvc_en_us_strings[UVC_STRING_IAD_IDX].id == 0) {
 		ret = usb_string_ids_tab(c->cdev, uvc_en_us_strings);
 		if (ret)
 			goto error;
 		uvc_iad.iFunction =
-			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id;
+			uvc_en_us_strings[UVC_STRING_IAD_IDX].id;
 		uvc_control_intf.iInterface =
 			uvc_en_us_strings[UVC_STRING_CONTROL_IDX].id;
 		ret = uvc_en_us_strings[UVC_STRING_STREAMING_IDX].id;

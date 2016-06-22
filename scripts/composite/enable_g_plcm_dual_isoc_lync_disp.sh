@@ -28,36 +28,45 @@ echo 0 > /sys/class/plcm_usb/plcm0/enable
 
 echo "Set the device descriptors"
 echo 095d > /sys/class/plcm_usb/plcm0/idVendor
-echo 9132 > /sys/class/plcm_usb/plcm0/idProduct
+echo 91A2 > /sys/class/plcm_usb/plcm0/idProduct
 echo 0310 > /sys/class/plcm_usb/plcm0/bcdDevice
 echo 239  > /sys/class/plcm_usb/plcm0/bDeviceClass
 echo 2    > /sys/class/plcm_usb/plcm0/bDeviceSubClass
 echo 1    > /sys/class/plcm_usb/plcm0/bDeviceProtocol
 echo "Polycom, Inc." > /sys/class/plcm_usb/plcm0/iManufacturer
-echo "CX5552" > /sys/class/plcm_usb/plcm0/iProduct
+echo "CX5559" > /sys/class/plcm_usb/plcm0/iProduct
 echo "BCD12345678" > /sys/class/plcm_usb/plcm0/iSerial
 
 echo "Set Audio Interface String"
-echo "Polycom CX5552 Audio" > /sys/class/plcm_usb/plcm0/f_audio_dual/iad_string
-echo "Polycom CX5552 Audio Control" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_control_string
-echo "Polycom CX5552 Speaker" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_out_stream_string
-echo "Polycom CX5552 Micphone" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_in_stream_string
+echo "Polycom CX5559 Audio" > /sys/class/plcm_usb/plcm0/f_audio_dual/iad_string
+echo "Polycom CX5559 Audio Control" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_control_string
+echo "Polycom CX5559 Speaker" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_out_stream_string
+echo "Polycom CX5559 Microphone" > /sys/class/plcm_usb/plcm0/f_audio_dual/audio_in_stream_string
 
 echo "Set Hid report"
 echo "0" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceSubClass
 echo "0" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_bInterfaceProtocol
-echo "2" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_length
+echo "18" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_length
 
 echo "Set Lync UCQ String"
-echo "UCQ01001000001000" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_ucq_string
+echo "UCQ11001000001000" > /sys/class/plcm_usb/plcm0/f_hidg/hidg_ucq_string
 
 if [ -f '/root/py_parse_hid_report.py' ] && [ -f '/root/lyncTelHidDescriptor.txt' ]; then
-	/usr/bin/python3 /root/py_parse_hid_report.py /root/lyncTelHidDescriptor.txt /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_desc
+	/usr/bin/python3 /root/py_parse_hid_report.py /root/lyncDispHidDescriptor.txt /sys/class/plcm_usb/plcm0/f_hidg/hidg_report_desc
 fi
 
 echo "Set Webcam config"
-#echo "2048" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket
-#echo "15" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize
+echo "3072" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket
+echo "40" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize
+#echo "1" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode
+#echo "100000" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpayload
+#echo "16384" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_bulksize
+#echo "2" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_usbreqnums
+
+echo "Set Video Interface String"
+echo "Polycom CX5559 Video" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_iad_string
+echo "Polycom CX5559 Video Control" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_control_string
+echo "Polycom CX5559 Video Stream" > /sys/class/plcm_usb/plcm0/f_webcam/webcam_stream_string
 
 echo "Set function lists"
 #echo "webcam,audio_source,hidg" > /sys/class/plcm_usb/plcm0/functions

@@ -1,14 +1,28 @@
-#include <pthread.h>
-#include <string.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <pthread.h>
+#include <ctype.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define BUF_LEN 512
+
+#define MYPORT 1234
+
+#define BACKLOG 5
+
+#define BUF_SIZE 200
+
+#define GET_MIC_MUTE_CMD "--GetMicMute"
+
+int fd_A[BACKLOG];
+int conn_amount;
 
 struct options {
     const char    *opt;
@@ -231,22 +245,22 @@ int lync_hid_fill_report(char report[8], char buf[BUF_LEN], int *hold)
     if (!tok)
         return 2;
 
-    if (strcmp(tok, "--quit") == 0)
+    if (strncmp(tok, "--quit", 6) == 0)
         return -1;
-    else if (strcmp(tok, "--hold") == 0) {
+    else if (strncmp(tok, "--hold", 6) == 0) {
         *hold = 1;
         return 2;
     }
 
     for (i = 0; lval[i].opt != NULL; i++) {
-        if (strcmp(tok, lval[i].opt) == 0) {
+        if (strncmp(tok, lval[i].opt, strlen(lval[i].opt)) == 0) {
             report[0] = lval[i].val;
             report[1] = lval[i].val2;
-            break;
+            return 2;
         }
     }
 
-    return 2;
+    return 0;
 }
 
 void print_options(char c)
@@ -254,37 +268,37 @@ void print_options(char c)
     int i = 0;
 
     if (c == 'k') {
-        printf("	keyboard options:\n"
-               "		--hold\n");
+        printf("    keyboard options:\n"
+               "        --hold\n");
 
         for (i = 0; kmod[i].opt != NULL; i++)
             printf("\t\t%s\n", kmod[i].opt);
 
-        printf("\n	keyboard values:\n"
-               "		[a-z] or\n");
+        printf("\n  keyboard values:\n"
+               "        [a-z] or\n");
 
         for (i = 0; kval[i].opt != NULL; i++)
             printf("\t\t%-8s%s", kval[i].opt, i % 2 ? "\n" : "");
 
         printf("\n");
     } else if (c == 'm') {
-        printf("	mouse options:\n"
-               "		--hold\n");
+        printf("    mouse options:\n"
+               "        --hold\n");
 
         for (i = 0; mmod[i].opt != NULL; i++)
             printf("\t\t%s\n", mmod[i].opt);
 
-        printf("\n	mouse values:\n"
-               "		Two signed numbers\n"
+        printf("\n  mouse values:\n"
+               "        Two signed numbers\n"
                "--quit to close\n");
     } else if (c == 'j') {
-        printf("	joystick options:\n");
+        printf("    joystick options:\n");
 
         for (i = 0; jmod[i].opt != NULL; i++)
             printf("\t\t%s\n", jmod[i].opt);
 
-        printf("\n	joystick values:\n"
-               "		three signed numbers\n"
+        printf("\n  joystick values:\n"
+               "        three signed numbers\n"
                "--quit to close\n");
     } else if (c == 'l') {
         printf("    lynchid options:\n");
@@ -298,6 +312,76 @@ void print_options(char c)
     }
 }
 
+#ifndef TIPS_LENGTH
+#define TIPS_LENGTH 1024
+#endif
+
+char *generate_help_tips(char c)
+{
+    char *tips = NULL;
+    int i;
+
+    if (c != 'l')
+        return NULL;
+
+    tips = (char *)malloc(TIPS_LENGTH);
+
+    if (!tips) {
+        perror("tips buffer malloc");
+        return NULL;
+    }
+
+    strncpy(tips, "    lynchid options:\n", TIPS_LENGTH);
+
+    for (i = 0; lval[i].opt != NULL; i++) {
+        strncat(tips, "\t\t", TIPS_LENGTH);
+        strncat(tips, lval[i].opt, TIPS_LENGTH);
+        strncat(tips, "\n", TIPS_LENGTH);
+    }
+
+    strncat(tips, "\n  lynchid commands:\n"
+               "        two unsigned numbers\n"
+               "--quit to close\n>", TIPS_LENGTH);
+
+    return tips;
+}
+
+int create_socket(int port)
+{
+    int socket_fd;
+    struct sockaddr_in server_addr;
+    int yes = 1;
+
+    if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("Error while create the socket\n");
+        return -1;
+    }
+
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("Error while set socket opt\n");
+        return -2;
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    memset(server_addr.sin_zero, 0, sizeof(server_addr.sin_zero));
+
+    if (bind(socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+        perror("Error while bind the socket\n");
+        return -3;
+    }
+
+    if (listen(socket_fd, BACKLOG) == -1) {
+        perror("Error while listen\n");
+        return -4;
+    }
+
+    printf("Listening the port: %d\n", MYPORT);
+
+    return socket_fd;
+}
+
 int main(int argc, const char *argv[])
 {
     const char *filename = NULL;
@@ -307,11 +391,17 @@ int main(int argc, const char *argv[])
     char report[8];
     int to_send = 8;
     int hold = 0;
+    int socket_fd, new_fd;
+    struct sockaddr_in client_addr;
+    socklen_t sin_size;
+    char socket_buf[BUF_SIZE];
+    int maxfd = 0;
     fd_set rfds;
+    int daemon = 0;
     int retval, i;
 
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s devname mouse|keyboard|joystick|lynchid\n",
+        fprintf(stderr, "Usage: %s devname mouse|keyboard|joystick|lynchid daemon\n",
                 argv[0]);
         return 1;
     }
@@ -326,20 +416,45 @@ int main(int argc, const char *argv[])
         return 3;
     }
 
+    if ((socket_fd = create_socket(MYPORT)) <= 0) {
+        perror("Error in create_socket\n");
+        return 4;
+    }
+
+    if (argc >= 4 && strncmp("daemon", argv[3], 6) == 0) {
+        daemon = 1;
+    }
+
     print_options(argv[2][0]);
+
+    conn_amount = 0;
+    sin_size = sizeof(client_addr);
+    maxfd = socket_fd > fd ? socket_fd : fd;
+    memset(fd_A, -1, BACKLOG * sizeof(int));
 
     while (42) {
         FD_ZERO(&rfds);
-        FD_SET(STDIN_FILENO, &rfds);
+        if (!daemon)
+            FD_SET(STDIN_FILENO, &rfds);
         FD_SET(fd, &rfds);
-        retval = select(fd + 1, &rfds, NULL, NULL, NULL);
+        FD_SET(socket_fd, &rfds);
+
+        for (i = 0; i < BACKLOG; i++) {
+            if (fd_A[i] != -1) {
+                FD_SET(fd_A[i], &rfds);
+                if (fd_A[i] > maxfd)
+                    maxfd = fd_A[i];
+            }
+        }
+
+        retval = select(maxfd + 1, &rfds, NULL, NULL, NULL);
 
         if (retval == -1 && errno == EINTR)
             continue;
 
         if (retval < 0) {
             perror("select()");
-            return 4;
+            return 5;
         }
 
         if (FD_ISSET(fd, &rfds)) {
@@ -352,7 +467,7 @@ int main(int argc, const char *argv[])
             printf("\n");
         }
 
-        if (FD_ISSET(STDIN_FILENO, &rfds)) {
+        if (!daemon && FD_ISSET(STDIN_FILENO, &rfds)) {
             memset(report, 0x0, sizeof(report));
             cmd_len = read(STDIN_FILENO, buf, BUF_LEN - 1);
 
@@ -373,11 +488,11 @@ int main(int argc, const char *argv[])
                 to_send = lync_hid_fill_report(report, buf, &hold);
 
             if (to_send == -1)
-                break;
+                continue;
 
             if (write(fd, report, to_send) != to_send) {
                 perror(filename);
-                return 5;
+                return 6;
             }
 
             if (!hold) {
@@ -385,12 +500,113 @@ int main(int argc, const char *argv[])
 
                 if (write(fd, report, to_send) != to_send) {
                     perror(filename);
-                    return 6;
+                    return 7;
                 }
+            }
+        }
+
+        for (i = 0; i < BACKLOG; i++) {
+            if (FD_ISSET(fd_A[i], &rfds)) {
+                retval = recv(fd_A[i], socket_buf, sizeof(socket_buf), 0);
+                if (retval <= 0) {
+                    printf("client[%d] close\n", i);
+                    close(fd_A[i]);
+                    FD_CLR(fd_A[i], &rfds);
+                    fd_A[i] = -1;
+                    conn_amount--;
+                } else {
+                    if (retval < BUF_SIZE)
+                        memset(&socket_buf[retval], 0, 1);
+                    printf("client[%d] send: %s\n", i, socket_buf);
+                    hold = 0;
+                    to_send = -1;
+                    memset(report, 0x0, sizeof(report));
+
+                    if (strncmp(GET_MIC_MUTE_CMD, socket_buf,
+                            strlen(GET_MIC_MUTE_CMD)) == 0) {
+                        if (lync_display_get_mic_mute())
+                            send(fd_A[i], "Mute\n>", 6, 0);
+                        else
+                            send(fd_A[i], "Not Mute\n>", 10, 0);
+                        break;
+                    }
+
+                    if (argv[2][0] == 'l')
+                        to_send = lync_hid_fill_report(report, socket_buf, &hold);
+
+                    if (to_send == 2) {
+                        if (write(fd, report, to_send) != to_send) {
+                            perror(filename);
+                            send(fd_A[i], "FAIL\n>", 6, 0);
+                            return 6;
+                        }
+
+                        if (!hold) {
+                            memset(report + 1, 0x0, sizeof(report) - 1);
+
+                            if (write(fd, report, to_send) != to_send) {
+                                perror(filename);
+                                send(fd_A[i], "FAIL\n>", 6, 0);
+                                return 7;
+                            }
+                        }
+
+                        send(fd_A[i], "OK\n>", 4, 0);
+                        break;
+                    } else if (to_send == -1) {
+                        //Quit
+                        send(fd_A[i], "Bye!\n", 5, 0);
+                        close(fd_A[i]);
+                        FD_CLR(fd_A[i], &rfds);
+                        fd_A[i] = -1;
+                        conn_amount--;
+                        break;
+                    }
+
+                    send(fd_A[i], "Unkown Command\n>", 16, 0);
+                }
+            }
+        }
+
+        if (FD_ISSET(socket_fd, &rfds)) {
+            new_fd = accept(socket_fd, (struct sockaddr *)&client_addr, &sin_size);
+            if (new_fd < 0) {
+                perror("Error while receiving the new client\n");
+                continue;
+            }
+
+            if (conn_amount < BACKLOG) {
+                //Find the proper place to store the new_fd
+                for (i = 0; i < BACKLOG; i++) {
+                    if (fd_A[i] == -1) {
+                        fd_A[i] = new_fd;
+                        break;
+                    }
+                }
+                conn_amount++;
+                printf("new connection client[%d] %s:%d\n", i,
+                    inet_ntoa(client_addr.sin_addr),
+                    ntohs(client_addr.sin_port));
+                char *tips = generate_help_tips('l');
+                if (tips) {
+                    send(new_fd, tips, strnlen(tips, TIPS_LENGTH), 0);
+                    free(tips);
+                }
+            } else {
+                printf("max connection arrives, exit\n");
+                send(new_fd, "bye", 4, 0);
+                close(new_fd);
             }
         }
     }
 
+    //close other connections
+    for (i = 0; i < BACKLOG; i++) {
+        if (fd_A[i] != -1)
+            close(fd_A[i]);
+    }
+
+    close(socket_fd);
     close(fd);
     return 0;
 }

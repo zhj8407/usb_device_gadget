@@ -887,6 +887,7 @@ webcam_function_init(struct plcm_usb_function *f,
 	config->bulkmode = 0;
 	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
+	config->usbreqnums = UVC_MAX_NUM_REQUESTS;
 
 	f->config = config;
 
@@ -922,6 +923,7 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 	config->bulkmode = 0;
 	config->bulksize = UVC_DEFAULT_BULK_REQ_BUFFER_SIZE;
 	config->maxpayload = UVC_DEFAULT_MAX_PAYLOAD_SIZE;
+	config->usbreqnums = UVC_MAX_NUM_REQUESTS;
 
 	webcam_config_unbind(c);
 }
@@ -967,13 +969,44 @@ static DEVICE_ATTR(webcam_ ## field,	\
 	webcam_ ## field ## _store		\
 	);
 
+#define WEBCAM_CONFIG_STRING_ATTR(field)			\
+static ssize_t										\
+webcam_ ## field ## _string_show(struct device *dev, struct device_attribute *attr,	\
+		char *buf)									\
+{													\
+	struct plcm_usb_function *f = dev_get_drvdata(dev);		\
+	struct webcam_config *config = f->config;				\
+	return sprintf(buf, "%s\n", config->video_ ## field ## _string);	\
+}													\
+static ssize_t										\
+webcam_ ## field ## _string_store(struct device *dev, struct device_attribute *attr,	\
+		const char *buf, size_t size)				\
+{													\
+	struct plcm_usb_function *f = dev_get_drvdata(dev);		\
+	struct webcam_config *config = f->config;				\
+	if (size >= sizeof(config->video_ ## field ## _string))	\
+		return -EINVAL;										\
+	return strlcpy(config->video_ ## field ## _string, buf,	\
+			sizeof(config->video_ ## field ## _string));	\
+}													\
+static DEVICE_ATTR(webcam_ ## field ## _string,	\
+	S_IRUGO | S_IWUSR,				\
+	webcam_ ## field ## _string_show,		\
+	webcam_ ## field ## _string_store		\
+	);
+
 WEBCAM_CONFIG_ATTR(interval, "%d\n", 1, 16)
 WEBCAM_CONFIG_ATTR(maxpacket, "%d\n", 1, 3072)
 WEBCAM_CONFIG_ATTR(maxburst, "%d\n", 0, 15)
 WEBCAM_CONFIG_ATTR(headersize, "%d\n", 2, 255)
 WEBCAM_CONFIG_ATTR(bulkmode, "%d\n", 0, 1)
-WEBCAM_CONFIG_ATTR(bulksize, "%d\n", 512, 8192)
+WEBCAM_CONFIG_ATTR(bulksize, "%d\n", 512, 16384)
 WEBCAM_CONFIG_ATTR(maxpayload, "%x\n", 0, 0xFFFFFFFF)
+WEBCAM_CONFIG_ATTR(usbreqnums, "%d\n", 1, UVC_MAX_NUM_REQUESTS)
+
+WEBCAM_CONFIG_STRING_ATTR(iad)
+WEBCAM_CONFIG_STRING_ATTR(control)
+WEBCAM_CONFIG_STRING_ATTR(stream)
 
 static struct device_attribute *webcam_function_attributes[] = {
 	&dev_attr_webcam_device,
@@ -984,6 +1017,10 @@ static struct device_attribute *webcam_function_attributes[] = {
 	&dev_attr_webcam_bulkmode,
 	&dev_attr_webcam_bulksize,
 	&dev_attr_webcam_maxpayload,
+	&dev_attr_webcam_usbreqnums,
+	&dev_attr_webcam_iad_string,
+	&dev_attr_webcam_control_string,
+	&dev_attr_webcam_stream_string,
 	NULL
 };
 

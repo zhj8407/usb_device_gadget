@@ -102,7 +102,7 @@ extern unsigned int uvc_gadget_trace_param;
 #define DRIVER_VERSION				"0.1.0"
 #define DRIVER_VERSION_NUMBER			KERNEL_VERSION(0, 1, 0)
 
-#define UVC_NUM_REQUESTS			4
+#define UVC_MAX_NUM_REQUESTS			4
 #define UVC_MAX_REQUEST_SIZE			64
 #define UVC_MAX_EVENTS				4
 
@@ -123,8 +123,8 @@ struct uvc_video
 
 	/* Requests */
 	unsigned int req_size;
-	struct usb_request *req[UVC_NUM_REQUESTS];
-	__u8 *req_buffer[UVC_NUM_REQUESTS];
+	struct usb_request *req[UVC_MAX_NUM_REQUESTS];
+	__u8 *req_buffer[UVC_MAX_NUM_REQUESTS];
 	struct list_head req_free;
 	spinlock_t req_lock;
 
@@ -140,6 +140,7 @@ struct uvc_video
 	unsigned char payload_headsize;
 	unsigned char bulk_mode;
 	unsigned int bulk_req_size;
+	unsigned int usb_req_nums;
 };
 
 enum uvc_state

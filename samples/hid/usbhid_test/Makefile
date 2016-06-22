@@ -8,9 +8,9 @@ PROGRAM=UsbHid
 # set compiler argument
 
 CROSS_LIB_PATH ?= /home/liwang/l4t_21_3/rootfs/lib/arm-linux-gnueabihf
-LDFLAGS= -lpthread -lrt -L$(CROSS_LIB_PATH) -ludev
+#DFLAGS= -lpthread -lrt -L$(CROSS_LIB_PATH) -ludev
 
-ifeq ($(CALL_DISPlAY),1)
+ifeq ($(CALL_DISPLAY),1)
 CFLAGS = -DENABLE_CALL_DISPLAY=1
 CROSS_LIB_PATH ?= /home/liwang/l4t_21_3/rootfs/lib/arm-linux-gnueabihf
 LDFLAGS= -lpthread -lrt -L$(CROSS_LIB_PATH) -ludev

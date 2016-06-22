@@ -60,7 +60,9 @@ extern "C"
 #define USBHID_DISP_ATTR_REPORT_DFSI   ( ( 1 << ( USBHID_DFSI_LOCAL_NAME - 1 ) ) | \
         ( 1 << ( USBHID_DFSI_LOCAL_STATUS - 1 ) ) | \
         ( 1 << ( USBHID_DFSI_OTHER_NAME - 1 ) ) | \
-        ( 1 << ( USBHID_DFSI_OTHER_TITIL - 1 ) ) )
+        ( 1 << ( USBHID_DFSI_OTHER_TITIL - 1 ) ) | \
+        ( 1 << ( USBHID_DFSI_CALL_STATUS - 1 ) ) | \
+        ( 1 << ( USBHID_DFSI_DURATION - 1 ) ) )
 
 #define USBHID_DISP_CTRL_BIT_ENABLE    0x01
 #define USBHID_DISP_CTRL_BIT_CLEAR     0x02
@@ -98,8 +100,13 @@ extern "C"
 #define USBHID_ICON_BIT_VOICEMAIL      0x02
 #define USBHID_ICON_BIT_CALLFWD        0x01
 
-
+#define USB_HID_ReportType_NULL     0x00
+#define USB_HID_ReportType_Input    0x01
+#define USB_HID_ReportType_Output   0x02
+#define USB_HID_ReportType_Feature  0x03
 void lync_display_process_set_report(unsigned char *report, unsigned int length);
+
+int lync_display_get_mic_mute();
 
 #ifdef __cplusplus
 }
