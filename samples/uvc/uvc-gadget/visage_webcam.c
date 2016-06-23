@@ -622,24 +622,12 @@ int main(int argc, char *argv[])
     /* load camera */
     start_camera(camera_width, camera_height);
 #endif
-    //read_camera();
-    //stop_camera();
-    //return 0;
-    /* load camera end */
-    //struct usb_video_info_t video_info;
-    //video_info.video_width=camera_width;
-    //video_info.video_height=camera_height;
-    //int usbDevFd = initUSBDevice();
 
     fd_set fds;
     FD_ZERO(&fds);
-    //FD_SET(dev->fd, &fds);
-    //FD_SET(fd, &fds);
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000; //1ms
-    //unsigned long getFrameTime = 0; //GetTimeInMilliSec();
-    //unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
 
     /*****inter process communication begin*****/
 #ifdef USE_V4L2
@@ -664,8 +652,6 @@ int main(int argc, char *argv[])
     //FD_SET(stack2app, &rfds);
     /*****inter process communication end*****/
     printf("=========visage uvc sample app init done w=%u h=%u, imagesize=%u======\n",  camera_width, camera_height, imagesize);
-    //uint32_t buffer_page_index = 0;
-    //uint32_t one_frame_size = imagesize;
     FD_SET(stack2app, &fds);
     int maxfd = stack2app > fd ? stack2app : fd;
     struct plcm_uvc_event_msg_t event;
@@ -710,12 +696,6 @@ int main(int argc, char *argv[])
                         getNextFrameTime = GetTimeInMilliSec();
                         printf("get one frame delta time=%lu, buffer_page_index=%u\n", getNextFrameTime - getFrameTime, buffer_page_index);
                         getFrameTime = getNextFrameTime;
-                        /*testcode */
-                        /*struct plcm_uvc_event_t event;
-                        event.m_event=e_start_stream;
-                        event.m_format.m_height=camera_height;
-                        event.m_format.m_width=camera_width;
-                        write(app2stack, &event, sizeof(struct plcm_uvc_event_t));*/
                     }
 
                     buffer_page_index++;
