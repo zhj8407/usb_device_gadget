@@ -304,8 +304,8 @@ uvc_close(struct uvc_device *dev)
 static uint32_t frame_count = 0;
 #define CAM_MAX_WIDTH 1920
 #define CAM_MAX_HEIGHT 1080
-#define CAM_DEF_WIDTH 1280
-#define CAM_DEF_HEIGHT 720
+#define CAM_DEF_WIDTH 1920
+#define CAM_DEF_HEIGHT 1080
 unsigned int camera_width = CAM_DEF_WIDTH;
 unsigned int camera_height = CAM_DEF_HEIGHT;
 unsigned int frame_size = CAM_DEF_WIDTH * CAM_DEF_HEIGHT * 2;
@@ -359,8 +359,9 @@ static int uvc_video_process(struct uvc_device *dev)
           printf("frame[%u]Unable to dequeue buffer: %s (%d).\n",frame_count, strerror(errno), errno);
         return ret;
     }
-	else
-		printf("frame[%u] successfully Dequeue buffer %p\n", frame_count, &buf);
+	else {
+		//printf("frame[%u] successfully Dequeue buffer %p\n", frame_count, &buf);
+	}
 
     uvc_video_fill_buffer(dev, &buf);
     frame_count++;
@@ -370,8 +371,9 @@ static int uvc_video_process(struct uvc_device *dev)
           printf("frame[%u]Unable to requeue buffer: %s (%d).\n",frame_count, strerror(errno), errno);
         return ret;
     }
-	else
-		printf("frame[%u] successfully Requeue buffer %p\n", frame_count, &buf);
+	else {
+		//printf("frame[%u] successfully Requeue buffer %p\n", frame_count, &buf);
+	}
 
     return 0;
 }
@@ -1315,7 +1317,7 @@ int main(int argc, char *argv[])
                         }
 
                         getNextFrameTime = GetTimeInMilliSec();
-                        printf("one image size=%lu, offset=%lu, delta time=%lu\n", jpeg_size, jpeg_offset, getNextFrameTime-getFrameTime);
+                        //printf("one image size=%lu, offset=%lu, delta time=%lu\n", jpeg_size, jpeg_offset, getNextFrameTime-getFrameTime);
                         getFrameTime = getNextFrameTime;
                         ret = send(main_socket, &cb, sizeof(struct CommandBuffer), MSG_NOSIGNAL);
 
