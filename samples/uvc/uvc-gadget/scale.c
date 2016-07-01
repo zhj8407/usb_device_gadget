@@ -70,24 +70,49 @@ void bilineary_scale(struct video_buffer_t * pInBuffer, struct video_buffer_t * 
             inX00row = outRowIndex / ratioHeight;
             inX00col = outColIndex / ratioWidth;
 
-            if (inX00row >= inHeight - 2) {
+            if (outColIndex % 2 == 0) {
+                if (inX00col % 2 == 1) inX00col -= 1;
+            }
+
+            if (outColIndex % 2 == 1) {
+                if (inX00col % 2 == 0) inX00col += 1;
+            }
+
+            if (inX00row >= inHeight - 1) {
                 //printf("==edge inX00row[%u]inHeight[%u]==\n", inX00row, inHeight);
-                inX00row = inHeight - 2;
+                inX00row = inHeight - 1;
             }
 
-            if (inX00col >= inWidth - 2) {
+            if (inX00col >= inWidth - 1) {
                 //printf("==edge inX00col[%u]inWidth[%u]==\n", inX00col, inWidth);
-                inX00col = inWidth - 2;
+                inX00col = inWidth - 1;
             }
 
-            inX00 = inBuffer[(inX00row * inWidth + inX00col) * inStep];
-            inX01 = inBuffer[(inX00row * inWidth + inX00col + 1) * inStep];
-            inX10 = inBuffer[((inX00row + 1) * inWidth + inX00col) * inStep];
-            inX11 = inBuffer[((inX00row + 1) * inWidth + inX00col + 1) * inStep];
+            /*uint32_t inX00index = (inX00row * inWidth + inX00col) * inStep;
+            uint32_t inX01index = (inX00row * inWidth + inX00col + 1) * inStep;
+            uint32_t inX10index = ((inX00row + 1) * inWidth + inX00col) * inStep;
+            uint32_t inX11index = ((inX00row + 1) * inWidth + inX00col + 1) * inStep;*/
 
-            outBuffer[outIndex * outStep] = yRatio * (xRatio * (inX00) + (1 - xRatio) * (inX01)) + (1 - yRatio) * (xRatio * (inX10) + (1 - xRatio) * (inX11));
+            uint32_t inX00index = (inX00row * inWidth) + (inX00col);// * inStep;
+            uint32_t inX01index = (inX00row * inWidth) + (inX00col + inStep);// * inStep;
+            uint32_t inX10index = ((inX00row + 1) * inWidth) + (inX00col);// * inStep;
+            uint32_t inX11index = ((inX00row + 1) * inWidth) + (inX00col + inStep);// * inStep;
+
+            uint32_t inRange = inWidth * inHeight;
+
+            if (inX00index > inRange || inX01index > inRange || inX10index > inRange || inX11index > inRange) {
+                //printf("index out of range inX00index[%u]=(inX00row[%u]*inWidth[%u]+inX00col[%u])*inStep[%u]\n", inX00index, inX00row, inWidth, inX00col, inStep);
+                //printf("index out of range[%u]: [%u] [%u] [%u] [%u]\n", inRange, inX00index, inX01index, inX10index, inX11index);
+            } else {
+                inX00 = inBuffer[inX00index];
+                inX01 = inBuffer[inX01index];
+                inX10 = inBuffer[inX10index];
+                inX11 = inBuffer[inX11index];
+            }
+
+            outBuffer[outIndex/* * outStep*/] = yRatio * (xRatio * (inX00) + (1 - xRatio) * (inX01)) + (1 - yRatio) * (xRatio * (inX10) + (1 - xRatio) * (inX11));
             //printf("outBuffer[%u]=[%u]%p, inX00row=%u, inX00col=%u, outRowIndex=%u, outColIndex=%u\n"
-            //      ,outIndex,outBuffer[outIndex*outStep], &outBuffer[outIndex*outStep],inX00row, inX00col, outRowIndex, outColIndex   );
+            //      ,outIndex,outBuffer[outIndex/**outStep*/], &outBuffer[outIndex/**outStep*/],inX00row, inX00col, outRowIndex, outColIndex   );
         }
     }
 
@@ -98,6 +123,7 @@ void bilineary_scale(struct video_buffer_t * pInBuffer, struct video_buffer_t * 
 int loop_cout = 0;
 void scaleNV12(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHeight, uint8_t * outBuffer, uint32_t outWidth, uint32_t outHeight)
 {
+    //printf("start scaling from %p [%ux%u] --> %p [%ux%u]\n",inBuffer, inWidth, inHeight, outBuffer, outWidth, outHeight);
 #ifdef MULTI_THREAD
     g_v_in_buf.m_buffer = inBuffer;
     g_v_in_buf.m_width = inWidth;
@@ -105,7 +131,7 @@ void scaleNV12(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHeight, 
     g_v_out_buf.m_buffer = outBuffer;
     g_v_out_buf.m_width = outWidth;
     g_v_out_buf.m_height = outHeight;
-    //printf("start scaling\n");
+
     pthread_cond_broadcast(&scale_start);
 
     while (scale_done_count < ROW_NUM * COLUMN_NUM && loop_cout < 1000) {
@@ -160,7 +186,7 @@ void scaleNV12(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHeight, 
         }
     }
 
-    v_in_buf.m_buffer = inBuffer + inWidth * inHeight + 1;
+    /*v_in_buf.m_buffer = inBuffer + inWidth * inHeight + 1;
     v_out_buf.m_buffer = outBuffer + outWidth * outHeight + 1;
 
     for (row = 0; row < ROW_NUM; row++) {
@@ -171,7 +197,7 @@ void scaleNV12(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHeight, 
             v_out_blk_par.m_height_len = v_out_buf.m_height / ROW_NUM;
             bilineary_scale(&v_in_buf, &v_out_buf, 2, 2, &v_out_blk_par);
         }
-    }
+    }*/
 
     //bilineary_scale(inBuffer, inWidth/2, inHeight/2, outBuffer, outWidth/2, outHeight/2, 1,1,0,0,0,0);
     //bilineary_scale(inBuffer, inWidth/2, inHeight/2, outBuffer, outWidth/2, outHeight/2, 1,1, inWidth/2, 0, outWidth/2,0);
@@ -545,6 +571,7 @@ int NV12toRGBA(unsigned char *yuv_buffer,
 /*use thread to scale*/
 void *image_scale_thread(void * attr)
 {
+#ifdef MULTI_THREAD
     struct scaler_info_t * pScalerInfo = (struct scaler_info_t *)attr;
 
     if (pScalerInfo == NULL) {
@@ -567,48 +594,78 @@ void *image_scale_thread(void * attr)
 
         memcpy(&v_in_buf, &g_v_in_buf, sizeof(struct video_buffer_t));
         memcpy(&v_out_buf, &g_v_out_buf, sizeof(struct video_buffer_t));
-        //if(v_in_buf==NULL || v_out_buf==NULL) {
-        //  printf("image_scale_thread[%u][%u] inbuf[%p] outbuf[%p] invalid\n", row_index, column_index, v_in_buf, v_out_buf);
-        //}
+
+        if (v_in_buf.m_buffer == NULL || v_out_buf.m_buffer == NULL) {
+            printf("image_scale_thread[%u][%u] inbuf[%p] outbuf[%p] invalid\n", row_index, column_index, v_in_buf.m_buffer, v_out_buf.m_buffer);
+            scale_done_count++;
+            return NULL;
+        }
+
         struct block_param_t v_out_blk_par;
+
         uint32_t inWidth    = v_in_buf.m_width;
+
         uint32_t inHeight   = v_in_buf.m_height;
+
         uint32_t outWidth   = v_out_buf.m_width;
+
         uint32_t outHeight  = v_out_buf.m_height;
 
         //handle Y
         v_out_blk_par.m_width_start_pos = column_index * v_out_buf.m_width / COLUMN_NUM;
+
         v_out_blk_par.m_width_len = v_out_buf.m_width / COLUMN_NUM;
+
         v_out_blk_par.m_height_start_pos = row_index * v_out_buf.m_height / ROW_NUM;
+
         v_out_blk_par.m_height_len = v_out_buf.m_height / ROW_NUM;
+
         bilineary_scale(&v_in_buf, &v_out_buf, 1, 1, &v_out_blk_par);
-        //handle U
+
         v_in_buf.m_buffer = g_v_in_buf.m_buffer + inWidth * inHeight;
+
+        //v_in_buf.m_width = inWidth / 2;
         v_in_buf.m_height = inHeight / 2;
+
         v_out_buf.m_buffer = g_v_out_buf.m_buffer + outWidth * outHeight;
+
+        //v_out_buf.m_width = outWidth / 2;
         v_out_buf.m_height = outHeight / 2;
+
+        //handle U
         v_out_blk_par.m_width_start_pos = column_index * outWidth / COLUMN_NUM;
+
         v_out_blk_par.m_width_len = outWidth / COLUMN_NUM;
+
         v_out_blk_par.m_height_start_pos = row_index * v_out_buf.m_height / ROW_NUM;
+
         v_out_blk_par.m_height_len = v_out_buf.m_height / ROW_NUM;
-        bilineary_scale(&v_in_buf, &v_out_buf, 2, 2, &v_out_blk_par);
+
+        bilineary_scale(&v_in_buf, &v_out_buf, 2, 1, &v_out_blk_par);
+
         //handle V
-        v_in_buf.m_buffer = g_v_in_buf.m_buffer + inWidth * inHeight + 1;
-        v_out_buf.m_buffer = g_v_out_buf.m_buffer + outWidth * outHeight + 1;
-        v_out_blk_par.m_width_start_pos = column_index * outWidth / COLUMN_NUM;
-        v_out_blk_par.m_width_len = outWidth / COLUMN_NUM;
-        v_out_blk_par.m_height_start_pos = row_index * v_out_buf.m_height / ROW_NUM;
-        v_out_blk_par.m_height_len = v_out_buf.m_height / ROW_NUM;
-        bilineary_scale(&v_in_buf, &v_out_buf, 2, 2, &v_out_blk_par);
+        //v_in_buf.m_buffer = g_v_in_buf.m_buffer + inWidth * inHeight + 1;
+        //v_out_buf.m_buffer = g_v_out_buf.m_buffer + outWidth * outHeight + 1;
+        //v_out_blk_par.m_width_start_pos = column_index * outWidth / COLUMN_NUM;
+        //v_out_blk_par.m_width_len = outWidth / COLUMN_NUM;
+        //v_out_blk_par.m_height_start_pos = row_index * v_out_buf.m_height / ROW_NUM;
+        //v_out_blk_par.m_height_len = v_out_buf.m_height / ROW_NUM;
+        //bilineary_scale(&v_in_buf, &v_out_buf, 2, 2, &v_out_blk_par);
 
         scale_done_count++;
     }
 
+#else
+    printf("[image_scale_thread]Not in multi thread mode %p\n", attr);
+#endif
+
     return NULL;
+
 }
 
 void create_scaler_thread(uint32_t colNum, uint32_t rowNum)
 {
+#ifdef MULTI_THREAD
     uint32_t i = 0;
     uint32_t j = 0;
     //uint32_t finished_count=0;
@@ -633,7 +690,9 @@ void create_scaler_thread(uint32_t colNum, uint32_t rowNum)
     }
 
     printf("thread create done\n");
-
+#else
+    printf("[create_scaler_thread] Not in multi thread mode %u %u\n", colNum, rowNum);
+#endif
 
 }
 

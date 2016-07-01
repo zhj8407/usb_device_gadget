@@ -282,9 +282,9 @@ int main(int argc, char *argv[])
                 camera_height = atoi(optarg);
                 break;
 
-			case 'q':
-				encoder_quality = atoi(optarg);
-				break;
+            case 'q':
+                encoder_quality = atoi(optarg);
+                break;
 
             default:
                 fprintf(stderr, "Invalid option '-%c'\n", opt);
@@ -292,6 +292,7 @@ int main(int argc, char *argv[])
                 return 1;
         }
     }
+
     imagesize = camera_width * camera_height;
     fd_set fds;
     FD_ZERO(&fds);
@@ -329,12 +330,15 @@ int main(int argc, char *argv[])
             if (FD_ISSET(fd, &efds)) {
                 printf("should not be here, efd:\n");
             }
+
             if (FD_ISSET(stack2app, &rfds)) {
                 struct plcm_uvc_event_msg_t event;
                 memset(&event, 0, sizeof(struct plcm_uvc_event_msg_t));
                 int len = read(stack2app, &event, sizeof(struct plcm_uvc_event_msg_t));
+
                 if (len > 0) {
                     printf("Receive %s[%d] from stack: format=%ux%u\n", getEventDescStr(event.m_event), event.m_event, event.m_format.m_width, event.m_format.m_height);
+
                     switch (event.m_event) {
                         case e_stack_ready:
                             break;
@@ -359,8 +363,7 @@ int main(int argc, char *argv[])
                         default:
                             break;
                     }
-                }
-				else {
+                } else {
                     printf("read failed: %d %s\n", errno, strerror(errno));
                 }
             }
