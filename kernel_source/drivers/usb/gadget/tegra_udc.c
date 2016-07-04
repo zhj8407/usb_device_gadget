@@ -913,6 +913,22 @@ static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
 
 	dtd->size_ioc_sts = cpu_to_le32(swap_temp);
 
+	/* The short packet happened with ISO multi-transaction */
+	if (req->ep->ep.mult &&
+			((req->ep->desc->bmAttributes & 0x3)==USB_ENDPOINT_XFER_ISOC)) {
+		if (*length <= req->ep->ep.maxpacket) {
+			DBG("build dtd: Mult0 1 \n");
+			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
+			swap_temp |= 0x00000400;
+			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
+		} else if (*length <= req->ep->ep.maxpacket * req->ep->ep.mult) {
+			DBG("build dtd: Mult0 2 \n");
+			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
+			swap_temp |= 0x00000800;
+			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
+		}
+	}
+
 	mb();
 
 	VDBG("length = %d address= 0x%x", *length, (int)*dma);
