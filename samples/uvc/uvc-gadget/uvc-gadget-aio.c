@@ -37,6 +37,8 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
+#include <pthread.h>
+
 #include <turbojpeg.h>
 
 #include "uvc.h"
@@ -67,6 +69,11 @@
 #define COLOR_COMPONENTS    3
 
 #define VISAGE_LED_NOTIFICATION 1
+//#define USE_CAM_THREAD 1
+#define V_BUF_NUM 1
+
+
+static int stream_on = 0;
 
 struct uvc_device {
     int fd;
@@ -95,6 +102,27 @@ struct uvc_device {
     unsigned int headersize;
     unsigned int maxpayloadsize;
 };
+
+#define LEN_720P_I420 (1280*720*3/2)
+#define LEN_720P_YUYV (1280*720*2)
+#define LEN_1080P_I420 (1920*1080*3/2)
+
+uint8_t vBuf[LEN_1080P_I420];
+uint8_t vBuf2[LEN_1080P_I420];
+
+inline unsigned long GetTimeInMilliSec()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+
+inline unsigned long GetTimeInMicroSec()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return (tv.tv_sec * 1000 * 1000) + (tv.tv_usec);
+}
 
 static int
 uvc_read_value_from_file(const char* filename,
@@ -222,6 +250,15 @@ uvc_open(const char *devname)
     return dev;
 }
 
+static void
+uvc_close(struct uvc_device *dev)
+{
+    close(dev->fd);
+    free(dev->imgdata);
+    free(dev->mem);
+    free(dev);
+}
+
 /*******************for camera capture begin*********/
 struct cam_buffer {
     unsigned int size;
@@ -229,7 +266,7 @@ struct cam_buffer {
 };
 struct cam_buffer *buffers = NULL;
 int fd = -1;
-unsigned int nbufs = 10;
+unsigned int nbufs = 1;
 unsigned char *pattern = NULL;
 unsigned int bSelectIO = 1;
 enum v4l2_buf_type buftype = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -460,12 +497,12 @@ void stop_camera()
 {
     video_enable(0);
 }
-static unsigned int count = 0;
+unsigned long timestamp_sec = 0;
+unsigned long timestamp_usec = 0;
 int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * readLen)
 {
     struct v4l2_buffer buf;
     int ret = 0;
-    //while(count <30)
     {
         ret = video_dequeue_buffer(&buf);
 
@@ -486,277 +523,31 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
                 printf("ERROR! buffer not enough: len=%u, need %u\n", bufferLen, buf.bytesused);
                 ret = -1;
             } else {
-                //printf("Successfully read from camera: len=%u, need %u\n", bufferLen, buf.bytesused);
+                /*struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                printf("Successfully read from camera: timestamp: %lu.%lu, curtime %lu.%lu delta=%lu.%lu\n",
+                    buf.timestamp.tv_sec, buf.timestamp.tv_usec, ts.tv_sec, ts.tv_nsec/1000,
+                    ts.tv_sec-buf.timestamp.tv_sec, ts.tv_nsec/1000 -buf.timestamp.tv_usec );*/
+                timestamp_sec = buf.timestamp.tv_sec;
+                timestamp_usec = buf.timestamp.tv_usec;
                 memcpy(buffer, buffers[buf.index].mem, buf.bytesused);
                 *readLen = buf.bytesused;
             }
 
-            ret = video_queue_buffer(buf.index);
+            video_queue_buffer(buf.index);
         }
-
-        count++;
-        //sleep(1);
     }
     return ret;
 }
-#if 0
-void NV12toI420(char * inBuffer, unsigned int width, unsigned int height)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
 
-    unsigned int img_size = width * height * 3 >> 1;
-    unsigned int index = 0;
-    char *tempBuf = malloc(width * height / 2);
-    unsigned int uvIndex = 0;
 
-    for (index = width * height; index < img_size; index += 2) {
-        tempBuf[uvIndex++] = inBuffer[index];
-    }
-
-    for (index = width * height + 1; index < img_size; index += 2) {
-        tempBuf[uvIndex++] = inBuffer[index];
-    }
-
-    memcpy(inBuffer + width * height, tempBuf, width * height / 2);
-    free(tempBuf);
-}
-void NV12toI420scale(char * inBuffer, unsigned int width, unsigned int height)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int buf_size = width * height * 3 / 2;
-    unsigned int img_size = width * height;
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    char *tempBuf = malloc(buf_size / 4);
-    unsigned int outIndex = 0;
-    unsigned int outImg_size = img_size / 4;
-    unsigned int outUIndex = outImg_size;
-    unsigned int outVIndex = outImg_size + outImg_size / 4;
-
-    for (hindex = 0; hindex < height; hindex += 2) {
-        for (windex = 0; windex < width; windex += 2) {
-            tempBuf[outIndex++] = inBuffer[hindex * width + windex];
-        }
-    }
-
-    //printf("NV12toI420scale: windex=%u, hindex=%u, outIndex=%u, buf_size=%u\n", windex, hindex, outIndex, buf_size);
-    for (hindex = 0; hindex < height; hindex += 4) {
-        for (windex = 0; windex < width; windex += 4) {
-            tempBuf[outUIndex++] = (inBuffer[img_size + hindex * width / 2 + windex] + inBuffer[img_size + hindex * width / 2 + windex + 2]) / 2;
-            tempBuf[outVIndex++] = (inBuffer[img_size + hindex * width / 2 + windex + 1] + inBuffer[img_size + hindex * width / 2 + windex + 3]) / 2;
-        }
-    }
-
-    //printf("NV12toI420scale:finish: windex=%u, hindex=%u, outUIndex=%u, outVIndex=%u\n", windex, hindex, outUIndex, outVIndex);
-    memcpy(inBuffer, tempBuf, buf_size / 4);
-    free(tempBuf);
-}
-
-void NV12toYUY2(char * inBuffer, unsigned int inWidth, unsigned int inHeight)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int img_size = inWidth * inHeight;
-    unsigned int out_img_size = img_size;
-    unsigned int out_buf_size = out_img_size * 2;
-    char *tempBuf = malloc(out_buf_size);
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    unsigned int outIndex = 0;
-    unsigned int uvIndex = img_size;
-
-    for (hindex = 0; hindex < inHeight; hindex++) {
-        if (hindex % 2 == 1) {
-            uvIndex -= inWidth;
-        }
-
-        for (windex = 0; windex < inWidth; windex++) {
-            //printf("NV12toI420scale:outIndex=%u, uvIndex=%u, hindex[%u] x inWidth[%u]+windex[%u]=%u\n", outIndex,  uvIndex, hindex, inWidth, windex, hindex*inWidth+windex);
-            tempBuf[outIndex] = inBuffer[hindex * inWidth + windex];
-            outIndex++;
-            tempBuf[outIndex] = inBuffer[uvIndex];
-            outIndex++;
-            uvIndex++;
-        }
-    }
-
-    //printf("NV12toYUY2:finish: uvIndex=%u, outIndex=%u, out_img_size=%u\n", uvIndex,  outIndex, out_img_size);
-    memcpy(inBuffer, tempBuf, out_buf_size);
-    free(tempBuf);
-}
-
-void NV12toYUY2scale(char * inBuffer, unsigned int inWidth, unsigned int inHeight)
-{
-    if (inBuffer == NULL) {
-        printf("NV12toI420: can't convert null pointer\n");
-        return;
-    }
-
-    unsigned int img_size = inWidth * inHeight;
-    unsigned int out_img_size = img_size / 4;
-    unsigned int out_buf_size = out_img_size * 2;
-    char *tempBuf = malloc(out_buf_size);
-    unsigned int windex = 0;
-    unsigned int hindex = 0;
-    unsigned int outIndex = 0;
-    unsigned int uvIndex = img_size;
-
-    for (hindex = 0; hindex < inHeight; hindex += 2) {
-        for (windex = 0; windex < inWidth; windex += 2) {
-            //printf("NV12toI420scale:outIndex=%u, uvIndex=%u, hindex[%u] x inWidth[%u]+windex[%u]=%u\n", outIndex,  uvIndex, hindex, inWidth, windex, hindex*inWidth+windex);
-            tempBuf[outIndex] = inBuffer[hindex * inWidth + windex];
-            outIndex++;
-            tempBuf[outIndex] = inBuffer[uvIndex];
-            outIndex++;
-
-            if (windex % 4 == 0)
-                uvIndex++;
-            else
-                uvIndex += 3;
-        }
-    }
-
-    //printf("NV12toYUY2scale:finish: uvIndex=%u, outIndex=%u, out_img_size=%u\n", uvIndex,  outIndex, out_img_size);
-    memcpy(inBuffer, tempBuf, out_buf_size);
-    free(tempBuf);
-}
-
-/* convert a YUV set to a rgb set - thanks to MartinS and
-   http://www.efg2.com/lab/Graphics/Colors/YUV.htm */
-static void yuvtorgb(unsigned int Y, unsigned int U, unsigned int V, unsigned int *r_ptr, unsigned int *g_ptr, unsigned int *b_ptr)
-{
-    int r, g, b;
-    static short L1[256], L2[256], L3[256], L4[256], L5[256];
-    static int initialised = 0;
-
-    if (!initialised) {
-        int i;
-        initialised = 1;
-
-        for (i = 0; i < 256; i++) {
-            L1[i] = 1.164 * (i - 16);
-            L2[i] = 1.596 * (i - 128);
-            L3[i] = -0.813 * (i - 128);
-            L4[i] = 2.018 * (i - 128);
-            L5[i] = -0.391 * (i - 128);
-        }
-    }
-
-    r = L1[Y] + L2[V];
-    g = L1[Y] + L3[U] + L5[V];
-    b = L1[Y] + L4[U];
-
-    if (r < 0) r = 0;
-
-    if (g < 0) g = 0;
-
-    if (b < 0) b = 0;
-
-    if (r > 255) r = 255;
-
-    if (g > 255) g = 255;
-
-    if (b > 255) b = 255;
-
-    *r_ptr = r;
-    *g_ptr = g;
-    *b_ptr = b;
-
-    return;
-}
-
-static void get_rgb(unsigned char *src,
-                    unsigned int x,
-                    unsigned int  y,
-                    unsigned int width,
-                    unsigned int height,
-                    unsigned int *r_value,
-                    unsigned int *g_value,
-                    unsigned int *b_value,
-                    unsigned int format)
-{
-    unsigned int y_value = 0;
-    unsigned int u_value = 0;
-    unsigned int v_value = 0;
-    unsigned char *y_buffer = src;
-    unsigned char *uv_buffer = (unsigned char *)(src + (width * height));
-    unsigned int yOffset = y * width + x ;
-    unsigned int uvOffset = (y >> 1) * (width >> 1) + (x >> 1) ;
-    y_value = *(y_buffer +  yOffset);
-
-    //0:NV12, 1:YUV422 Planar
-    if (format == 0) {
-        u_value = *(uv_buffer + 2 * uvOffset);
-        v_value =  *(uv_buffer + 2 * uvOffset  + 1);
-    } else if (format == 1) {
-        //TODO:Support YUV422 Planar
-    }
-
-    yuvtorgb(y_value, u_value, v_value, r_value, g_value, b_value);
-
-    return ;
-}
-
-static int NV12toRGBA(unsigned char *yuv_buffer,
-                      unsigned int width, unsigned int height,
-                      unsigned char *rgb_buffer)
-{
-    unsigned int _width = width;
-    unsigned int _height = height;
-    unsigned int x = 0, y = 0;
-    unsigned int r_value = 0, g_value = 0, b_value = 0;
-    unsigned long location = 0;
-
-    if (!yuv_buffer || !rgb_buffer)
-        return -1;
-
-    for (y = 0; y < _height; y++) {
-        for (x = 0; x < _width; x++) {
-            /* Figure out where in memory to put the pixel */
-
-            location = (x) * (COLOR_COMPONENTS) + (y) * (_width * COLOR_COMPONENTS);
-
-            get_rgb(yuv_buffer, x, y, _width, _height, &r_value, &g_value, &b_value, 0);
-
-            *(rgb_buffer + location) = r_value; //Paint a black pixel.
-            *(rgb_buffer + location + 1) = g_value;
-            *(rgb_buffer + location + 2) = b_value;
-        }
-    }
-
-    return 0;
-}
-#endif
 /*******************for camera capture end*********/
 
-static void
-uvc_close(struct uvc_device *dev)
-{
-    close(dev->fd);
-    free(dev->imgdata);
-    free(dev->mem);
-    free(dev);
-}
 
 /* ---------------------------------------------------------------------------
  * Video streaming
  */
-#define LEN_720P_I420 (1280*720*3/2)
-#define LEN_720P_YUYV (1280*720*2)
-#define LEN_1080P_I420 (1920*1080*3/2)
 
-
-uint8_t vBuf[LEN_1080P_I420];
 static void
 uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 {
@@ -772,6 +563,11 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
 
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
+#ifdef USE_CAM_THREAD
+            act_len = (dev->width) * (dev->height) * 2;
+            memcpy(dev->mem[buf->index], vBuf, act_len);
+            buf->bytesused = act_len;
+#else
             ret = read_one_camera_frame(vBuf, LEN_1080P_I420, &cam_read_len);
 
             if (ret == 0) {
@@ -788,26 +584,48 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
                 buf->bytesused = 0;
             }
 
+#endif
             //printf("sending data for YUY2: len=%u, ret=%u\n", buf->bytesused, ret);
             break;
 
         case V4L2_PIX_FMT_YUV420:
-            ret = read_one_camera_frame(vBuf, LEN_1080P_I420, &cam_read_len);
+#ifdef USE_CAM_THREAD
+            act_len = (dev->width) * (dev->height) * 3 / 2;
+            memcpy(dev->mem[buf->index], vBuf, act_len);
+            buf->bytesused = act_len;
+#else
+            {
+                //unsigned long packet1time = 0;
+                //unsigned long packet2time = 0;
+                //unsigned long packet3time = 0;
+                //packet1time=GetTimeInMilliSec();
 
-            if (ret == 0) {
-                if (dev->width == width) {
-                    NV12toI420(vBuf, width, height, dev->mem[buf->index], dev->width, dev->height);
+                ret = read_one_camera_frame(vBuf, LEN_1080P_I420, &cam_read_len);
+
+                //packet2time=GetTimeInMilliSec();
+
+                if (ret == 0) {
+                    if (dev->width == width) {
+                        NV12toI420(vBuf, width, height, dev->mem[buf->index], dev->width, dev->height);
+                    } else {
+                        NV12toI420scale(vBuf, width, height, dev->mem[buf->index], dev->width, dev->height);
+                    }
+
+                    act_len = (dev->width) * (dev->height) * 3 / 2;
+                    //memcpy(dev->mem[buf->index], vBuf, act_len);
+                    buf->bytesused = act_len;
                 } else {
-                    NV12toI420scale(vBuf, width, height, dev->mem[buf->index], dev->width, dev->height);
+                    buf->bytesused = 0;
                 }
 
-                act_len = (dev->width) * (dev->height) * 3 / 2;
-                //memcpy(dev->mem[buf->index], vBuf, act_len);
-                buf->bytesused = act_len;
-            } else {
-                buf->bytesused = 0;
+                buf->timestamp.tv_sec = timestamp_sec;
+                buf->timestamp.tv_usec = timestamp_usec;
+                //packet3time=GetTimeInMilliSec();
+                //printf("[stats][%s][%ux%u]: len=%u, read delta=%lu, convert delta=%lu\n",
+                //          getV4L2FormatStr(dev->fcc), dev->width, dev->height, buf->bytesused,
+                //          packet2time-packet1time, packet3time-packet2time);
             }
-
+#endif
             //printf("sending Camera[%ux%u] data for YUV420 %ux%u: len=%u, ret=%u\n", width, height, dev->width, dev->height, buf->bytesused, ret);
             break;
 
@@ -869,19 +687,35 @@ uvc_video_process(struct uvc_device *dev)
     buf.memory = V4L2_MEMORY_MMAP;
 
     if ((ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf)) < 0) {
-#if 0
-        printf("Unable to dequeue buffer: %s (%d).\n", strerror(errno),
-               errno);
+#if 1
+
+        if (stream_on)
+            printf("Unable to dequeue buffer: %s (%d).\n", strerror(errno), errno);
+
 #endif
         return ret;
     }
 
+    /*unsigned long packet1time=0;
+    unsigned long packet2time=0;
+    unsigned long packetprocesstime=0;
+
+    if (packet1time==0) {
+        packet1time=GetTimeInMilliSec();
+    }*/
     uvc_video_fill_buffer(dev, &buf);
+    /*packet2time=GetTimeInMilliSec();
+    printf("process one USB buf req, delta time=%lu ms\n", packet2time-packet1time);
+    //packetprocesstime=GetTimeInMilliSec();
+    //printf("process one camera frame, delta time=%lu ms, converting use: %lu ms\n", packet2time-packet1time, packetprocesstime-packet2time);
+    packet1time=packet2time;*/
 
     if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
-#if 0
-        printf("Unable to requeue buffer: %s (%d).\n", strerror(errno),
-               errno);
+#if 1
+
+        if (stream_on)
+            printf("Unable to requeue buffer: %s (%d).\n", strerror(errno), errno);
+
 #endif
         return ret;
     }
@@ -968,8 +802,10 @@ uvc_video_stream(struct uvc_device *dev, int enable)
         /* Set the led to red. */
         system("/usr/sbin/commanduC lightLed 1 1");
 #endif
+        stream_on = 0;
         return 0;
     }
+
 
     printf("Starting video stream.\n");
 
@@ -1003,6 +839,8 @@ uvc_video_stream(struct uvc_device *dev, int enable)
         system("/usr/sbin/commanduC lightLed 4 2");
 
 #endif
+    stream_on = 1;
+
     return ret;
 }
 
@@ -1414,7 +1252,7 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             uvc_video_stream(dev, 0);
             uvc_video_reqbufs(dev, 0);
 
-            uvc_video_reqbufs(dev, 4);
+            uvc_video_reqbufs(dev, V_BUF_NUM);
             uvc_video_stream(dev, 1);
             alarm(2);
         }
@@ -1461,7 +1299,7 @@ uvc_events_process(struct uvc_device *dev)
             return;
 
         case UVC_EVENT_STREAMON:
-            uvc_video_reqbufs(dev, 4);
+            uvc_video_reqbufs(dev, V_BUF_NUM);
             uvc_video_stream(dev, 1);
             break;
 
@@ -1571,7 +1409,51 @@ void sig_handle(int sig)
         uvc_video_reqbufs(global_uvc, 0);
     }
 }
+#ifdef USE_CAM_THREAD
+void * camera_thread(void * attr)
+{
+    if (attr == NULL) {
+        printf("[camera_thread]: null attr, cannot start\n");
+        return NULL;
+    }
 
+    struct uvc_device *device = (struct uvc_device *)attr;
+
+    printf("attr=%p device=%p, device->fd=%u\n", attr, device, device->fd);
+
+    unsigned long packet1time = 0;
+
+    unsigned long packet2time = 0;
+
+    unsigned long packetprocesstime = 0;
+
+    while (1) {
+        unsigned int readLen = 0;
+        int ret = read_one_camera_frame(vBuf2, LEN_1080P_I420, &readLen);
+
+        if (ret >= 0 && readLen > 0) {
+            if (packet1time == 0) {
+                packet1time = GetTimeInMilliSec();
+            }
+
+            //packet2time=GetTimeInMilliSec();
+            //printf("read one camera frame, delta time=%lu ms\n", packet2time-packet1time);
+            //packet1time=packet2time;
+            if (stream_on) {
+                //uvc_video_process(device);
+                //packet2time=GetTimeInMilliSec();
+                //printf("process one camera frame, delta time=%lu ms\n", packet2time-packet1time);
+                NV12toI420scale(vBuf2, width, height, vBuf, device->width, device->height);
+                //packetprocesstime=GetTimeInMilliSec();
+                //printf("process one camera frame, delta time=%lu ms, converting use: %lu ms\n", packet2time-packet1time, packetprocesstime-packet2time);
+                //packet1time=packet2time;
+            }
+        }
+
+        usleep(1000);
+    }
+}
+#endif
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
@@ -1627,6 +1509,8 @@ int main(int argc, char *argv[])
     /* load camera */
     start_camera(device);
 
+
+
     create_scaler_thread(ROW_NUM, COLUMN_NUM);
     //read_camera();
     //stop_camera();
@@ -1637,12 +1521,23 @@ int main(int argc, char *argv[])
     if (dev == NULL)
         return 1;
 
+#ifdef USE_CAM_THREAD
+    pthread_t cam_pid;
+
+    if (0 != pthread_create(&cam_pid, NULL, camera_thread, (void*)dev)) {
+        printf("create camera thread failed: %d, %s\n", errno, strerror(errno));
+        return -1;
+    }
+
+    printf("CameraThread started\n");
+#endif
     global_uvc = dev;
 
     image_load(dev, mjpeg_image);
     uvc_events_init(dev);
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
+    //unsigned long lastCalltime = 0;
 
     while (1) {
         fd_set efds = fds;
@@ -1659,7 +1554,19 @@ int main(int argc, char *argv[])
                 uvc_events_process(dev);
 
             if (FD_ISSET(dev->fd, &wfds)) {
-                uvc_video_process(dev);
+                //unsigned long packet1time = 0;
+                //unsigned long packet2time = 0;
+
+                if (stream_on) {
+                    //packet1time=GetTimeInMilliSec();
+                    uvc_video_process(dev);
+                    //packet2time=GetTimeInMilliSec();
+                    //printf("process one USB buf req, delta time=%lu ms\n", packet2time-packet1time);
+                    //packetprocesstime=GetTimeInMilliSec();
+                    //printf("[stats]process one camera frame, delta time=%lu ms, delt between two calls: %lu ms\n", packet2time-packet1time, packet2time-lastCalltime);
+                    //packet1time = packet2time;
+                    //lastCalltime = packet2time;
+                }
 
                 if (dev->bulk) {
                     // Reset the alarm.

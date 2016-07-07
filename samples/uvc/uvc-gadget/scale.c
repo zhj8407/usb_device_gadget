@@ -293,8 +293,7 @@ void NV12toI420scale(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHe
         return;
     }
 
-    unsigned int buf_size = inWidth * inHeight * 3 / 2;
-    uint8_t *tempBuf = malloc(buf_size);
+
 #if 0
     unsigned int img_size = inWidth * inHeight;
     unsigned int windex = 0;
@@ -319,11 +318,20 @@ void NV12toI420scale(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHe
     }
 
 #else
-    scaleNV12(inBuffer, inWidth, inHeight, tempBuf, outWidth, outHeight);
-    NV12toI420(tempBuf, outWidth, outHeight, outBuffer, outWidth, outHeight);
+
+    if (inWidth == outWidth && inHeight == outHeight) {
+        NV12toI420(inBuffer, outWidth, outHeight, outBuffer, outWidth, outHeight);
+    } else {
+        unsigned int buf_size = inWidth * inHeight * 3 / 2;
+        uint8_t *tempBuf = malloc(buf_size);
+        scaleNV12(inBuffer, inWidth, inHeight, tempBuf, outWidth, outHeight);
+        NV12toI420(tempBuf, outWidth, outHeight, outBuffer, outWidth, outHeight);
+        free(tempBuf);
+    }
+
 #endif
 
-    free(tempBuf);
+
 
 }
 

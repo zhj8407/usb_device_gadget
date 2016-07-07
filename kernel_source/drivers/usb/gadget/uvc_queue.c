@@ -371,7 +371,17 @@ static struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 	 * this aspect.
 	 */
 	buf->buf.v4l2_buf.sequence = queue->sequence++;
+	/* comment out this line if need to do stats*/
 	do_gettimeofday(&buf->buf.v4l2_buf.timestamp);
+	/*{
+		struct timespec ts;
+
+		ktime_get_ts(&ts);
+
+		printk(KERN_INFO "[uvc_queue]: stats: cur=%lu.%lu, timestamp=%lu.%lu, delta=%lu.%lu\n",
+			ts.tv_sec, ts.tv_nsec/1000, buf->buf.v4l2_buf.timestamp.tv_sec, buf->buf.v4l2_buf.timestamp.tv_usec,
+			ts.tv_sec - buf->buf.v4l2_buf.timestamp.tv_sec, ts.tv_nsec/1000-buf->buf.v4l2_buf.timestamp.tv_usec);
+	}*/
 
 	vb2_set_plane_payload(&buf->buf, 0, buf->bytesused);
 	vb2_buffer_done(&buf->buf, VB2_BUF_STATE_DONE);
