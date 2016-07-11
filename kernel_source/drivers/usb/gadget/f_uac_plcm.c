@@ -13,6 +13,8 @@
 #include <linux/usb/audio.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
+#include <linux/spinlock_types.h>
+#include <linux/workqueue.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -159,6 +161,19 @@ struct audio_dev {
 
 	/* The ALSA Sound Card it represents on the USB-Client side */
 	struct snd_uac_plcm_chip uac_plcmc;
+
+	/* Stores the state from usb host */
+	unsigned suspended : 1;
+	unsigned sink_status_changed: 1;
+	unsigned sink_active : 1;
+	unsigned source_status_changed: 1;
+	unsigned source_active : 1;
+
+	/* Protecting the status change request */
+	spinlock_t lock;
+
+	/* Work queue for uevent notification. */
+	struct work_struct status_notify_work;
 };
 
 static struct audio_dev *agdev_g;
@@ -1184,6 +1199,9 @@ static void afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
 	struct audio_dev *agdev = func_to_agdev(fn);
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
+	/* Cancel the pending work queue */
+	cancel_work_sync(&agdev->status_notify_work);
+
 	alsa_uac_plcm_exit(agdev);
 
 	/*TODO	while ((req = audio_req_get(audio)))
@@ -1204,25 +1222,64 @@ static void afunc_unbind(struct usb_configuration *cfg, struct usb_function *fn)
 static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsigned source, unsigned alt)
 {
 	struct audio_dev *agdev = func_to_agdev(fn);
+	unsigned long flags;
+
+	spin_lock_irqsave(&agdev->lock, flags);
+	if (source == 1) {
+		agdev->source_status_changed = 1;
+		if (alt)
+			agdev->source_active = 1;
+		else
+			agdev->source_active = 0;
+	} else if (sink == 1) {
+		agdev->sink_status_changed = 1;
+		if (alt)
+			agdev->sink_active = 1;
+		else
+			agdev->sink_active = 0;
+	}
+
+	schedule_work(&agdev->status_notify_work);
+	spin_unlock_irqrestore(&agdev->lock, flags);
+}
+
+static void audio_status_notify(struct work_struct *data)
+{
+	struct audio_dev *agdev = container_of(data, struct audio_dev, status_notify_work);
+	char **uevent_envp = NULL;
 	struct device *dev = NULL;
+	unsigned long flags;
+
 	if(!uac_plcm_config)
 		return;
 
 	dev = uac_plcm_config->dev;
 
-	if( alt == 0) {
-		if(sink == 1)
-			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_sink_deactive);
-		if(source == 1)
-			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_source_deactive);
-	} else {
-		if(sink == 1)
-			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_sink_active);
-		if(source == 1)
-			kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_source_active);
+	spin_lock_irqsave(&agdev->lock, flags);
+	if (agdev->suspended)
+		uevent_envp = uac_suspend;
+	else if (agdev->source_status_changed) {
+		if (agdev->source_active)
+			uevent_envp = uac_source_active;
+		else
+			uevent_envp = uac_source_deactive;
+		agdev->source_status_changed = 0;
+	} else if (agdev->sink_status_changed) {
+		if (agdev->sink_active)
+			uevent_envp = uac_sink_active;
+		else
+			uevent_envp = uac_sink_deactive;
+		agdev->sink_status_changed = 0;
 	}
-	pr_trace("%s: sink %d, source %d, alt %d \n", __func__, sink, source, alt);
+	spin_unlock_irqrestore(&agdev->lock, flags);
 
+	if (uevent_envp) {
+		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uevent_envp);
+		pr_info("%s: audio sent uevent %s\n", __func__, uevent_envp[0]);
+	} else {
+		pr_info("%s: audio did not send uevent (suspended: %d, sink_active: %d, source_active: %d\n",
+			__func__, agdev->suspended, agdev->sink_active, agdev->source_active);
+	}
 }
 
 static int afunc_set_alt(struct usb_function *fn, unsigned intf, unsigned alt)
@@ -1352,23 +1409,29 @@ static void afunc_disable(struct usb_function *fn)
 	agdev->as_out_alt = 0;
 }
 
-static void afunc_suspend(struct usb_function *fn)
+static void afunc_resume(struct usb_function *fn)
 {
-	struct device *dev = NULL;
+	struct audio_dev *agdev = func_to_agdev(fn);
+	unsigned long flags;
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
 
-	if(!uac_plcm_config) {
-		pr_trace("%s:%d - uac_plcm_config is NULL, return\n",
-			__func__, __LINE__);
-		return;
-	}
+	spin_lock_irqsave(&agdev->lock, flags);
+	agdev->suspended = 0;
+	spin_unlock_irqrestore(&agdev->lock, flags);
+}
 
-	dev = uac_plcm_config->dev;
+static void afunc_suspend(struct usb_function *fn)
+{
+	struct audio_dev *agdev = func_to_agdev(fn);
+	unsigned long flags;
 
-	/* Notify the userspace through uevent. */
-	if (dev)
-		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uac_suspend);
+	pr_trace("%s:%d\n", __func__, __LINE__);
+
+	spin_lock_irqsave(&agdev->lock, flags);
+	agdev->suspended = 1;
+	schedule_work(&agdev->status_notify_work);
+	spin_unlock_irqrestore(&agdev->lock, flags);
 }
 
 
@@ -1573,6 +1636,7 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	agdev_g->func.unbind = afunc_unbind;
 	agdev_g->func.set_alt = afunc_set_alt;
 	agdev_g->func.get_alt = afunc_get_alt;
+	agdev_g->func.resume = afunc_resume;
 	agdev_g->func.suspend = afunc_suspend;
 	agdev_g->func.disable = afunc_disable;
 	agdev_g->func.setup = afunc_setup;
@@ -1580,6 +1644,13 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	res = usb_add_function(cfg, &agdev_g->func);
 	if (res < 0)
 		kfree(agdev_g);
+
+	/* Initialize the lock */
+	spin_lock_init(&agdev_g->lock);
+
+	/* Initialize the work queue */
+	INIT_WORK(&agdev_g->status_notify_work, audio_status_notify);
+
 	return res;
 }
 
