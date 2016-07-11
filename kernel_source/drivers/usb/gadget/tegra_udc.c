@@ -2344,8 +2344,10 @@ static void suspend_irq(struct tegra_udc *udc)
 	udc->usb_state = USB_STATE_SUSPENDED;
 
 	/* report suspend to the driver, serial.c does not support this */
+	spin_unlock(&udc->lock);
 	if (udc->driver && udc->driver->suspend)
 		udc->driver->suspend(&udc->gadget);
+	spin_lock(&udc->lock);
 }
 
 static void bus_resume(struct tegra_udc *udc)
@@ -2354,8 +2356,10 @@ static void bus_resume(struct tegra_udc *udc)
 	udc->resume_state = 0;
 
 	/* report resume to the driver, serial.c does not support this */
+	spin_unlock(&udc->lock);
 	if (udc->driver && udc->driver->resume)
 		udc->driver->resume(&udc->gadget);
+	spin_lock(&udc->lock);
 }
 
 /* Clear up all ep queues */
