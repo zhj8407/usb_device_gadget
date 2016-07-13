@@ -1,8 +1,10 @@
 CROSS_COMPILE	?= arm-linux-gnueabihf-
-KERNEL_DIR	?= /home/rdeng/code/usb_byoc/l4t_21_3/sources/kernel_source
-CROSS_LIB_PATH ?= /home/rdeng/code/usb_byoc/l4t_21_3/rootfs/lib/arm-linux-gnueabihf
-ALSA_DIR ?= /home/rdeng/code/usb_byoc/l4t_21_3/build-output/_rootfs_/usr/lib
-ALSA_IDIR ?= /home/rdeng/code/usb_byoc/l4t_21_3/build-output/_rootfs_/usr/include
+#Please set the VISAGE_SRC_PATH to a valid path
+VISAGE_SRC_PATH ?= /home/jiezhang/Dev/visage/platform/l4t_21_3
+KERNEL_DIR	?= $(VISAGE_SRC_PATH)/sources/kernel_source
+CROSS_LIB_PATH ?= $(VISAGE_SRC_PATH)/rootfs/lib/arm-linux-gnueabihf
+ALSA_DIR ?= $(VISAGE_SRC_PATH)/build-output/_rootfs_/usr/lib
+ALSA_IDIR ?= $(VISAGE_SRC_PATH)/build-output/_rootfs_/usr/include
 
 CC		:= $(CROSS_COMPILE)gcc
 #KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include -I$(ALSA_DIR)/include -I$(ALSA_SRC_DIR)/include -I./libasound2/include
@@ -10,7 +12,7 @@ KERNEL_INCLUDE	:= -I$(ALSA_IDIR)
 CFLAGS		:= -g $(KERNEL_INCLUDE)
 LDFLAGS		?= -g -L$(CROSS_LIB_PATH) -ludev -L$(ALSA_DIR) -lasound -lm
 
-all: audio_capture 
+all: audio_capture
 
 audio_capture: audio_capture.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)

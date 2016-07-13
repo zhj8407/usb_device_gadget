@@ -23,8 +23,8 @@ pid_t start_audio_in()
 
     if ((child = fork()) == 0) {
         //Child process
-        execlp("audio_capture", "audio_capture", "-m 0", "-n 16",
-               "-t2", "-d2", "-r32000", "-b 1", "-c -1","-o 1", NULL);
+        execlp("/root/audio_capture", "audio_capture", "-m 0", "-n 16",
+               "-t2", "-d2", "-r32000", "-b 1", "-c -1", "-o 9", NULL);
         perror("audio_capture");
         exit(errno);
     } else {
