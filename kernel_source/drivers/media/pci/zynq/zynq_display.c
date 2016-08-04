@@ -1728,7 +1728,83 @@ int vpif_display_init(struct pci_dev *pdev)
     
     set_interrupts();
 
+	  if (en_no_subdev == 0) {
+    	 if (en_er_board)
+    		subdev_count = 	1;
+    	else 
+			subdev_count = 	 MAX_DISPLAY_SUBDEV_NUM;
+		vpif_obj.sd = kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
+    	if (vpif_obj.sd == NULL) {
+        	zynq_printk(0, "[zynq_display]Unable to allocate memory for subdevice(adv7511) pointers\n");
+        	err = -ENOMEM;
+    	   	// goto probe_out;
+			goto rls_irq;
+    	}
+   } else {
+		   subdev_count = 	0;
+		   vpif_obj.sd = NULL;
+	}
+	
+    for (i = 0; i < subdev_count; i++) {
+
+        unsigned int bus_num = (unsigned int)-1;
+        struct vpif_subdev_info *info = NULL;
+
+        if (i == 0) {
+             if (en_er_board) {
+			 	bus_num =  SUBDEV_CH4_I2C_BUS;
+            	info = &board_subdev_info[DISPLAY_SUBDEV_IDX_1];
+			}else {
+				bus_num =  SUBDEV_CH3_I2C_BUS;
+            	info = &board_subdev_info[DISPLAY_SUBDEV_IDX_0];
+			  }
+        } else if (i == 1) {
+            bus_num =  SUBDEV_CH4_I2C_BUS;
+            info = &board_subdev_info[DISPLAY_SUBDEV_IDX_1];
+        }
+
+        if (info->enable == 0) continue;
+
+        if (bus_num == (unsigned int)-1 ) {
+            zynq_printk(0, "[zynq_display] I2C bus number %d is invalid !!\n", (int)bus_num);
+            err = -EBUSY;
+            goto rls_sd_obj;
+        }
+
+        i2c_adap = zynq_get_i2c_adapter_by_bus_num(bus_num);
+
+        if (i2c_adap == NULL) {
+            zynq_printk(0, "[zynq_display] The i2c_adap handle for %d is NULL !!\n", bus_num);
+            err = -EBUSY;
+            goto rls_sd_obj;
+        }
+	
+		vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &info->board_info, NULL);
+
+        if (!vpif_obj.sd[i]) {
+            zynq_printk(0, "[zynq_display]Error registering v4l2 subdevice %s\n",  info->name);
+            for (j = 0; j < VPIF_DISPLAY_MAX_DEVICES; j++) 
+				if (i == j) g_video_display_en[j] = 0;
+			continue;
+			//err = -EBUSY;
+            //goto rls_sd_obj;
+        }
+        actual_subdev_count++;
+        //zynq_printk(1, "[zynq_display]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  info->name, bus_num, info->board_info.addr);
+    }
+    
+    if ((err = v4l2_device_register_subdev_nodes(&vpif_obj.v4l2_dev)) != 0) {
+            zynq_printk(0, "[zynq_display]Failed to call v4l2_device_register_subdev_nodes()!!\n");
+            err = -EBUSY;
+            goto rls_sd_obj;
+	}
+    
     for (j = 0; j < VPIF_DISPLAY_MAX_DEVICES; j++) {
+		
+		zynq_printk(0, "[zynq_display]ch = %u, enable = %u\n", (unsigned int)j, g_video_display_en[j]  );
+		
+		if (g_video_display_en[j] == 0) continue;
+		
         ch = vpif_obj.dev[j];
         /* Initialize field of the channel objects */
         atomic_set(&ch->usrs, 0);
@@ -1802,75 +1878,7 @@ int vpif_display_init(struct pci_dev *pdev)
 		} // end of 'en_video_input_window == 0'
     }
     
-   if (en_no_subdev == 0) {
-    	 if (en_er_board)
-    		subdev_count = 	1;
-    	else 
-			subdev_count = 	 MAX_DISPLAY_SUBDEV_NUM;
-		vpif_obj.sd = kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
-    	if (vpif_obj.sd == NULL) {
-        	zynq_printk(0, "[zynq_display]Unable to allocate memory for subdevice(adv7511) pointers\n");
-        	err = -ENOMEM;
-    	   	// goto probe_out;
-			goto rls_irq;
-    	}
-   } else {
-		   subdev_count = 	0;
-		   vpif_obj.sd = NULL;
-	}
-	
-    for (i = 0; i < subdev_count; i++) {
-
-        unsigned int bus_num = (unsigned int)-1;
-        struct vpif_subdev_info *info = NULL;
-
-        if (i == 0) {
-             if (en_er_board) {
-			 	bus_num =  SUBDEV_CH4_I2C_BUS;
-            	info = &board_subdev_info[DISPLAY_SUBDEV_IDX_1];
-			}else {
-				bus_num =  SUBDEV_CH3_I2C_BUS;
-            	info = &board_subdev_info[DISPLAY_SUBDEV_IDX_0];
-			  }
-        } else if (i == 1) {
-            bus_num =  SUBDEV_CH4_I2C_BUS;
-            info = &board_subdev_info[DISPLAY_SUBDEV_IDX_1];
-        }
-
-        if (info->enable == 0) continue;
-
-        if (bus_num == (unsigned int)-1 ) {
-            zynq_printk(0, "[zynq_display] I2C bus number %d is invalid !!\n", (int)bus_num);
-            err = -EBUSY;
-            goto rls_sd_obj;
-        }
-
-        i2c_adap = zynq_get_i2c_adapter_by_bus_num(bus_num);
-
-        if (i2c_adap == NULL) {
-            zynq_printk(0, "[zynq_display] The i2c_adap handle for %d is NULL !!\n", bus_num);
-            err = -EBUSY;
-            goto rls_sd_obj;
-        }
-
-        vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &info->board_info, NULL);
-
-
-        if (!vpif_obj.sd[i]) {
-            zynq_printk(0, "[zynq_display]Error registering v4l2 subdevice %s\n",  info->name);
-            err = -EBUSY;
-            goto rls_sd_obj;
-        }
-
-        if ((err = v4l2_device_register_subdev_nodes(&vpif_obj.v4l2_dev)) != 0) {
-            zynq_printk(0, "[zynq_display]%s failed to call v4l2_device_register_subdev_nodes()!!\n", info->name);
-            goto rls_sd_obj;
-        }
-
-        actual_subdev_count++;
-
-        //zynq_printk(1, "[zynq_display]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  info->name, bus_num, info->board_info.addr);
-    }
+ 
 #ifdef USE_ZYNQ_MALLOC
     if (allocate_reserved_memory(&pdev->dev) != 0)  goto rls_sd_obj;
 #endif    

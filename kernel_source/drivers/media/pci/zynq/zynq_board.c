@@ -221,14 +221,16 @@ static struct adv7511_platform_data adv7511_pdata_0 = {
     .i2c_edid = (0x7e << 1),
     .i2c_cec = (0x78 << 1),
     .cec_clk = 750000,
-    .gpio = GPIO_PK3
+    //.gpio = GPIO_PK3
+	.gpio = -1
 };
 
 static struct adv7511_platform_data adv7511_pdata_1 = {
     .i2c_edid = (0x7e << 1) >> 1,
     .i2c_cec = (0x78 << 1) >> 1,
     .cec_clk = 750000,
-    .gpio = GPIO_PK4
+    //.gpio = GPIO_PK4
+	.gpio = -1
 };
 
 
@@ -328,6 +330,10 @@ static void rls_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci_
             is_scaler = 1;
             index =3;
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            break;	
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -398,7 +404,9 @@ static void rls_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci_
     } else if (is_scaler && (index != (unsigned int)-1) ) {
         scaler_status_t st;
         scaler_get_status(&st, index);
-        if (st.is_initialized) scaler_release(pci_base_addr);
+        if (st.is_initialized) {
+			scaler_release_by_index(pci_base_addr, index);
+		}
     }  else if (is_osd && (index != (unsigned int)-1)) {
         osd_status_t st;
         osd_get_status(&st, index);
@@ -449,6 +457,10 @@ static void init_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci
         case SCALER3:
             is_scaler = 1;
             index =3;
+            break;
+		case SCALER4: 
+			is_scaler = 1;
+            index =4;
             break;
         case VSELECTOR:
             is_vselector = 1;
@@ -591,6 +603,11 @@ static void dump_regs_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             dump_scaler_regs(index);
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            dump_scaler_regs(index);
+            break;	
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -739,6 +756,11 @@ static void stop_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             stop_scaler(index);
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            stop_scaler(index);
+            break;	
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -888,6 +910,11 @@ static void start_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             start_scaler(index);
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            start_scaler(index);
+            break;	
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -1053,6 +1080,11 @@ static void config_imp(struct vpif_vidoe_pipelie_entity* handle,  vpif_vidoe_pip
             index =3;
             config_scaler(index,   config);
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            config_scaler(index,   config);
+            break;	
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -1226,6 +1258,11 @@ static void config_input_size_imp(struct vpif_vidoe_pipelie_entity* handle, unsi
             index =3;
             config_scaler_input_size(index,   in_width,  in_height);
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            config_scaler_input_size(index,   in_width,  in_height);
+            break;	
         case VDMA0:
             is_vdma = 1;
             index = 0;
@@ -1353,6 +1390,11 @@ static void config_crop_imp(struct vpif_vidoe_pipelie_entity* handle, unsigned i
             index =3;
             config_scaler_crop(index,  crop_start_x, crop_start_y, crop_width, crop_height) ;
             break;
+		case SCALER4:
+            is_scaler = 1;
+            index =4;
+            config_scaler_crop(index,  crop_start_x, crop_start_y, crop_width, crop_height) ;
+            break;	
         case VSELECTOR:
         case VDMA0:
         case VDMA1:
@@ -1374,6 +1416,8 @@ static void config_crop_imp(struct vpif_vidoe_pipelie_entity* handle, unsigned i
 }
 
 
+vpif_vidoe_pipelie_entity_t webcam_pipeline_entity =  {.type= SCALER_TYPE, .id = SCALER4, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp};
+
 vpif_vidoe_pipelie_entity_t  board_video_pipeline_entities[] = {
     {.type= VDMA_TYPE, .id = VDMA0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= VDMA_TYPE, .id = VDMA1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
@@ -1383,7 +1427,8 @@ vpif_vidoe_pipelie_entity_t  board_video_pipeline_entities[] = {
     {.type= SCALER_TYPE, .id = SCALER1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= SCALER_TYPE, .id = SCALER2, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= SCALER_TYPE, .id = SCALER3, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
-    {.type= OSD_TYPE, .id = OSD0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
+    //{.type= SCALER_TYPE, .id = SCALER4, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
+	{.type= OSD_TYPE, .id = OSD0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= OSD_TYPE, .id = OSD1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= CRESAMPLER_TYPE, .id = CRESAMPLER0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= CRESAMPLER_TYPE, .id = CRESAMPLER1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
@@ -1428,6 +1473,8 @@ const char *to_video_pipelin_entity_name(vpif_vidoe_pipelie_entity_id_t  id)
             return  "SCALER2";
         case SCALER3:
             return  "SCALER3";
+		case SCALER4:
+            return  "SCALER4";	
         case CRESAMPLER0:
             return  "CRESAMPLER0";
         case CRESAMPLER1:
@@ -1519,8 +1566,12 @@ const char *to_video_data_pin_name(vpif_video_data_pin_t pin)
             return "SCALER2_OUT";
         case SCALER3_IN:
             return "SCALER3_IN";
+		case SCALER4_IN:
+            return "SCALER4_IN";	
         case SCALER3_OUT:
             return "SCALER3_OUT";
+		case SCALER4_OUT:
+            return "SCALER4_OUT";	
         case VSELECTOR_IN:
             return "VSELECTOR_IN";
         case VSELECTOR_OUT:

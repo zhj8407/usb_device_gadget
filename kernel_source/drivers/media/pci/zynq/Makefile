@@ -22,6 +22,8 @@ ifeq ($(CONFIG_KERNEL_MODE_NEON),y)
 endif			
 			
 pcm1865-objs := zynq_pcm1865.o
+adv762x-objs := zynq_adv762x.o
+hdmitrans-objs := zynq_hdmi.o
 
 fakepci.objs :=  fakepci.o
 fakei2cmaster.objs := fakei2cmaster.o
@@ -32,4 +34,5 @@ obj-$(CONFIG_VIDEO_ZYNQ) += pcm1865.o
 obj-$(CONFIG_VIDEO_ZYNQ) += fakepci.o
 obj-$(CONFIG_VIDEO_ZYNQ) += fakei2cmaster.o
 obj-$(CONFIG_VIDEO_ZYNQ) += v4l2loopback.o
-
+obj-$(CONFIG_VIDEO_ZYNQ_HDMI) += adv762x.o
+obj-$(CONFIG_VIDEO_ZYNQ_HDMI) += hdmitrans.o

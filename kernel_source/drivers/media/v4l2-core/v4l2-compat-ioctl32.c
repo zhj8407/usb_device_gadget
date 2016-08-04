@@ -1091,7 +1091,8 @@ long v4l2_compat_ioctl32(struct file *file, unsigned int cmd, unsigned long arg)
 	case VIDIOC_SUBDEV_G_EDID32:
 	case VIDIOC_SUBDEV_S_EDID32:
 	case VIDIOC_S_VOUT_PIPELINE:
-	case VIDIOC_S_SCALER_CROP:	
+	case VIDIOC_S_SCALER_CROP:
+	case VIDIOC_S_UART_MODE:	
 		ret = do_video_ioctl(file, cmd, arg);
 		break;
 

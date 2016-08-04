@@ -320,7 +320,8 @@ static int dsi_p_wuxga_10_1_enable(struct device *dev)
 			goto fail;
 		}
 	}
-
+	
+#if 0
 	msleep(100);
 #if DSI_PANEL_RESET
 	err = tegra_panel_reset(&panel_of, 20);
@@ -334,6 +335,7 @@ static int dsi_p_wuxga_10_1_enable(struct device *dev)
 		gpio_set_value(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio, 1);
 		msleep(20);
 	}
+#endif
 #endif
 
 	return 0;

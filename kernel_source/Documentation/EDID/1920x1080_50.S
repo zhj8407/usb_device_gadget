@@ -27,18 +27,18 @@
 #define XPIX 1920
 #define YPIX 1080
 #define XY_RATIO XY_RATIO_16_9
-#define XBLANK 280 /* 2200 - 1920 = 280 */
+#define XBLANK 720  /* 2640 - 1920 = 720 */
 #define YBLANK 45 /* 1125 - 1080 = 45*/
-#define XOFFSET 88 /* 2008 - 1920  = 88 */
-#define XPULSE 44 /*  2052 -2008 = 44 */
+#define XOFFSET 528  /* 2448  - 1920  = 528  */
+#define XPULSE 44 /*  2492  - 2448 = 44 */
 #define YOFFSET (63+4) /* 1084 - 1080 =4 */
-#define YPULSE (63+4) /*  1088 - 1084 = 4*/
+#define YPULSE (63+5) /*  1089 - 1084 = 5*/
 #define DPI 96
-#define VFREQ 60 /* Hz */
+#define VFREQ 50 /* Hz */
 #define TIMING_NAME "Linux FHD"
 #define ESTABLISHED_TIMINGS_BITS 0x00 /* none */
-#define HSYNC_POL 0
-#define VSYNC_POL 0
+#define HSYNC_POL 1
+#define VSYNC_POL 1
 #define CRC 0x05
 
 #include "edid.S"
