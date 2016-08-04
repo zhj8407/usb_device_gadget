@@ -11,6 +11,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "hid_lync_display.h"
+
 #define BUF_LEN 512
 
 #define MYPORT 1234
@@ -19,7 +21,7 @@
 
 #define BUF_SIZE 200
 
-#define GET_MIC_MUTE_CMD "--GetMicMute"
+#define GET_MIC_MUTE_CMD "GetMicMute"
 
 int fd_A[BACKLOG];
 int conn_amount;
@@ -227,13 +229,13 @@ int joystick_fill_report(char report[8], char buf[BUF_LEN], int *hold)
 }
 
 static struct options lval[] = {
-    {.opt = "--volumeup",   .val = 0x01, .val2 = 0x01},
-    {.opt = "--volumedown", .val = 0x01, .val2 = 0x02},
-    {.opt = "--flash",      .val = 0x02, .val2 = 0x08},
-    {.opt = "--delete",     .val = 0x02, .val2 = 0x10},
-    {.opt = "--micmute",    .val = 0x02, .val2 = 0x04},
-    {.opt = "--hookon",     .val = 0x02, .val2 = 0x03},
-    {.opt = "--hookoff",    .val = 0x02, .val2 = 0x01},
+    {.opt = "volumeup",   .val = 0x01, .val2 = 0x01},
+    {.opt = "volumedown", .val = 0x01, .val2 = 0x02},
+    {.opt = "flash",      .val = 0x02, .val2 = 0x08},
+    {.opt = "delete",     .val = 0x02, .val2 = 0x10},
+    {.opt = "micmute",    .val = 0x02, .val2 = 0x04},
+    {.opt = "hookon",     .val = 0x02, .val2 = 0x03},
+    {.opt = "hookoff",    .val = 0x02, .val2 = 0x01},
     {.opt = NULL}
 };
 
@@ -245,9 +247,9 @@ int lync_hid_fill_report(char report[8], char buf[BUF_LEN], int *hold)
     if (!tok)
         return 2;
 
-    if (strncmp(tok, "--quit", 6) == 0)
+    if (strncmp(tok, "quit", 4) == 0)
         return -1;
-    else if (strncmp(tok, "--hold", 6) == 0) {
+    else if (strncmp(tok, "hold", 4) == 0) {
         *hold = 1;
         return 2;
     }
@@ -459,12 +461,14 @@ int main(int argc, const char *argv[])
 
         if (FD_ISSET(fd, &rfds)) {
             cmd_len = read(fd, buf, BUF_LEN - 1);
-            printf("recv report:");
+            printf("\nrecv report:");
 
             for (i = 0; i < cmd_len; i++)
                 printf(" %02x", buf[i]);
 
             printf("\n");
+            if (argv[2][0] == 'l' && cmd_len > 0)
+                lync_display_process_set_report((unsigned char *)buf, (unsigned int)cmd_len);
         }
 
         if (!daemon && FD_ISSET(STDIN_FILENO, &rfds)) {

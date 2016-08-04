@@ -6,7 +6,7 @@ LDFLAGS		:= -g
 
 all: hid_gadget_test
 
-hid_gadget_test: hid_gadget_test.o
+hid_gadget_test: hid_gadget_test.o hid_lync_display.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
 clean:
