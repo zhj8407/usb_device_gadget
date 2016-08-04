@@ -23,22 +23,23 @@
 #define REVISION 3
 
 /* Display */
-#define CLOCK 148500 /* kHz */
-#define XPIX 1920
-#define YPIX 1080
+#define CLOCK 74250 /* kHz */
+#define XPIX 1280
+#define YPIX 720
 #define XY_RATIO XY_RATIO_16_9
-#define XBLANK 280 /* 2200 - 1920 = 280 */
-#define YBLANK 45 /* 1125 - 1080 = 45*/
-#define XOFFSET 88 /* 2008 - 1920  = 88 */
-#define XPULSE 44 /*  2052 -2008 = 44 */
-#define YOFFSET (63+4) /* 1084 - 1080 =4 */
-#define YPULSE (63+4) /*  1088 - 1084 = 4*/
+#define XBLANK   700  /*  1980 -1280 = 700 */
+#define YBLANK  30  /* 750 -720 = 30*/
+#define XOFFSET 440  /*  1720 - 1280 = 440*/
+#define XPULSE  40  /*1760 - 1720 = 40  */
+#define YOFFSET (5 + 63) /* 725- 720 = 5*/
+#define YPULSE  (5 + 63) /* 730 -725 = 5 */
 #define DPI 96
-#define VFREQ 60 /* Hz */
-#define TIMING_NAME "Linux FHD"
+#define VFREQ 50 /* Hz */
+#define TIMING_NAME "Linux HD"
 #define ESTABLISHED_TIMINGS_BITS 0x00 /* none */
-#define HSYNC_POL 0
-#define VSYNC_POL 0
-#define CRC 0x05
+#define HSYNC_POL 1
+#define VSYNC_POL 1
+#define CRC 0x94
 
 #include "edid.S"
+

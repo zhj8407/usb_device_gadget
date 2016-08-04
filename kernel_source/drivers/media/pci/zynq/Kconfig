@@ -11,6 +11,15 @@ config VIDEO_ZYNQ
 	  To compile this driver as a module, choose M here: the
 	  module will be called zynq
 
+config VIDEO_ZYNQ_HDMI  
+	tristate "ADV762X HDMI Transceiver support"
+	depends on I2C 
+	help
+	  This is a driver for ADV762X's control module.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called hdmitrans
+	  
 config SERIAL_ZYNQ_CONSOLE
 	bool "Support for console on ZYNQ serial port"
 	depends on VIDEO_ZYNQ=y || VIDEO_ZYNQ=m

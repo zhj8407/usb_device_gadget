@@ -1647,23 +1647,28 @@ static int adv7511_probe(struct i2c_client *client, const struct i2c_device_id *
 	if (err)
 		goto err_hdl;
 	
-	irq = gpio_to_irq(pdata->gpio);
+	state->irq = -1;
+	if (pdata->gpio != -1) {
 	
-	if (irq <= 0) {
-		err = -ENODEV;
-		v4l_err(client, "IRQ not found\n");
-		goto err_gpio;
-	}
+		irq = gpio_to_irq(pdata->gpio);
+	
+		if (irq <= 0) {
+			err = -ENODEV;
+			v4l_err(client, "IRQ not found\n");
+			goto err_gpio;
+		}
 
-	err = request_irq(irq, adv7511x_irq_handler, IRQF_SHARED | IRQF_TRIGGER_RISING,
-			  ADV7511_DRIVER_NAME, state);
-	if (err) {
-		v4l_err(client, "IRQ setup failed\n");
-		goto err_gpio;
+		err = request_irq(irq, adv7511x_irq_handler, IRQF_SHARED | IRQF_TRIGGER_RISING,
+			  	ADV7511_DRIVER_NAME, state);
+		if (err) {
+			v4l_err(client, "IRQ setup failed\n");
+			goto err_gpio;
+		}
+		v4l2_info(sd, "Set GPIO %d as interrupt %d.\n", pdata->gpio, irq);
+		state->irq = irq;
+	} else {
+		v4l2_info(sd, "jeff Not set interrupt !!\n");
 	}
-	v4l2_info(sd, "Set GPIO %d as interrupt %d.\n", pdata->gpio, irq);
-	state->irq = irq;
-	
 	
 #ifndef  IS_VIRTUAL_DEV
 	/* EDID and CEC i2c addr */
@@ -1723,7 +1728,7 @@ static int adv7511_probe(struct i2c_client *client, const struct i2c_device_id *
 	
 #endif
 	
-	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name, client->addr, client->adapter->name);
+	v4l2_info(sd, "jeff %s found @ 0x%x (%s)\n", client->name, client->addr, client->adapter->name);
 	//v4l2_info(sd, "edid addr: 0x%02x, cec addr: 0x%02x, cec_clk: %u \n", state->pdata.i2c_edid,  state->pdata.i2c_cec,  state->pdata.cec_clk);
 	
 	return 0;

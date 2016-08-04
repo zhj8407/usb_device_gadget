@@ -57,6 +57,7 @@ extern  unsigned int board_subdev_info_num;
 
 extern vpif_vidoe_pipelie_entity_t  board_video_pipeline_entities[];
 extern unsigned int board_video_pipeline_entity_num;
+extern vpif_vidoe_pipelie_entity_t webcam_pipeline_entity;
 
 vpif_vidoe_pipelie_entity_t *board_find_video_pipeline_entity(vpif_vidoe_pipelie_entity_id_t id);
 const char *to_video_pipelin_entity_name(vpif_vidoe_pipelie_entity_id_t  id);

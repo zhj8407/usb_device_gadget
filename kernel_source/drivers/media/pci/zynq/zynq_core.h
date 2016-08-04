@@ -14,7 +14,8 @@
 #include "modules/zynq_regs.h"
 #include "zynq_fpga_verify.h"
 #include "zynq_debug.h"
-
+#include "modules/zynq_scaler.h"
+#include "zynq_control.h"
 /* Maximum channel allowed */
 #define VPIF_NUM_CHANNELS		(4)
 #define VPIF_CAPTURE_NUM_CHANNELS	(6)
@@ -25,6 +26,7 @@ extern unsigned int g_video_cap_en[VPIF_CAPTURE_NUM_CHANNELS];
 extern unsigned int g_video_display_nr[VPIF_DISPLAY_NUM_CHANNELS];
 extern unsigned int g_video_display_en[VPIF_DISPLAY_NUM_CHANNELS];
 extern unsigned int g_video_control_nr[1];
+extern  int  m10mo_get_resolution(unsigned int *width, unsigned int *height);
 
 /* Macros to read/write registers */
 extern void __iomem *zynq_reg_base;
@@ -278,33 +280,75 @@ static inline void enable_channel5(int enable) {
     return;
 }
 ///////////////////////////////////////////////////////////////////////////////
-static inline void ch0_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch0_set_videobuf_res(unsigned long width, unsigned long height) {
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
 }
 
-static inline void ch1_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch1_set_videobuf_res(unsigned long width, unsigned long height) {
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
+}
+#if 0
+static inline int  webcam_stream_enable(unsigned int enable) {
+  	u32 val = 0;
+	
+    if (!zynq_reg_base) return -1;
+
+	val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+	if (enable)
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
+	else
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
+	
+    return 0;	
+}
+#endif
+static inline int webcam_set_videobuf_res(unsigned long width, unsigned long height) {
+#if 0
+	void __iomem *base =   zynq_reg_base;
+	unsigned int in_width =(unsigned int)-1;
+    unsigned int in_height =(unsigned int)-1;
+	
+	m10mo_get_resolution(&in_width, &in_height);
+	
+	if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) {
+		zynq_printk(0, "[zynq_core] Could not set the resolution of web cam !!\n");
+		return;
+	} else {
+		zynq_printk(0, "[zynq_core] Set the resolution of web cam from (%u, %u) to (%lu, %lu)\n", in_width, in_height, width, height);
+	}
+	webcam_stream_enable(0);
+	fpga_reg_write(base,  FPGA_WEBCAM_VIDEO_RES_REG, ((width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | height));
+	webcam_stream_enable(1);
+#endif
+	return vpif_control_config_webcam_res(width, height );
+	
 }
 
-static inline void ch2_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch2_set_videobuf_res(unsigned long width, unsigned long height) {
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
 }
 
-static inline void ch3_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch3_set_videobuf_res(unsigned long width, unsigned long height) {
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
 
 }
-static inline void ch4_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch4_set_videobuf_res(unsigned long width, unsigned long height) {
 	void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
 }
-static inline void ch5_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch5_set_videobuf_res(unsigned long width, unsigned long height) {
 	void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
+	return 0;
 }
 ///////////////////////////////////////////////////////////////////////////////
 

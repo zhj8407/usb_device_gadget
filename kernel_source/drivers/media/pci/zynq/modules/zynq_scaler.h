@@ -3,7 +3,7 @@
 #include <linux/io.h>
 
 /*Refer from : http://www.xilinx.com/support/documentation/ip_documentation/v_scaler/v8_0/pg009_v_scaler.pdf*/
-#define SCALER_MAX_NUM 4
+#define SCALER_MAX_NUM 5
 #define SCALER_COEF_DATA_ROW_NUM  4
 #define SCALER_COEF_DATA_COL_NUM 4
 extern short scaler_coef_data_0[SCALER_COEF_DATA_ROW_NUM][SCALER_COEF_DATA_COL_NUM];
@@ -64,6 +64,8 @@ int scaler_initial(void __iomem *pci_base_addr);
 
 int scaler_initial_by_index(void __iomem *pci_base_addr, unsigned index);
 
+int scaler_release_by_index(void __iomem *pci_base_addr, unsigned index);
+
 int scaler_setoption(EScalerOptionFlags flag, void *userdata, unsigned  index);
 
 int scaler_reset(unsigned index);
@@ -83,6 +85,8 @@ int  scaler_disable_reg_update(unsigned index);
 void scaler_get_status(scaler_status_t *st, unsigned index);
 
 int scaler_config_input_size(unsigned index, unsigned int in_width, unsigned int in_height) ;
+
+int scaler_config_output_size(unsigned index, unsigned int out_width, unsigned int out_height) ;
 
 int scaler_config_crop(unsigned int index,  unsigned int crop_start_x,  unsigned int crop_start_y,  unsigned int crop_width, unsigned int crop_height) ;
 

@@ -68,7 +68,9 @@ typedef enum  {
     PCIEIF_IN = 42,
     PCIEIF_OUT = 43,
     VPINNONE = 44, //means none pin
-    VPINNUM = 45
+	SCALER4_IN =45,
+    SCALER4_OUT = 46,
+    VPINNUM = 47
 } vpif_video_data_pin_t;
 
 #define VIN_0 (VIN0_IN)
@@ -103,7 +105,8 @@ typedef enum {
     VOUT1 = 22,
     PCIEIF =23,
     VUNKOWNPIPELINEID = 24,
-    VPIPELINEIDNUM = 25
+	SCALER4 = 25,
+    VPIPELINEIDNUM = 26
 } vpif_vidoe_pipelie_entity_id_t ;
 
 typedef enum {

@@ -68,7 +68,7 @@ struct common_obj {
     u8 started;
     /* Function pointer to set the addresses */
     void (*set_addr) (unsigned long, unsigned long);
-    void (*set_res) (unsigned long, unsigned long);
+    int (*set_res) (unsigned long, unsigned long);
     void (*enable_channel) (int);
     void (*enable_channel_intr)(int);
     void (*enable_channel_video)(int);
@@ -90,6 +90,8 @@ struct common_obj {
     u8 is_stop_streaming;
 
     atomic_t refcount;
+	
+	unsigned int reqbuf_count; 
 };
 
 struct channel_obj {

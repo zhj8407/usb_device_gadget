@@ -35,7 +35,7 @@
 #include <media/m10mo.h>
 #include <linux/m10mo-ioctl.h>
 
-#define M10MO_FW_NAME		"/data/m10mo.bin"
+#define M10MO_FW_NAME		"/lib/firmware/ISP/m10mo.bin"
 
 static struct file *gM10MO_FileID;
 static mm_segment_t fs_old;
@@ -1216,6 +1216,46 @@ static void __exit m10mo_exit(void)
     unregister_chrdev_region(m10mo_dev_t, 1);
     kfree(m10mo_des);
 }
+
+
+int m10mo_get_resolution(unsigned int *width, unsigned int *height) {
+	 
+	int ret = 0;
+    u32 cat_addr = 0, byte_N = 0;
+	unsigned int uRegValue = 0;
+ 
+    struct i2c_client *client = NULL;
+	
+	if (!m10mo_des) return -1;
+	
+	client =   m10mo_des->client;
+
+	cat_addr = 0x1;
+	byte_N = 0x1;
+	
+	if (client) {
+		ret = M10MO_ReadOneByteCRAM(client, cat_addr, byte_N);
+		uRegValue = (unsigned int)ret;
+		switch (uRegValue) {
+			case 0x28:
+				*width = 1920;
+				*height =1080;
+				break;
+			case 0x21:
+				*width = 1280;
+				*height =720;
+				break;
+			default:
+				break;
+		}
+	}
+	
+	return 0;
+	
+}
+EXPORT_SYMBOL_GPL(m10mo_get_resolution);
+
+
 
 module_init(m10mo_init);
 module_exit(m10mo_exit);

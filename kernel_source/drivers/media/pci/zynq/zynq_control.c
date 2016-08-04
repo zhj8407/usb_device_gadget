@@ -26,6 +26,8 @@
 
 extern unsigned int en_er_board;
 
+extern  int  m10mo_get_resolution(unsigned int *width, unsigned int *height);
+
 /////////////////////////////////////////////////////////////////////////////
 unsigned int en_modules = 1;
 module_param(en_modules, int, 0644);
@@ -46,6 +48,8 @@ static atomic_t g_is_vin2_valid;
 static atomic_t g_is_cpuin_valid;
 static atomic_t g_is_should_reset;
 
+static struct pci_dev *g_pci_dev = NULL;
+
 static u32 fpga_release_date = 0;
 static int config_all_video_pipeline_entities(void __iomem *pci_reg_base);
 //static int dump_all_video_pipeline_entities(void __iomem *pci_reg_base) ;
@@ -55,6 +59,14 @@ static int release_all_video_pipeline_entities(void __iomem *pci_reg_base);
 static int init_all_video_pipeline_entities(void __iomem *pci_reg_base);
 static int create_register_dump_sysfs(struct kobject *kobj);
 static int destroy_register_dump_sysfs(struct kobject *kobj);
+
+static void config_scaler(vpif_vidoe_pipelie_entity_t *entity);
+static void config_vselector(vpif_vidoe_pipelie_entity_t *entity) ;
+static void config_osd(vpif_vidoe_pipelie_entity_t *entity);
+static void config_resampler(vpif_vidoe_pipelie_entity_t *entity) ;
+static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity);
+static void config_vdma(vpif_vidoe_pipelie_entity_t *entity);
+
 /////////////////////////////////////////////////////////////////////////////
 
 static unsigned int is_initial_vpif_obj = 0;
@@ -233,6 +245,113 @@ static int vpif_control_enable_video_streams(unsigned int enable)
     return  0;
 }
 
+int vpif_control_config_webcam_enable(unsigned int enable) {
+
+  u32 val = 0;
+    if (!zynq_reg_base) return -1;
+
+    if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
+		val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+		if (enable)
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
+		else
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
+		val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+       	zynq_printk(0, "[zynq_control] (%d) enable web cam video stream reg: 0x%08x\n", __LINE__, val);
+	}
+    return 0;
+
+	
+}
+
+int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_height ) {
+	
+	vpif_vidoe_pipelie_entity_config_t config;
+    scaler_size_t size;
+    scaler_crop_area_t crop;
+    scaler_num_phases_t phases;
+    scaler_coef_data_t  coef_data;
+    scaler_shrink_factor_t shrink_factor;
+	unsigned int crop_start_x = 0;
+    unsigned int crop_start_y = 0;
+    unsigned int crop_width = (unsigned int)-1;
+    unsigned int crop_height = (unsigned int)-1;
+	unsigned int in_width =(unsigned int)-1;
+    unsigned int in_height =(unsigned int)-1;
+	
+    vpif_vidoe_pipelie_entity_t *entity = &webcam_pipeline_entity;
+
+	m10mo_get_resolution(&in_width, &in_height);
+	
+	if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) return -1;
+	
+	if ((out_width * out_height) > (in_width * in_height)) {
+		zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because out:(%u, %u) > in:(%u, %u)\n", out_width, out_height, in_width, in_height);
+		return -1;
+	}
+	
+	crop_width = in_width;
+	crop_height = in_height;
+	
+	if (!entity) {
+		zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because the entity is NULL!!\n");
+		return  -1;
+	} else {
+		zynq_printk(0, "[zynq_control] Set the resolution of web cam from (%u, %u) to (%u, %u)\n", in_width, in_height, out_width, out_height);
+	}
+	
+	vpif_control_config_webcam_enable(0);
+	fpga_reg_write(zynq_reg_base,  FPGA_WEBCAM_VIDEO_RES_REG, ((out_width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | out_height));
+#if 1
+	entity->stop(entity);
+	entity->rls(entity, zynq_reg_base);
+    entity->init(entity, zynq_reg_base);
+	
+	config.flag =  SCALER_OPTION_SET_IN_SIZE;
+    size.width = in_width;
+    size.height = in_height;
+    config.data = &size;
+    entity->config(entity,  &config);
+
+    config.flag = SCALER_OPTION_SET_OUT_SIZE;
+    size.width = out_width;
+    size.height = out_height;
+    config.data = &size;
+    entity->config(entity,  &config);
+
+
+    config.flag = SCALER_OPTION_SET_CROP;
+    crop.start_x= crop_start_x;
+    crop.start_y= crop_start_y;
+    crop.width= crop_width;
+    crop.height= crop_height;
+    config.data = &crop;
+    entity->config(entity,  &config);
+
+    config.flag = SCALER_OPTION_SET_SHRINK_FACTOR;
+    shrink_factor.hsf = ((crop_width << 20 )/out_width);
+    shrink_factor.vsf = ((crop_height << 20)/out_height);
+    config.data = &shrink_factor;
+    entity->config(entity,  &config);
+
+
+    config.flag = SCALER_OPTION_SET_NUM_PHASES;
+    phases.num_h_phases = 4;
+    phases.num_v_phases = 4;
+    config.data = &phases;
+    entity->config(entity,  &config);
+
+    config.flag = SCALER_OPTION_SET_COEF_DATA;
+    coef_data.coef_data = scaler_coef_data_0;
+    config.data=&coef_data;
+    entity->config(entity,  &config);
+
+	entity->start(entity);
+#endif
+	vpif_control_config_webcam_enable(1);
+	return 0;
+}
+
 int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable)
 {
     switch (id) {
@@ -320,6 +439,10 @@ static unsigned int vpif_control_is_valid(ePIPEPORTID id) {
 
 int vpif_control_init_pipeline(struct pci_dev *pdev) {
     if (!pdev) return -1;
+	
+	
+	g_pci_dev = pdev;
+	
 /////////////////////////////////////////////////////////////////////
     /*FPGA  initialize function*/
     fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG) ;
@@ -886,6 +1009,9 @@ static int vpif_scaler_crop(struct file *file, void *fh, struct v4l2_scaler_crop
         case 3:
             id = SCALER3;
             break;
+		case 4:
+            id = SCALER4;
+            break;	
         default:
             goto exit;
     }
@@ -973,12 +1099,6 @@ static int dump_all_video_pipeline_entities(void __iomem *pci_reg_base)
 }
 #endif
 
-static void config_scaler(vpif_vidoe_pipelie_entity_t *entity);
-static void config_vselector(vpif_vidoe_pipelie_entity_t *entity) ;
-static void config_osd(vpif_vidoe_pipelie_entity_t *entity);
-static void config_resampler(vpif_vidoe_pipelie_entity_t *entity) ;
-static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity);
-static void config_vdma(vpif_vidoe_pipelie_entity_t *entity);
 
 static int config_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
@@ -1262,7 +1382,7 @@ static void config_scaler(vpif_vidoe_pipelie_entity_t *entity) {
     unsigned int out_width = default_in_width >> 2;
     unsigned int out_height = default_in_height >> 2;
 
-    //zynq_printk(0, "[zynq_core][scaler_config](%d)id = %d\n", __LINE__,entity->id);
+ //   zynq_printk(0, "[zynq_control][scaler_config](%d)id = %s\n", __LINE__,to_video_pipelin_entity_name(entity->id));
 
     config.flag =  SCALER_OPTION_SET_IN_SIZE;
     size.width = in_width;
@@ -1327,6 +1447,9 @@ static int set_register(vpif_vidoe_pipelie_entity_id_t  id, u16 offset, u32 valu
         case SCALER3:
             scaler_set_reg(3, offset, value);
             break;
+		case SCALER4:
+            scaler_set_reg(4, offset, value);
+            break;	
         case VSELECTOR:
             vselector_set_reg(offset, value);
             break;
@@ -1400,6 +1523,9 @@ static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_s
         case SCALER3:
             scaler_get_regs(3, &cfg_regs);
             break;
+		case SCALER4:
+            scaler_get_regs(4, &cfg_regs);
+            break;	
         case VSELECTOR:
             vselector_get_regs(&cfg_regs);
             break;
@@ -1474,7 +1600,10 @@ static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *b
     } else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(SCALER3)) == 0) {
         id = SCALER3;
         str = g_scaler_regs_dump_str[3];
-    }  else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(VSELECTOR)) == 0) {
+    } else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(SCALER4)) == 0) {
+        id = SCALER4;
+        str = g_scaler_regs_dump_str[4];
+    } else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(VSELECTOR)) == 0) {
         id = VSELECTOR ;
         str = g_vselector_regs_dump_str[0];
     } else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(OSD0)) == 0) {
@@ -1599,6 +1728,9 @@ static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const 
     } else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(SCALER3)) == 0) {
         id = SCALER3;
         got = 1;
+    }  else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(SCALER4)) == 0) {
+        id = SCALER4;
+        got = 1;
     }  else  if (strcmp(attr->attr.name, to_video_pipelin_entity_name(VSELECTOR)) == 0) {
         id = VSELECTOR ;
         got = 1;
@@ -1652,6 +1784,7 @@ static struct kobj_attribute scaler0_attribute = __ATTR(SCALER0,  S_IRUGO |  S_I
 static struct kobj_attribute scaler1_attribute = __ATTR(SCALER1,  S_IRUGO |  S_IWUGO, b_show, b_store);
 static struct kobj_attribute scaler2_attribute = __ATTR(SCALER2,  S_IRUGO |  S_IWUGO, b_show, b_store);
 static struct kobj_attribute scaler3_attribute = __ATTR(SCALER3,  S_IRUGO |  S_IWUGO , b_show, b_store);
+static struct kobj_attribute scaler4_attribute = __ATTR(SCALER4,  S_IRUGO |  S_IWUGO , b_show, b_store);
 static struct kobj_attribute vselector_attribute = __ATTR(VSELECTOR,  S_IRUGO |  S_IWUGO, b_show, b_store);
 static struct kobj_attribute osd0_attribute = __ATTR(OSD0,  S_IRUGO |  S_IWUGO, b_show, b_store);
 static struct kobj_attribute osd1_attribute = __ATTR(OSD1,  S_IRUGO |  S_IWUGO, b_show, b_store);
@@ -1672,6 +1805,7 @@ static struct attribute *attrs[] = {
     (struct attribute *)&scaler1_attribute,
     (struct attribute *)&scaler2_attribute,
     (struct attribute *)&scaler3_attribute,
+    (struct attribute *)&scaler4_attribute,
     (struct attribute *)&vselector_attribute,
     (struct attribute *)&osd0_attribute,
     (struct attribute *)&osd1_attribute,

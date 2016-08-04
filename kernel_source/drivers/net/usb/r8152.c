@@ -5676,6 +5676,9 @@ static void r8153_init(struct r8152 *tp)
 	ocp_data &= ~LED_MODE_MASK;
 	ocp_write_word(tp, MCU_TYPE_PLA, PLA_LED_FEATURE, ocp_data);
 
+	//LED0: LINK ACTIVE, LED1: LINK 1000
+	ocp_write_word(tp, MCU_TYPE_PLA, PLA_LEDSEL, 0x4f);
+
 	ocp_data = FIFO_EMPTY_1FB | ROK_EXIT_LPM;
 	if (tp->version == RTL_VER_04 && tp->udev->speed != USB_SPEED_SUPER)
 		ocp_data |= LPM_TIMER_500MS;

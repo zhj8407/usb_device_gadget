@@ -22,4 +22,8 @@ int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable);
 
 int vpif_control_config_reset(unsigned int enable);
 
+int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_height);
+
+int vpif_control_config_webcam_enable( unsigned int value);
+
 #endif
