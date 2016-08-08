@@ -239,7 +239,9 @@ static void done(struct tegra_ep *ep, struct tegra_req *req, int status)
 
 	ep->stopped = 1;
 #ifdef CONFIG_TEGRA_GADGET_BOOST_CPU_FREQ
-	if (req->req.complete && req->req.length >= BOOST_TRIGGER_SIZE)
+	if (req->req.complete &&
+			(req->req.length >= BOOST_TRIGGER_SIZE ||
+			ep->ep.mult > 0))
 		ep_queue_request_count--;
 #endif
 
@@ -917,12 +919,12 @@ static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
 	if (req->ep->ep.mult &&
 			((req->ep->desc->bmAttributes & 0x3)==USB_ENDPOINT_XFER_ISOC)) {
 		if (*length <= req->ep->ep.maxpacket) {
-			DBG("build dtd: Mult0 1 \n");
+			/* DBG("build dtd: Mult0 1 \n"); */
 			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
 			swap_temp |= 0x00000400;
 			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
 		} else if (*length <= req->ep->ep.maxpacket * req->ep->ep.mult) {
-			DBG("build dtd: Mult0 2 \n");
+			/* DBG("build dtd: Mult0 2 \n"); */
 			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
 			swap_temp |= 0x00000800;
 			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
@@ -1005,7 +1007,8 @@ tegra_ep_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 	}
 
 #ifdef CONFIG_TEGRA_GADGET_BOOST_CPU_FREQ
-	if (req->req.length >= BOOST_TRIGGER_SIZE) {
+	if (req->req.length >= BOOST_TRIGGER_SIZE ||
+			ep->ep.mult > 0) {
 		ep_queue_request_count++;
 		schedule_work(&udc->boost_cpufreq_work);
 	}
