@@ -1028,14 +1028,14 @@ uvc_events_process(struct uvc_device *dev)
         case UVC_EVENT_STREAMON:
             uvc_video_reqbufs(dev, 2);
             uvc_video_stream(dev, 1);
-            break;
+            return;
 
         case UVC_EVENT_STREAMOFF:
             // Cacel the alarm.
             alarm(0);
             uvc_video_stream(dev, 0);
             uvc_video_reqbufs(dev, 0);
-            break;
+            return;
     }
 
     //Ignore the SET_CUR event. Because we have triggle the transfer
