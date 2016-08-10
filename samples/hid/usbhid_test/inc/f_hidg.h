@@ -1,0 +1,1 @@
+../../../../kernel_source/drivers/usb/gadget/f_hidg.h

@@ -17,6 +17,8 @@
 #include "hid_lync_display.h"
 #endif
 
+#include "f_hidg.h"
+
 #define BUF_LEN 512
 
 #define MYPORT 1234
@@ -444,7 +446,7 @@ int main(int argc, const char *argv[])
     struct udev_list_entry *properties, *props_list_entry;
     struct udev_monitor *mon;
     int fd_dev;
-    char hid_cmd[8];
+    struct hidg_report_data hidg_report;
     int status = 0;
     udev = udev_new();
     int value;
@@ -510,33 +512,37 @@ int main(int argc, const char *argv[])
                 properties = udev_device_get_properties_list_entry(dev);
                 udev_list_entry_foreach(props_list_entry, properties) {
                     if (!strcmp(udev_list_entry_get_name(props_list_entry), "HID_EVENT")) {
-                        memset(hid_cmd, 0, sizeof(hid_cmd));
+                        memset(&hidg_report, 0, sizeof(struct hidg_report_data));
                         value = atoi(udev_list_entry_get_value(props_list_entry));
                         length = value & 0xFF;
                         value = value >> 8;
 
                         if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature &&
                                 (value & 0xFF) == USBHID_VENDOR_EXT_REPORT_ID) {
-                            hid_cmd[0] = USBHID_VENDOR_EXT_REPORT_ID;
-                            hid_cmd[1] = USBHID_VENDOR_EXT_REPORT_VENDOR_ID & 0xff;
-                            hid_cmd[2] = (USBHID_VENDOR_EXT_REPORT_VENDOR_ID >> 8) & 0xff;
-                            hid_cmd[3] = USBHID_VENDOR_EXT_REPORT_VERSION & 0xff;
-                            hid_cmd[4] = (USBHID_VENDOR_EXT_REPORT_VERSION >> 8) & 0xff;
+                            hidg_report.length = 5;
+                            hidg_report.data[0] = USBHID_VENDOR_EXT_REPORT_ID;
+                            hidg_report.data[1] = USBHID_VENDOR_EXT_REPORT_VENDOR_ID & 0xff;
+                            hidg_report.data[2] = (USBHID_VENDOR_EXT_REPORT_VENDOR_ID >> 8) & 0xff;
+                            hidg_report.data[3] = USBHID_VENDOR_EXT_REPORT_VERSION & 0xff;
+                            hidg_report.data[4] = (USBHID_VENDOR_EXT_REPORT_VERSION >> 8) & 0xff;
                         } else if (((value >> 8) & 0xFF) == USB_HID_ReportType_Feature
                                    && (value & 0xFF) == USBHID_DISP_ATTR_REPORT_ID) {
-                            hid_cmd[0] = USBHID_DISP_ATTR_REPORT_ID;
-                            hid_cmd[1] = USBHID_DISP_ATTR_REPORT_ROWS;
-                            hid_cmd[2] = USBHID_DISP_ATTR_REPORT_COLS;
-                            hid_cmd[3] = USBHID_DISP_ATTR_REPORT_DFSI & 0xff;
-                            hid_cmd[4] = (USBHID_DISP_ATTR_REPORT_DFSI >> 8) & 0xff;
+                            hidg_report.length = 5;
+                            hidg_report.data[0] = USBHID_DISP_ATTR_REPORT_ID;
+                            hidg_report.data[1] = USBHID_DISP_ATTR_REPORT_ROWS;
+                            hidg_report.data[2] = USBHID_DISP_ATTR_REPORT_COLS;
+                            hidg_report.data[3] = USBHID_DISP_ATTR_REPORT_DFSI & 0xff;
+                            hidg_report.data[4] = (USBHID_DISP_ATTR_REPORT_DFSI >> 8) & 0xff;
                         } else {
                             printf("WARNING:The HID_EVENT is not processed yet!\n");
                         }
 
-                        status = ioctl(fd, &hid_cmd, length);
+                        if (hidg_report.length > 0) {
+                            status = ioctl(fd, HIDG_IOC_SEND_VENDOR_REPORT, &hidg_report);
 
-                        if (status != 0) {
-                            printf("sent ioctl message failed! status=%d\n", status);
+                            if (status != 0) {
+                                printf("sent ioctl message failed! status=%d\n", status);
+                            }
                         }
 
                         printf("HID uevent value=0x%x,length=%d, response status=%d\n", value, length, status);
