@@ -11,8 +11,6 @@
 
 #include "hid_lync_display.h"
 
-#define DEBUG
-
 static int micMute = 0;
 
 static void usbhidStatus_hostSetLed(unsigned char status)

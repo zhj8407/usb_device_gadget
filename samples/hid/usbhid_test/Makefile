@@ -5,14 +5,15 @@
 ###########################################################
 CC=/usr/bin/arm-linux-gnueabihf-gcc
 PROGRAM=UsbHid
+VISAGE_PLATFORM_DIR=/home/jiezhang/Dev/visage/platform/l4t_21_3
 # set compiler argument
 
-CROSS_LIB_PATH ?= /home/liwang/l4t_21_3/rootfs/lib/arm-linux-gnueabihf
+CROSS_LIB_PATH ?= $(VISAGE_PLATFORM_DIR)/rootfs/lib/arm-linux-gnueabihf
 #DFLAGS= -lpthread -lrt -L$(CROSS_LIB_PATH) -ludev
+CALL_DISPLAY=1
 
 ifeq ($(CALL_DISPLAY),1)
 CFLAGS = -DENABLE_CALL_DISPLAY=1
-CROSS_LIB_PATH ?= /home/liwang/l4t_21_3/rootfs/lib/arm-linux-gnueabihf
 LDFLAGS= -lpthread -lrt -L$(CROSS_LIB_PATH) -ludev
 else
 LDFLAGS= -lpthread -lrt
