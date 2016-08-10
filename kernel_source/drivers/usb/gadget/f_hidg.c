@@ -61,6 +61,14 @@ struct f_hidg {
 	struct usb_ep			*in_ep;
 	struct usb_ep			*out_ep;
 	struct usb_request		*out_reqs[XFER_INT_OUT_REQ_MAX_COUNT];
+
+	int report_request;
+
+	/* Protecting the get report request */
+	spinlock_t report_lock;
+
+	/* Work queue for uevent notification. */
+	struct work_struct report_notify_work;
 };
 
 static inline struct f_hidg *func_to_hidg(struct usb_function *f)
@@ -446,9 +454,7 @@ static int hidg_setup(struct usb_function *f,
 	struct usb_request		*req  = cdev->req;
 	int status = 0;
 	__u16 value, index, length;
-	char **uevent_envp = NULL;
-	char hidevent[32];
-	char *hid_uevent[2] = {hidevent, NULL};
+	unsigned long flags;
 
 	value	= __le16_to_cpu(ctrl->wValue);
 	index	= __le16_to_cpu(ctrl->wIndex);
@@ -462,14 +468,10 @@ static int hidg_setup(struct usb_function *f,
 	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
 		  | HID_REQ_GET_REPORT):
 		length = min_t(unsigned, length, hidg->report_length);
-		memset(hidevent,0,sizeof(hidevent));
-		snprintf(hidevent, sizeof(hidevent), "HID_EVENT=%d",(value << 8 | length));
-		uevent_envp = hid_uevent;
-		if (uevent_envp) {
-			kobject_uevent_env(&hidg_config->dev->kobj, KOBJ_CHANGE, uevent_envp);
-		} else {
-			VDBG(cdev,"%s: did not send uevent \n", __func__);
-			}
+		spin_lock_irqsave(&hidg->report_lock, flags);
+		hidg->report_request = ((value << 8) | length);
+		schedule_work(&hidg->report_notify_work);
+		spin_unlock_irqrestore(&hidg->report_lock, flags);
 		return 0;
 
 	case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
@@ -642,6 +644,35 @@ const struct file_operations f_hidg_fops = {
 	.unlocked_ioctl = f_hidg_ioctl,
 };
 
+static void hidg_report_notify(struct work_struct *data)
+{
+	struct f_hidg *hidg = container_of(data, struct f_hidg, report_notify_work);
+	char **uevent_envp = NULL;
+	struct device *dev = NULL;
+	char hidevent[32];
+	char *hid_uevent[2] = {hidevent, NULL};
+	unsigned long flags;
+
+	if(!hidg_config)
+		return;
+
+	dev = hidg_config->dev;
+
+	spin_lock_irqsave(&hidg->report_lock, flags);
+	memset(hidevent, 0, sizeof(hidevent));
+	snprintf(hidevent, sizeof(hidevent), "HID_EVENT=%d",hidg->report_request);
+	uevent_envp = hid_uevent;
+	spin_unlock_irqrestore(&hidg->report_lock, flags);
+
+	if (uevent_envp) {
+		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uevent_envp);
+		pr_info("%s: hidg sent uevent %s\n", __func__, uevent_envp[0]);
+	} else {
+		pr_info("%s: hidg did not send uevent request report: %d\n",
+			__func__, hidg->report_request);
+	}
+}
+
 static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct usb_ep		*ep;
@@ -706,6 +737,12 @@ static int hidg_bind(struct usb_configuration *c, struct usb_function *f)
 	init_waitqueue_head(&hidg->read_queue);
 	INIT_LIST_HEAD(&hidg->completed_out_req);
 
+	/* Initialize the report lock */
+	spin_lock_init(&hidg->report_lock);
+
+	/* Initialize the work queue */
+	INIT_WORK(&hidg->report_notify_work, hidg_report_notify);
+
 	/* create char device */
 	cdev_init(&hidg->cdev, &f_hidg_fops);
 	dev = MKDEV(major, hidg->minor);
@@ -736,6 +773,9 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_hidg *hidg = func_to_hidg(f);
 	int i = 0;
+
+	/* Cancel the pending work queue */
+	cancel_work_sync(&hidg->report_notify_work);
 
 	device_destroy(hidg_class, MKDEV(major, hidg->minor));
 	cdev_del(&hidg->cdev);
