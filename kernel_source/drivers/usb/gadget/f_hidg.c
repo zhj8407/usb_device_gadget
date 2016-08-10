@@ -1,5 +1,5 @@
 /*
- * f_hid.c -- USB HID function driver
+ * f_hidg.c -- USB HID function driver
  *
  * Copyright (C) 2015 Polycom, Inc.
  *
@@ -20,26 +20,13 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 
+#include "f_hidg.h"
+
 /*-------------------------------------------------------------------------*/
-#define HID_REPORT_DESC_MAX_LENGTH	2048
-#define USB_STRING_MAX_LENGTH 126
 
 #define XFER_INT_OUT_REQ_MAX_COUNT		4
 
 /*                            HID gadget struct                            */
-struct hidg_device_config {
-	int	device;
-	struct device *dev;
-
-	unsigned char bInterfaceSubClass;
-	unsigned char bInterfaceProtocol;
-
-	unsigned short report_length;
-	unsigned short report_desc_length;
-	unsigned char report_desc[HID_REPORT_DESC_MAX_LENGTH];
-	unsigned char lync_ucq_string[USB_STRING_MAX_LENGTH];
-};
-
 struct f_hidg_req_list {
 	struct usb_request	*req;
 	unsigned int		pos;
@@ -259,29 +246,50 @@ static void f_hidg_req_complete(struct usb_ep *ep, struct usb_request *req)
 	hidg->write_pending = 0;
 	wake_up(&hidg->write_queue);
 }
-static ssize_t f_hidg_ioctl(struct file *file, const char __user *buffer,
-				size_t count)
+
+static long f_hidg_ioctl(struct file *file, unsigned int cmd,
+				unsigned long arg)
 {
 	struct f_hidg *hidg = file->private_data;
-	ssize_t status = -ENOMEM;
-	struct usb_composite_dev	*cdev = hidg->func.config->cdev;
-	struct usb_request		*req  = cdev->req;
-	unsigned char *buf = (unsigned char *)req->buf;
-	count = min_t(unsigned int, count, hidg->report_length);
-	status = copy_from_user(buf, buffer, count);
+	u8 __user *uarg = (u8 __user *)arg;
+	struct hidg_report_data hidg_report;
+	struct usb_composite_dev *cdev = hidg->func.config->cdev;
+	struct usb_request *req = cdev->req;
+	int err;
+	unsigned int n = 0, count = 0;
 
-	if (status != 0) {
-		ERROR(cdev,
-			"copy_from_user error\n");
-		return -EINVAL;
+	switch(cmd) {
+	case HIDG_IOC_SEND_VENDOR_REPORT:
+		if (!(file->f_mode & FMODE_WRITE)) {
+			err = -EBADF;
+			break;
+		}
+
+		n = _IOC_SIZE(cmd);
+
+		if (copy_from_user(&hidg_report, uarg, n)) {
+			err = -EFAULT;
+			break;
+		}
+
+		count = hidg_report.length;
+
+		memcpy(req->buf, hidg_report.data, count);
+
+		req->zero = 0;
+		req->length = count;
+		err = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
+		if (err < 0)
+			ERROR(cdev, "usb_ep_queue error on ep0 err=%d,length=%d\n",
+				err, req->length);
+		break;
+
+	default:
+		err = -ENOTTY;
+		break;
 	}
-	req->zero = 0;
-	req->length = count;
-	status = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
-	if (status < 0)
-		ERROR(cdev, "usb_ep_queue error on ep0 status=%d,length=%d\n", status,req->length);
-	return status;
 
+	return err;
 }
 
 static ssize_t f_hidg_write(struct file *file, const char __user *buffer,
@@ -438,7 +446,6 @@ static int hidg_setup(struct usb_function *f,
 	struct usb_request		*req  = cdev->req;
 	int status = 0;
 	__u16 value, index, length;
-	unsigned char *buf = (unsigned char *)req->buf;
 	char **uevent_envp = NULL;
 	char hidevent[32];
 	char *hid_uevent[2] = {hidevent, NULL};
