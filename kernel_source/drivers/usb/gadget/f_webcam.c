@@ -253,7 +253,7 @@ static const struct UVC_FRAME_UNCOMPRESSED(4) uvc_frame_i420_360p = {
 	.dwMaxVideoFrameBufferSize	= cpu_to_le32(345600),
 	.dwDefaultFrameInterval	= cpu_to_le32(333333),
 	.bFrameIntervalType	= 4,
-	.dwFrameInterval[0] = cpu_to_le32(333333),
+	.dwFrameInterval[0]	= cpu_to_le32(333333),
 	.dwFrameInterval[1]	= cpu_to_le32(666666),
 	.dwFrameInterval[2]	= cpu_to_le32(1000000),
 	.dwFrameInterval[3]	= cpu_to_le32(5000000),
@@ -272,7 +272,7 @@ static const struct UVC_FRAME_UNCOMPRESSED(2) uvc_frame_i420_720p = {
 	.dwMaxVideoFrameBufferSize	= cpu_to_le32(1382400),
 	.dwDefaultFrameInterval	= cpu_to_le32(5000000),
 	.bFrameIntervalType	= 2,
-	.dwFrameInterval[0] = cpu_to_le32(1000000),
+	.dwFrameInterval[0]	= cpu_to_le32(1000000),
 	.dwFrameInterval[1]	= cpu_to_le32(5000000),
 };
 
@@ -370,8 +370,8 @@ static const struct UVC_FRAME_MJPEG(3) uvc_frame_mjpg_360p = {
 	.dwFrameInterval[2]	= cpu_to_le32(1000000),
 };
 
-static const struct UVC_FRAME_MJPEG(2) uvc_frame_mjpg_720p = {
-	.bLength		= UVC_DT_FRAME_MJPEG_SIZE(2),
+static const struct UVC_FRAME_MJPEG(1) uvc_frame_mjpg_720p = {
+	.bLength		= UVC_DT_FRAME_MJPEG_SIZE(1),
 	.bDescriptorType	= USB_DT_CS_INTERFACE,
 	.bDescriptorSubType	= UVC_VS_FRAME_MJPEG,
 	.bFrameIndex		= 2,
@@ -381,10 +381,9 @@ static const struct UVC_FRAME_MJPEG(2) uvc_frame_mjpg_720p = {
 	.dwMinBitRate		= cpu_to_le32(29491200),
 	.dwMaxBitRate		= cpu_to_le32(29491200),
 	.dwMaxVideoFrameBufferSize	= cpu_to_le32(1843200),
-	.dwDefaultFrameInterval	= cpu_to_le32(333333),
-	.bFrameIntervalType	= 2,
-	.dwFrameInterval[0]	= cpu_to_le32(333333),
-	.dwFrameInterval[1]	= cpu_to_le32(666666),
+	.dwDefaultFrameInterval	= cpu_to_le32(5000000),
+	.bFrameIntervalType	= 1,
+	.dwFrameInterval[0]	= cpu_to_le32(5000000),
 };
 
 static const struct UVC_FRAME_MJPEG(2) uvc_frame_mjpg_1080p = {
