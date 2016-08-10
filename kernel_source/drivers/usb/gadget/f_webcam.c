@@ -655,6 +655,7 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
 	struct usb_request *req = uvc->control_req;
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
+	int ret;
 
 	/* printk(KERN_INFO "setup request %02x %02x value %04x index %04x %04x\n",
 	 *	ctrl->bRequestType, ctrl->bRequest, le16_to_cpu(ctrl->wValue),
@@ -670,21 +671,29 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	if (le16_to_cpu(ctrl->wLength) > UVC_MAX_REQUEST_SIZE)
 		return -EINVAL;
 
-	if ((ctrl->bRequestType & USB_DIR_IN) == 0 &&
-		(ctrl->bRequestType & USB_RECIP_MASK) == USB_RECIP_INTERFACE &&
-		ctrl->bRequest == UVC_SET_CUR) {
-
-		req->length = le16_to_cpu(ctrl->wLength);
-		req->zero = 0;
-		req->context = uvc;
-
-		usb_ep_queue(cdev->gadget->ep0, req, GFP_KERNEL);
-	}
-
 	memset(&v4l2_event, 0, sizeof(v4l2_event));
 	v4l2_event.type = UVC_EVENT_SETUP;
 	memcpy(&uvc_event->req, ctrl, sizeof(uvc_event->req));
 	v4l2_event_queue(uvc->vdev, &v4l2_event);
+
+	/* Tell the complete callback to generate an event for
+	 * the next request that will be enqueued by
+	 * uvc_event_write.
+	 */
+	 uvc->event_setup_out =
+		!(uvc_event->req.bRequestType & USB_DIR_IN);
+
+	if (uvc->event_setup_out) {
+		DBG(f->config->cdev, "uvc_function_setup: queue the Control OUT SETUP immediatly. %s\n",
+			(ctrl->wValue >> 8) == UVC_VS_PROBE_CONTROL ? "PROBE" : ((ctrl->wValue >> 8) == UVC_VS_COMMIT_CONTROL ? "COMMIT" : "UNDEFINED"));
+		req->length = le16_to_cpu(ctrl->wLength);
+		req->zero = 0;
+		req->context = uvc;
+
+		ret = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
+		if (ret < 0)
+			ERROR(f->config->cdev, "Failed to queue the ep0\n");
+	}
 
 	return 0;
 }

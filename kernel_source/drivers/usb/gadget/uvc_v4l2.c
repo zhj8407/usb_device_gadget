@@ -305,12 +305,6 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
 			struct uvc_event *uvc_event = (void *)&event->u.data;
 
-			/* Tell the complete callback to generate an event for
-			 * the next request that will be enqueued by
-			 * uvc_event_write.
-			 */
-			uvc->event_setup_out =
-				!(uvc_event->req.bRequestType & USB_DIR_IN);
 			uvc->event_length = uvc_event->req.wLength;
 		}
 
