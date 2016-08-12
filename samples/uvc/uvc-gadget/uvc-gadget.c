@@ -164,24 +164,41 @@ inline unsigned long GetTimeInUSec()
     return (tv.tv_sec * 1000 * 1000) + (tv.tv_nsec);
 }
 int g_gst_connect_flag = 0;
-int connect_socket_block(const char * so_path)
-{
-    struct sockaddr_un sock_un;
-    int main_socket = socket(PF_UNIX, SOCK_STREAM, 0);
-    int connectRetry = 0;
 
-    if (main_socket < 0) {
-        printf("open socket failed %d %s\n", errno, strerror(errno));
+
+void close_gst_socket()
+{
+    if (g_gst_connect_flag > 0)
+        FD_CLR(main_socket, &fds);
+
+    if (main_socket >= 0) {
+        //printf("close socket %d\n", main_socket);
+        close(main_socket);
+        main_socket = -1;
     }
 
+    g_gst_connect_flag = 0;
+}
+
+int connect_socket_block(const char * so_path)
+{
+    int connectRetry = 0;
+    struct sockaddr_un sock_un;
     sock_un.sun_family = AF_UNIX;
     strncpy(sock_un.sun_path, so_path, sizeof(sock_un.sun_path) - 1);
 
+    main_socket = socket(PF_UNIX, SOCK_STREAM, 0);
 
-    while (connectRetry < 3) {
+    if (main_socket < 0) {
+        printf("open socket failed %d %s\n", errno, strerror(errno));
+        close_gst_socket();
+        return -1;
+    }
+
+    while (connectRetry < 1) {
         if (connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un)) < 0) {
-            printf("[%u]connect socket failed %d %s\n", connectRetry, errno, strerror(errno));
-            usleep(1000);
+            //printf("[%u]connect socket failed %d %s\n", connectRetry, errno, strerror(errno));
+            //usleep(1000);
             connectRetry++;
         } else { //connected
             g_gst_connect_flag = 1;
@@ -190,23 +207,10 @@ int connect_socket_block(const char * so_path)
         }
     }
 
-    close(main_socket);
-    main_socket = -1;
+    close_gst_socket();
     return -1;
 }
 
-void close_gst_socket()
-{
-    if (g_gst_connect_flag > 0)
-        FD_CLR(main_socket, &fds);
-
-    if (main_socket >= 0) {
-        close(main_socket);
-        main_socket = -1;
-    }
-
-    g_gst_connect_flag = 0;
-}
 
 
 static int
@@ -370,6 +374,7 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
 
     *readLen = jpeg_size;
     jpeg_size = 0;
+    jpeg_offset = 0;
 
     return 0;
 }
@@ -387,7 +392,7 @@ static void uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *bu
     if (ret)
         buf->bytesused = 0;
 
-    if (frame_count % (30 * 100) == 0)
+    if (frame_count % (30 * 10) == 0)
         printf("sending data for %s: len=%u, ret=%u\n", getV4L2FormatStr(dev->fcc) , buf->bytesused, ret);
 }
 
@@ -511,6 +516,16 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
 
         if (ret < 0)
             printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
+
+        if (pSharedMem != NULL) {
+            freeSharedMem(USB_SHM_VIDEO_IN_BUFFER, pSharedMem, VBUF_LEN);
+            pSharedMem = NULL;
+        }
+
+        if (shm_lock != NULL) {
+            freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
+            shm_lock = NULL;
+        }
 
         return 0;
     }
@@ -1128,12 +1143,18 @@ void sig_handle(int sig)
     printf("Received signal: %d(%s)\n", sig, strsignal(sig));
 
     // Alarm timeout. Stop the video
-    if (sig != SIGALRM)
+    if (sig != SIGALRM && sig != SIGINT)
         return;
 
     if (global_uvc) {
         uvc_video_stream(global_uvc, 0);
         uvc_video_reqbufs(global_uvc, 0);
+    }
+
+    if (sig == SIGINT) {
+        printf("Close GST socket before exit\n");
+        close_gst_socket();
+        exit(0);
     }
 }
 
@@ -1201,6 +1222,7 @@ int main(int argc, char *argv[])
      * video and clean the buffer.
      */
     signal(SIGALRM, sig_handle);
+    signal(SIGINT, sig_handle);
 
     image_load(dev, mjpeg_image);
     uvc_events_init(dev);
@@ -1246,6 +1268,7 @@ int main(int argc, char *argv[])
     max_fd = max_fd > main_socket ? max_fd : main_socket;
     //int maxfd = dev->fd;
     //FD_SET(main_socket, &fds);
+
     printf("=========stack shim init done======\n");
     unsigned long getFrameTime = 0; //GetTimeInMilliSec();
     unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
@@ -1272,8 +1295,10 @@ int main(int argc, char *argv[])
                     main_socket = connect_socket_block("/tmp/v_in_sock");
 
                     if (main_socket > 0) {
+                        printf("connected to socket %d\n", main_socket);
                         FD_SET(main_socket, &fds);
                     } else {
+                        //printf("connect failed\n");
                     }
                 }
 
@@ -1301,11 +1326,13 @@ int main(int argc, char *argv[])
                     }
 
                     if (event->m_event == e_stream_ready) {
+                        printf("Receive event: stream ready\n");
                         main_socket = connect_socket_block("/tmp/v_in_sock");
 
                         if (main_socket > 0) {
                             FD_SET(main_socket, &fds);
                         } else {
+
                         }
                     }
                 }
@@ -1344,20 +1371,21 @@ int main(int argc, char *argv[])
                         cb.area_id = recvCB.area_id;
                         cb.payload.ack_buffer.offset = recvCB.payload.buffer.offset;
 
-                        if (getFrameTime == 0) {
+                        /*if (getFrameTime == 0) {
                             getFrameTime = GetTimeInMilliSec();
                         }
 
                         getNextFrameTime = GetTimeInMilliSec();
-                        //printf("one image size=%lu, offset=%lu, delta time=%lu\n", jpeg_size, jpeg_offset, getNextFrameTime-getFrameTime);
-                        getFrameTime = getNextFrameTime;
+                        printf("one image size=%lu, offset=%lu, delta time=%lu\n", jpeg_size, jpeg_offset, getNextFrameTime-getFrameTime);
+                        getFrameTime = getNextFrameTime;*/
+
+
+                        uvc_video_process(dev);
                         ret = send(main_socket, &cb, sizeof(struct CommandBuffer), MSG_NOSIGNAL);
 
                         if (ret == -1) {
                             printf("send ACK[size=%u] to socket failed %d %s\n", sizeof(struct CommandBuffer), errno, strerror(errno));
                         }
-
-                        uvc_video_process(dev);
 
                         if (dev->bulk) {
                             // Reset the alarm.
@@ -1365,9 +1393,10 @@ int main(int argc, char *argv[])
                         }
 
                         //printf("done with one image\n");
-                    } else
+                    } else {
                         printf("Receive a cmd from gst ret[%d]: msg.type=%u areaid=%u\n",
                                ret, recvCB.type, recvCB.area_id);
+                    }
                 }
             }
         }
