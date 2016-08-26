@@ -2196,6 +2196,7 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 #endif
 	//	struct vivi_dev *dev = video_drvdata(file);
 	const struct vivi_fmt *fmt;
+	int stride = 0;
 
 	fmt = get_format(f);
 	
@@ -2215,10 +2216,11 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 	f->fmt.pix.field = V4L2_FIELD_INTERLACED;
 	v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
 			      &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
-	f->fmt.pix.bytesperline =
-		(f->fmt.pix.width * fmt->depth) >> 3;
-	f->fmt.pix.sizeimage =
-		f->fmt.pix.height * f->fmt.pix.bytesperline;
+
+	f->fmt.pix.bytesperline = f->fmt.pix.width;
+	stride = (f->fmt.pix.width * fmt->depth) >> 3;
+	f->fmt.pix.sizeimage = f->fmt.pix.height * stride;
+
 	if (fmt->is_yuv)
 		f->fmt.pix.colorspace = V4L2_COLORSPACE_SMPTE170M;
 	else
