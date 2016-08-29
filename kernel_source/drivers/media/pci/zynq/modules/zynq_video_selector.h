@@ -9,6 +9,7 @@ typedef enum vselector_option_flags {
     VSELECTOR_OPTION_SET_VOUT1_FULL_SRC = 4,
     VSELECTOR_OPTION_SET_VOUT0_1_16_SRC = 5,
     VSELECTOR_OPTION_SET_VOUT1_1_16_SRC = 6,
+	VSELECTOR_OPTION_SET_SCALED_FRAME_SIZE = 7
 } EVSelectorOptionFlags;
 
 typedef enum vselector_video_src {
@@ -18,10 +19,16 @@ typedef enum vselector_video_src {
 	VSELECTOR_CPU=3
 } EVSelectorVideoSrc;
 
+
 typedef struct {
     unsigned int width;
     unsigned int height;
 } vselector_vout_frame_size_t;
+
+typedef struct {
+    unsigned int width;
+    unsigned int height;
+} vselector_vout_scaled_frame_size_t;
 
 typedef struct {
     unsigned char  vin0;
