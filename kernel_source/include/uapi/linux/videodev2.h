@@ -2115,6 +2115,12 @@ typedef enum {
 } eVideoFormat;
 
 typedef enum {
+	E1TO16SCALE = 0,
+	E1TO9SCALE = 1,
+	EUNKNOWNSCALE = 2
+} eOSDScale;
+
+typedef enum {
 	EVIN0,
 	EVIN1,
 	EVIN2,
@@ -2133,6 +2139,7 @@ struct v4l2_vout_pipeline {
 	vout_pipe_t pipes[2]; //0: VOUT_0, 1: VOUT_1
 	eVideoFormat format;
 	__u32 reset;
+	 eOSDScale osd_scale;
 } ;
 #define VIDIOC_S_VOUT_PIPELINE   _IOWR('V', 103, struct v4l2_vout_pipeline)
 

@@ -10,7 +10,7 @@ typedef struct {
     u32 value;
 } vselector_cfg_reg;
 
-#define VSELECTOR_REG_NUM  (7)
+#define VSELECTOR_REG_NUM  (13)
 extern vselector_cfg_reg  vselector_cached_registers[];
 
 typedef struct {
@@ -27,6 +27,7 @@ typedef struct {
     u16 framerate_of_vin1;//0x0024
     u16 framerate_of_vin2;//0x0028
     u16 frameraet_of_cpu;//0x002c
+    u16 vout_scaled_frame_size;//0x0030
 } vselector_handle_t;
 
 static vselector_handle_t handle;
@@ -36,6 +37,7 @@ static int sw_reset(void);
 static int set_enable(vselector_enable_t *userdata);
 static int set_source(EVSelectorOptionFlags flag, vselector_source_t *userdata);
 static int set_vout_framesize(vselector_vout_frame_size_t *size);
+static int set_scaled_framesize(vselector_vout_scaled_frame_size_t  *size);
 static u8 is_initialized = 0;
 static u8 is_started = 0;
 
@@ -158,6 +160,7 @@ int vselector_initial(void __iomem *pci_base_addr)
 	handle.framerate_of_vin1 = 0x0024;
 	handle.framerate_of_vin2 = 0x0028;
 	handle.frameraet_of_cpu = 0x002c;
+	handle.vout_scaled_frame_size = 0x0030;
     mutex_init(&lock);
 
     sw_reset();
@@ -194,6 +197,8 @@ int vselector_setoption(EVSelectorOptionFlags flag, void *userdata)
         case VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE:
             set_vout_framesize((vselector_vout_frame_size_t *)userdata);
             break;
+		case VSELECTOR_OPTION_SET_SCALED_FRAME_SIZE:
+			set_scaled_framesize((vselector_vout_scaled_frame_size_t *)userdata);
         default:
             break;
     }
@@ -355,6 +360,29 @@ static int set_source(EVSelectorOptionFlags flag, vselector_source_t *src)
 
     return 0;
 }
+
+
+static int set_scaled_framesize(vselector_vout_scaled_frame_size_t  *size) {
+	u32 value = 0x00000000;
+    u16 reg = handle.vout_scaled_frame_size;
+    u32  width = size->width;
+    u32 height = size->height;
+
+    if (!size) return  0;
+
+    value = get_cached_registers(reg) & ~( 0x1fff0000 | 0x00001fff);
+    value = value  | ((height << 16) | width);
+
+    mutex_lock(&lock);
+#if 1
+    fpga_reg_write(handle.base, reg, value);
+#endif
+//	zynq_printk(0, "[zynq_video_selector](%d) (reg, vlaue)--->(0x%08x, 0x%08x)\n", __LINE__, reg, value);
+    set_cached_registers(reg, value);
+    mutex_unlock(&lock);
+    return 0;
+}
+
 
 static int set_vout_framesize(vselector_vout_frame_size_t *size)
 {

@@ -41,6 +41,7 @@ static unsigned int b_firstconfig_vout_pipeline = 1;
 static  unsigned int default_in_width = 1920;
 static  unsigned int default_in_height = 1080;
 static unsigned  int  default_frame_rate = 60;
+static unsigned int default_divisor = 4;
 
 static atomic_t g_is_vin0_valid;
 static atomic_t g_is_vin1_valid;
@@ -448,6 +449,11 @@ int vpif_control_init_pipeline(struct pci_dev *pdev) {
     fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG) ;
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
         zynq_printk(1, "[zynq_control] Enable FPGA modules.\n");
+		if (fpga_release_date >= 0x20160801) 
+				default_divisor = 3;
+		else 
+				default_divisor = 4;
+		zynq_printk(1, "[zynq_control](%d) default_divisor = %u\n", __LINE__, default_divisor);
         g_is_pipeline_initialized = 1;
         mutex_init(&g_config_lock);
 		atomic_set(&g_is_cpuin_valid, -1);
@@ -692,6 +698,17 @@ static char  *videofmt_to_string(eVideoFormat fmt) {
     }
 }
 
+static char  *osdscale_to_string(eOSDScale scale) {
+    switch (scale) {
+        case E1TO16SCALE:
+            return "1/16";
+        case E1TO9SCALE:
+            return "1/9";
+        default:
+            return "EUNKNOWNSCALE";
+    }
+}
+
 /*
 struct v4l2_vout_osd {
 	__u32 osd_id; // 0: for VOUT_0, 1: for VOUT_1
@@ -736,6 +753,7 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     vpif_vidoe_pipelie_entity_config_t config;
     vselector_source_t  src;
     vselector_vout_frame_size_t size;
+	vselector_vout_scaled_frame_size_t scaled_size;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
     unsigned int is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
     unsigned int is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
@@ -797,40 +815,63 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
 		}
 	}
 	
-   if (g_vout_pipeline_config.format != a->format) {
+   if ((g_vout_pipeline_config.format != a->format) ||  (g_vout_pipeline_config.osd_scale != a->osd_scale)) {
         
-		zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
+		if (g_vout_pipeline_config.format != a->format) {
+			zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
+        	mutex_lock(&g_config_lock);
+        	g_vout_pipeline_config.format = a->format;
+       		 mutex_unlock(&g_config_lock);
+			 if (a->format == E1080P60FMT || a->format == E1080P50FMT) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
+            	size.width = 1920;
+            	size.height =1080;
+            	config.data = &size;
+            	entity->config(entity,  &config);
+            	default_in_width = 1920;
+            	default_in_height = 1080;
+            	if (a->format == E1080P60FMT)
+                	default_frame_rate = 60;
+            	else
+                	default_frame_rate = 50;
+			} else if (a->format == E720P60FMT || a->format == E720P50FMT) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
+            	size.width = 1280;
+            	size.height =720;
+            	config.data = &size;
+            	entity->config(entity,  &config);
+            	default_in_width = 1280;
+            	default_in_height = 720;
+            	if (a->format == E720P60FMT)
+                	default_frame_rate = 60;
+            	else
+                	default_frame_rate = 50;
+        	}
+		}
+        if ((g_vout_pipeline_config.osd_scale != a->osd_scale) &&   (fpga_release_date >= 0x20160801)) {
+			
+			zynq_printk(0, "[zynq_control]Change the osd scale from %s  to %s.\n",osdscale_to_string(g_vout_pipeline_config.osd_scale),  osdscale_to_string(a->osd_scale));
+			mutex_lock(&g_config_lock);
+        	g_vout_pipeline_config.osd_scale = a->osd_scale;
+       	 	mutex_unlock(&g_config_lock);
+			
+			config.flag = VSELECTOR_OPTION_SET_SCALED_FRAME_SIZE ;
+           
+			memset(&scaled_size, 0x0, sizeof(vselector_vout_scaled_frame_size_t));
+			if (a->osd_scale == E1TO16SCALE) {
+				default_divisor = 4;
 
-        mutex_lock(&g_config_lock);
-        g_vout_pipeline_config.format = a->format;
-        mutex_unlock(&g_config_lock);
-
-        if (a->format == E1080P60FMT || a->format == E1080P50FMT) {
-            config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
-            size.width = 1920;
-            size.height =1080;
-            config.data = &size;
-            entity->config(entity,  &config);
-            default_in_width = 1920;
-            default_in_height = 1080;
-            if (a->format == E1080P60FMT)
-                default_frame_rate = 60;
-            else
-                default_frame_rate = 50;
-
-        } else if (a->format == E720P60FMT || a->format == E720P50FMT) {
-            config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
-            size.width = 1280;
-            size.height =720;
-            config.data = &size;
-            entity->config(entity,  &config);
-            default_in_width = 1280;
-            default_in_height = 720;
-            if (a->format == E720P60FMT)
-                default_frame_rate = 60;
-            else
-                default_frame_rate = 50;
-        }
+			} else if (a->osd_scale == E1TO9SCALE){
+				default_divisor = 3;
+			}
+			if (default_divisor != 0) {
+				scaled_size.width = default_in_width/default_divisor;
+            	scaled_size.height =default_in_height/default_divisor;
+				config.data = &scaled_size;
+            	if ((scaled_size.width != 0) && (scaled_size.height != 0))entity->config(entity,  &config);
+			}
+		}
+		
         vpif_control_enable_video_streams(0);
         stop_all_video_pipeline_entities(zynq_reg_base);
         release_all_video_pipeline_entities(zynq_reg_base);
@@ -1143,14 +1184,17 @@ static int config_all_video_pipeline_entities(void __iomem *pci_reg_base) {
 static void config_vdma(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     vdma_size_t size;
-    //zynq_printk(0, "[zynq_core][vdma_config](%d)id = %d\n", __LINE__,entity->id);
+	
+	if (default_divisor == 0) return;
+    
+	//zynq_printk(0, "[zynq_core][vdma_config](%d)id = %d\n", __LINE__,entity->id);
     config.flag = VDMA_OPTION_SET_IN_SIZE;
     if (entity->id == VDMA0 || entity->id == VDMA2) {
         size.width = default_in_width;
         size.height = default_in_height;
     } else if (entity->id == VDMA1 || entity->id == VDMA3) {
-        size.width = default_in_width/4;
-        size.height = default_in_height/4;
+        size.width = default_in_width/default_divisor;
+        size.height = default_in_height/default_divisor;
     }
     config.data = &size;
     entity->config(entity,  &config);
@@ -1213,6 +1257,8 @@ static void config_osd(vpif_vidoe_pipelie_entity_t *entity) {
     osd_size_t active_output_size;
     osd_layer_paramter_t param;
 
+	if (default_divisor == 0) return;
+	
     //zynq_printk(0, "[zynq_core][osd_config](%d)id = %d\n", __LINE__,entity->id);
     config.flag = OSD_OPTION_SET_OUTPUT_ACTIVE_SIZE;
     active_output_size.width = default_in_width;
@@ -1239,15 +1285,23 @@ static void config_osd(vpif_vidoe_pipelie_entity_t *entity) {
     param.global_alpha_enable = 1;
     param.priority = 1;
     param.alpha_value = 0x100;
+	
+	param.position_x =  default_in_width - (default_in_width / default_divisor);
+	param.position_y = default_in_height - (default_in_height / default_divisor);
+#if 0
     if ((default_in_width == 1920) && (default_in_height == 1080)) {
-        param.position_x =  1440;
-        param.position_y = 810;
+			param.position_x =  1440;
+        	param.position_y = 810;
+
     } else {
-        param.position_x =  960;
-        param.position_y = 540;
+			param.position_x =  960;
+        	param.position_y = 540;
+	
     }
-    param.width = default_in_width >> 2;
-    param.height = default_in_height >> 2;
+#endif
+
+    param.width = default_in_width /default_divisor;
+    param.height = default_in_height/default_divisor;
     config.data = &param;
     entity->config(entity,  &config);
 
@@ -1278,6 +1332,10 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity) {
         g_vout_pipeline_config.pipes[0].osd = ENONE;
         g_vout_pipeline_config.pipes[1].full = EVIN2;
         g_vout_pipeline_config.pipes[1].osd = EVIN2;
+		if (default_divisor == 3)
+			g_vout_pipeline_config.osd_scale = E1TO9SCALE;
+		else
+			g_vout_pipeline_config.osd_scale = E1TO16SCALE;
 		mutex_unlock(&g_config_lock);
 		if (tc358746_is_yuv() == 0) {
 			zynq_printk(0, "[zynq_control] Because could not capture the video from webcam, should do the reset of vselector at the next configuration!!\n ");
@@ -1379,8 +1437,8 @@ static void config_scaler(vpif_vidoe_pipelie_entity_t *entity) {
     unsigned int crop_height = default_in_height;
     unsigned int in_width = default_in_width;
     unsigned int in_height = default_in_height;
-    unsigned int out_width = default_in_width >> 2;
-    unsigned int out_height = default_in_height >> 2;
+    unsigned int out_width = default_in_width / default_divisor;
+    unsigned int out_height = default_in_height / default_divisor;
 
  //   zynq_printk(0, "[zynq_control][scaler_config](%d)id = %s\n", __LINE__,to_video_pipelin_entity_name(entity->id));
 
