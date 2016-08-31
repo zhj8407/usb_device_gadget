@@ -908,6 +908,13 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
                                          struct vpif_cap_buffer, list);
     /* Remove buffer from the buffer queue */
     list_del(&common->cur_frm->list);
+	if (list_empty(&common->dma_queue)) {
+		zynq_printk(0, "[zynq_capture]Cannot get next frm from DMA queue, use cur instead\n");
+	}
+	else {
+		common->next_frm = list_entry(common->dma_queue.next,
+                                         struct vpif_cap_buffer, list);
+	}
     spin_unlock_irqrestore(&common->irqlock, flags);
     /* Mark state of the current frame to active */
     common->cur_frm->vb.state = VB2_BUF_STATE_ACTIVE;
@@ -2951,7 +2958,9 @@ static void vpif_schedule_next_buffer(struct common_obj *common)
     common->next_frm->vb.state = VB2_BUF_STATE_ACTIVE;
 
 #if defined(USE_ZYNQ_MALLOC)
-    addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);
+    /*addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);*/
+	/*DST: should be cur_frm since cur_frm has been set to next_frm*/
+	addr =	zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
 #elif defined(USE_DMA_COUNTING)
     addr = vb2_dma_contig_plane_dma_addr(&common->next_frm->vb, 0);
 #endif
@@ -3046,7 +3055,7 @@ static irqreturn_t vpif_channel_isr(int irq, void *dev_id)
         }
         spin_unlock(&common->irqlock);
 
-        if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id]) vpif_process_buffer_complete(common);
+        /*if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id])*/ vpif_process_buffer_complete(common);
 
         channel_first_int[VPIF_VIDEO_INDEX][channel_id] = 0;
         vpif_schedule_next_buffer(common);

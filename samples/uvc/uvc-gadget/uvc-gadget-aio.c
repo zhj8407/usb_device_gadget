@@ -70,7 +70,7 @@
 
 #define VISAGE_LED_NOTIFICATION 1
 //#define USE_CAM_THREAD 1
-#define V_BUF_NUM 1
+#define V_BUF_NUM 2
 
 
 static int stream_on = 0;
@@ -1444,7 +1444,18 @@ void * camera_thread(void * attr)
                 //uvc_video_process(device);
                 //packet2time=GetTimeInMilliSec();
                 //printf("process one camera frame, delta time=%lu ms\n", packet2time-packet1time);
-                NV12toI420scale(vBuf2, width, height, vBuf, device->width, device->height);
+                switch (device->fcc) {
+                    case V4L2_PIX_FMT_YUYV: {
+                        NV12toYUY2scale(vBuf2, width, height, vBuf, device->width, device->height);
+                        break;
+                    }
+
+                    case V4L2_PIX_FMT_YUV420: {
+                        NV12toI420scale(vBuf2, width, height, vBuf, device->width, device->height);
+                        break;
+                    }
+                }
+
                 //packetprocesstime=GetTimeInMilliSec();
                 //printf("process one camera frame, delta time=%lu ms, converting use: %lu ms\n", packet2time-packet1time, packetprocesstime-packet2time);
                 //packet1time=packet2time;

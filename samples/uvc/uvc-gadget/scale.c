@@ -464,8 +464,14 @@ void NV12toYUY2scale(uint8_t * inBuffer, unsigned int inWidth, unsigned int inHe
 
     memcpy(inBuffer, tempBuf, out_buf_size);
 #else
-    scaleNV12(inBuffer, inWidth, inHeight, tempBuf, outWidth, outHeight);
-    NV12toYUY2(tempBuf, outWidth, outHeight, outBuffer, outWidth, outHeight);
+
+    if (inWidth == outWidth && inHeight == outHeight) {
+        NV12toYUY2(tempBuf, outWidth, outHeight, outBuffer, outWidth, outHeight);
+    } else {
+        scaleNV12(inBuffer, inWidth, inHeight, tempBuf, outWidth, outHeight);
+        NV12toYUY2(tempBuf, outWidth, outHeight, outBuffer, outWidth, outHeight);
+    }
+
 #endif
     free(tempBuf);
 }
