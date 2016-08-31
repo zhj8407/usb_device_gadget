@@ -370,9 +370,13 @@ int read_one_camera_frame(void * buffer, unsigned int bufferLen, unsigned int * 
         return -1;
     }
 
-    memcpy(buffer, pSharedMem + jpeg_offset, jpeg_size);
+    if (jpeg_size <= bufferLen && pSharedMem) {
+        memcpy(buffer, pSharedMem + jpeg_offset, jpeg_size);
+        *readLen = jpeg_size;
+    } else {
+        *readLen = 0;
+    }
 
-    *readLen = jpeg_size;
     jpeg_size = 0;
     jpeg_offset = 0;
 
@@ -508,6 +512,7 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
         frame_count = 0;
         stream_on = 0;
         ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
+
         //FD_CLR(main_socket, &fds);
         //close(main_socket);
         //main_socket = -1;
