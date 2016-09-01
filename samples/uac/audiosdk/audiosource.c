@@ -193,7 +193,8 @@ int audio_snd_card_parm_set(snd_pcm_t *pcm_handle)
 
 int audio_snd_card_write_dummy(snd_pcm_t *pcm_handle, char* buffers, int size)
 {
-    printf("[audio_playback] dummy write!\n");
+    usleep(20*1000);
+    //printf("[audio_playback] dummy write!\n");
 }
 /*
 SND_PCM_STATE_OPEN

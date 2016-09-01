@@ -13,7 +13,7 @@
 #include "audiolinxtypes.h"
 #include "audiosource.h"
 void *connection_handler(void *);
-#define DEVFILE "hw:3,0"
+#define DEVFILE "hw:2,0"
 #define DUMP 1
 #define DUMP_FILE_NAME "dump"
 char file_name[128] = {0x0};
@@ -76,7 +76,7 @@ void *connection_handler(void *arguments)
 			break;
 	};
 #endif
-	printf("open recving stream");
+	printf("open recving stream %d",PCM_PERIOD_BYTES);
 
 	for (;;) {
 		bzero(buf, sizeof(buf));
@@ -141,6 +141,14 @@ main()
 
 	struct linxed_struct args;
 	pthread_t sniffer_thread;
+	struct sched_param param;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	param.sched_priority = 21;
+	pthread_attr_setschedpolicy(&attr,SCHED_RR);
+	pthread_attr_setschedparam(&attr,&param);
+	pthread_attr_setinheritsched(&attr,PTHREAD_EXPLICIT_SCHED);
+
 	pthread_mutex_init(&args.mutex, NULL);
 	pthread_cond_init(&args.cond, NULL);
 	args.pid = getpid();
@@ -163,6 +171,7 @@ main()
 		printf("could not create thread");
 	}
 	//Now join the thread , so that we dont terminate before the thread
+	pthread_attr_destroy(&attr);
 	pthread_join(sniffer_thread, NULL);
 	pthread_cond_destroy(&fakeCond);
 	pthread_mutex_destroy(&fakeMutex);
