@@ -511,13 +511,13 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
 #endif
         frame_count = 0;
         stream_on = 0;
-        ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
 
         //FD_CLR(main_socket, &fds);
         //close(main_socket);
         //main_socket = -1;
         close_gst_socket();
         max_fd = dev->fd > app2stack ? dev->fd : app2stack;
+	ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
 
         if (ret < 0)
             printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
