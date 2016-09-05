@@ -24,12 +24,20 @@
 #define UVC_EVENT_STREAMOFF		(V4L2_EVENT_PRIVATE_START + 3)
 #define UVC_EVENT_SETUP			(V4L2_EVENT_PRIVATE_START + 4)
 #define UVC_EVENT_DATA			(V4L2_EVENT_PRIVATE_START + 5)
-#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 5)
+#define UVC_EVENT_FRAMEDONE		(V4L2_EVENT_PRIVATE_START + 6)
+#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 6)
 
 struct uvc_request_data
 {
 	__s32 length;
 	__u8 data[60];
+};
+
+struct uvc_frame_done_info
+{
+	__u32 buffer_index;
+	__u32 bytes_transferred;
+	__s32 status;
 };
 
 struct uvc_event
@@ -38,6 +46,7 @@ struct uvc_event
 		enum usb_device_speed speed;
 		struct usb_ctrlrequest req;
 		struct uvc_request_data data;
+		struct uvc_frame_done_info frame_done;
 	};
 };
 
