@@ -212,7 +212,7 @@ void handleStartStream(unsigned int format, unsigned int width, unsigned int hei
         "! shmsink name=/usb_v_in shm-size=3110400 socket-path=/tmp/mjpeg_socket wait-for-connection=false &"
         //camera_width, camera_height,
         );*/
-    sprintf(gst_cmd, "gst-launch-1.0 --gst-debug=3 --verbose%s%s%s%s%s &"
+    sprintf(gst_cmd, "gst-launch-1.0 --gst-debug=3 --verbose%s%s%s%s%s > /dev/null 2>&1 &"
             , getGstCameraCmd(camera_device, V4L2_PIX_FMT_NV12, camera_width, camera_height, CAM_DEF_FRAMERATE)
             , getGstScalerCmd(V4L2_PIX_FMT_NV12, output_width, output_height, output_framerate)
             , getGstConvertorCmd(output_format, output_width, output_height, output_framerate)
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
     /*****inter process communication begin*****/
 
     app2stack = open(fifo_in_name, O_RDWR | O_NONBLOCK);
-    stack2app = open(fifo_out_name, O_RDWR | O_NONBLOCK);
+    stack2app = open(fifo_out_name, O_RDONLY | O_NONBLOCK);
 
     FD_SET(stack2app, &fds);
     int maxfd = stack2app > fd ? stack2app : fd;
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
         fd_set efds = fds;
         fd_set wfds = fds;
         fd_set rfds = fds;
-        ret = select(maxfd + 1, &rfds, &wfds, &efds, &timeout);
+        ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
 
         if (ret == -1) {
             if (errno != EINTR) {
@@ -327,9 +327,9 @@ int main(int argc, char *argv[])
                 break;
             }
         } else {
-            if (FD_ISSET(fd, &efds)) {
+            /*if (FD_ISSET(fd, &efds)) {
                 printf("should not be here, efd:\n");
-            }
+            }*/
 
             if (FD_ISSET(stack2app, &rfds)) {
                 struct plcm_uvc_event_msg_t event;
@@ -337,7 +337,7 @@ int main(int argc, char *argv[])
                 int len = read(stack2app, &event, sizeof(struct plcm_uvc_event_msg_t));
 
                 if (len > 0) {
-                    printf("Receive %s[%d] from stack: format=%ux%u\n", getEventDescStr(event.m_event), event.m_event, event.m_format.m_width, event.m_format.m_height);
+                    //printf("Receive %s[%d] from stack: format=%ux%u\n", getEventDescStr(event.m_event), event.m_event, event.m_format.m_width, event.m_format.m_height);
 
                     switch (event.m_event) {
                         case e_stack_ready:
@@ -359,6 +359,15 @@ int main(int argc, char *argv[])
                         case e_stop_stream:
                             handleStopStream();
                             break;
+
+                        case e_retry_socket: {
+                            struct plcm_uvc_event_msg_t event;
+                            event.m_event = e_stream_ready;
+                            event.m_format.m_height = camera_height;
+                            event.m_format.m_width = camera_width;
+                            write(app2stack, &event, sizeof(struct plcm_uvc_event_msg_t));
+                            break;
+                        }
 
                         default:
                             break;

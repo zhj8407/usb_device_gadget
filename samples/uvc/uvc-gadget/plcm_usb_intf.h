@@ -10,7 +10,8 @@ enum plcm_usb_video_event {
     e_set_format,     //= 4,
     e_start_stream,   //= 5,
     e_stop_stream,    //= 6,
-    e_last_event     //= 7
+    e_retry_socket,         //= 7,
+    e_last_event      //=8
 };
 
 struct plcm_uvc_format_t {
@@ -33,6 +34,7 @@ static const char* plcm_usb_video_event_str[e_last_event + 1] = {
     "set format",
     "start stream",
     "stop stream",
+    "retry connect socket",
     "unknown"
 };
 
