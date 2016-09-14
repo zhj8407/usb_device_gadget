@@ -108,6 +108,7 @@ struct plcm_usb_dev {
 	struct mutex mutex;
 	bool connected;
 	bool sw_connected;
+	bool sw_configured;
 	struct work_struct work;
 	char ffs_aliases[256];
 	unsigned short ffs_string_ids;
@@ -188,19 +189,26 @@ static void plcm_usb_work(struct work_struct *data)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cdev->lock, flags);
-	if (cdev->config)
-		uevent_envp = configured;
-	else if (dev->connected != dev->sw_connected)
+
+	/* Connected status is changed. */
+	if (dev->connected != dev->sw_connected)
 		uevent_envp = dev->connected ? connected : disconnected;
+
+	/* Configured status is changed. */
+	if (dev->connected && cdev->config && !dev->sw_configured)
+		uevent_envp = configured;
+
 	dev->sw_connected = dev->connected;
+	dev->sw_configured = (cdev->config != NULL);
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
 	if (uevent_envp) {
 		kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
 		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
 	} else {
-		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
-			 dev->connected, dev->sw_connected, cdev->config);
+		pr_debug("%s: did not send uevent (%d %d %d %p)\n", __func__,
+			 dev->connected, dev->sw_connected,
+			 dev->sw_configured, cdev->config);
 	}
 }
 
@@ -1304,17 +1312,17 @@ static ssize_t state_show(struct device *pdev, struct device_attribute *attr,
 {
 	struct plcm_usb_dev *dev = dev_get_drvdata(pdev);
 	struct usb_composite_dev *cdev = dev->cdev;
-	char *state = "DISCONNECTED";
+	char *state = "CONNECTED";
 	unsigned long flags;
 
 	if (!cdev)
 		goto out;
 
 	spin_lock_irqsave(&cdev->lock, flags);
-	if (cdev->config)
+	if (!dev->connected)
+		state = "DISCONNECTED";
+	else if (cdev->config)
 		state = "CONFIGURED";
-	else if (dev->connected)
-		state = "CONNECTED";
 	spin_unlock_irqrestore(&cdev->lock, flags);
 out:
 	return sprintf(buf, "%s\n", state);
@@ -1559,9 +1567,11 @@ plcm_usb_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (!dev->connected) {
 		dev->connected = 1;
+		pr_debug("%s: connected\n", __func__);
 		schedule_work(&dev->work);
 	} else if (c->bRequest == USB_REQ_SET_CONFIGURATION &&
 						cdev->config) {
+		pr_debug("%s: configured\n", __func__);
 		schedule_work(&dev->work);
 	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
@@ -1572,6 +1582,30 @@ plcm_usb_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 static void plcm_usb_disconnect(struct usb_composite_dev *cdev)
 {
 	struct plcm_usb_dev *dev = _plcm_usb_dev;
+	/*
+	 * In the design of tegra_udc, this disconnect callback will
+	 * be invoked while receiving the BUS RESET from USB Host(HUB).
+	 * The BUS Reset does not mean the usb disconnection. So we
+	 * should not set the connection to 0 here.
+	 *
+	 * Instread the configuration will be reset in composite dev,
+	 * then the sw_configured should be set to 0.
+	 */
+	pr_info("%s: curr sw_configured: %d\n", __func__, dev->sw_configured);
+
+	dev->sw_configured = 0;
+	schedule_work(&dev->work);
+}
+
+static void plcm_usb_resume(struct usb_composite_dev *cdev)
+{
+	pr_info("%s: invoked\n", __func__);
+}
+
+static void plcm_usb_suspend(struct usb_composite_dev *cdev)
+{
+	struct plcm_usb_dev *dev = _plcm_usb_dev;
+	pr_info("%s: curr connected: %d\n", __func__, dev->connected);
 
 	dev->connected = 0;
 	schedule_work(&dev->work);
@@ -1584,6 +1618,8 @@ static struct usb_composite_driver plcm_usb_driver = {
 	.bind		= plcm_usb_bind,
 	.unbind		= plcm_usb_unbind,
 	.disconnect	= plcm_usb_disconnect,
+	.resume		= plcm_usb_resume,
+	.suspend	= plcm_usb_suspend,
 	.max_speed	= USB_SPEED_HIGH,
 };
 
