@@ -1,0 +1,27 @@
+CROSS_COMPILE	?= arm-linux-gnueabihf-
+VISAGE_SOURCE_DIR ?= /home/jiezhang/Dev/visage/platform/new/l4t_21_3
+KERNEL_DIR	?= $(VISAGE_SOURCE_DIR)/sources/kernel_source
+CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/rootfs/lib/arm-linux-gnueabihf
+
+CC		:= $(CROSS_COMPILE)gcc
+#KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
+KERNEL_INCLUDE	:=
+INC_FOLDER	:=../include/
+DBUS_INCLUDE := /usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include
+CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(INC_FOLDER) -I$(DBUS_INCLUDE)
+LDFLAGS		:= -g -L. -ldbus-1 -ludev
+
+all: udm
+
+%.o: %.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
+udm: dbus_utils.o udev_utils.o file_utils.o main.o
+	ln -sf $(CROSS_LIB_PATH)/libudev.so.1.3.5 ./libudev.so
+	ln -sf $(CROSS_LIB_PATH)/libdbus-1.so.3.7.6 ./libdbus-1.so
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+clean:
+	rm -f *.o
+	rm -f udm
+	rm ./libudev.so ./libdbus-1.so
