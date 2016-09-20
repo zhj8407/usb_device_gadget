@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 
 #include "libudev.h"
+#include "f_uac_plcm.h"
 
 void sig_child(int sig)
 {
@@ -52,6 +57,7 @@ int main()
     sigset_t sigset;
     struct sigaction act;
     act.sa_handler = sig_child;
+    int uac_ctrl_fd;
 
     if (sigemptyset(&act.sa_mask) == -1) {
         printf("Can't empty the signal set\n");
@@ -122,6 +128,15 @@ int main()
        This section will run continuously, calling usleep() at the end
        of each pass. This is to demonstrate how to use a udev_monitor
        in a non-blocking way. */
+
+    uac_ctrl_fd = open("/dev/uac_plcm_control", O_RDWR | O_NONBLOCK);
+    //uac_ctrl_fd = open("/dev/uac_plcm_control", O_RDWR);
+    if (uac_ctrl_fd < 0) {
+        fprintf(stderr, "Failed to open the audio control file, error : %d(%s)\n",
+                errno, strerror(errno));
+        exit(-1);
+    }
+
     while (1) {
         /* Set up the call to select(). In this case, select() will
            only operate on a single file descriptor, the one
@@ -132,11 +147,16 @@ int main()
         // struct timeval tv;
         struct timespec tv;
         int ret;
+        int max_fd;
         FD_ZERO(&fds);
         FD_SET(fd, &fds);
+        FD_SET(uac_ctrl_fd, &fds);
+
+        max_fd = fd < uac_ctrl_fd ? uac_ctrl_fd : fd;
         tv.tv_sec = 0;
         tv.tv_nsec = 250 * 1000 * 1000;
-        ret = pselect(fd + 1, &fds, NULL, NULL, &tv, &sigset);
+
+        ret = pselect(max_fd + 1, &fds, NULL, NULL, &tv, &sigset);
 
         /* Check if our file descriptor has received data. */
         if (ret == -1) {
@@ -146,7 +166,24 @@ int main()
             // }
         } else if (ret) {
             // printf("\nselect() says there should be data\n");
-            if (FD_ISSET(fd, &fds)) {
+            if (FD_ISSET(uac_ctrl_fd, &fds)) {
+                printf("Got event from uac\n");
+                struct uac_ctrl_event event;
+
+                ret = ioctl(uac_ctrl_fd, UAC_IOC_DQEVENT, &event);
+
+                if (ret) {
+                    printf("Failed to Dequeue event, ret = %d\n", ret);
+                    continue;
+                }
+
+                printf("Dequeued the event\n");
+                printf("\t\tEvent.request:         0x%02x\n", event.request);
+                printf("\t\tEvent.unit_id:         0x%02x\n", event.u.fu.unit_id);
+                printf("\t\tEvent.contro_selector: 0x%02x\n", event.u.fu.control_selector);
+                printf("\t\tEvent.value:           0x%04x\n", event.u.fu.value);
+
+            } else if (FD_ISSET(fd, &fds)) {
                 /* Make the call to receive the device.
                    select() ensured that this will not block. */
                 dev = udev_monitor_receive_device(mon);
