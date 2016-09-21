@@ -10,15 +10,23 @@
  * (at your option) any later version.
  */
 
-#include <linux/usb/audio.h>
-#include <linux/platform_device.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/spinlock_types.h>
+#include <linux/miscdevice.h>
+#include <linux/platform_device.h>
+#include <linux/poll.h>
+#include <linux/sched.h>
+#include <linux/spinlock.h>
+#include <linux/uaccess.h>
+#include <linux/usb/audio.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
+
+#include "f_uac_plcm.h"
 
 #if 1
 #define pr_trace(fmt, ...) \
@@ -123,6 +131,9 @@ struct uac_plcm_rtd_params {
 	u8 set_cmd;
 	struct usb_audio_control *set_con;
 
+	/* Control event */
+	struct uac_ctrl_event ctrl_event;
+	u8 ctrl_event_set;
 };
 
 struct snd_uac_plcm_chip {
@@ -151,6 +162,13 @@ static struct snd_pcm_hardware uac_plcm_pcm_hardware = {
 	.periods_min = MIN_PERIODS,
 };
 
+/* --------- UAC Control Event Structures ------------ */
+
+struct uac_kevent_list {
+	struct list_head	list;
+	struct uac_ctrl_event	event;
+};
+
 struct audio_dev {
 	u8 ac_intf, ac_alt;
 	u8 as_out_intf, as_out_alt;
@@ -170,10 +188,23 @@ struct audio_dev {
 	unsigned source_active : 1;
 
 	/* Protecting the status change request */
-	spinlock_t lock;
+	spinlock_t			status_lock;
+
+	/* character device */
+	struct miscdevice miscdev;
 
 	/* Work queue for uevent notification. */
-	struct work_struct status_notify_work;
+	struct work_struct	status_notify_work;
+
+	/* Protecting the uac control events list. */
+	spinlock_t			ctrl_events_lock;
+
+	/* Dequeueable event */
+	struct list_head	ctrl_events_avail;
+	/* Number of available events. */
+	unsigned int		nctrl_events_avail;
+	/* Waiting for available events. */
+	wait_queue_head_t	ctrl_events_wait;
 };
 
 static struct audio_dev *agdev_g;
@@ -194,6 +225,210 @@ static inline struct snd_uac_plcm_chip *pdev_to_uac_plcmc(struct platform_device
 	return container_of(p, struct snd_uac_plcm_chip, pdev);
 }
 
+/* --------- UAC Control Event Handlers ------------ */
+int uac_ctrl_event_queue(struct audio_dev *agdev, const struct uac_ctrl_event *ev)
+{
+	unsigned long flags;
+	struct uac_kevent_list *kevent;
+
+	spin_lock_irqsave(&agdev->ctrl_events_lock, flags);
+
+	if (agdev->nctrl_events_avail >= MAX_UAC_CTRL_EVENTS_COUNT) {
+		list_for_each_entry_reverse(kevent, &agdev->ctrl_events_avail, list) {
+			/* Copy the event to kevent. */
+			kevent->event.request = ev->request;
+			/* Copy payload. */
+			kevent->event.u = ev->u;
+			break;
+		}
+		pr_warn("Override the last event\n");
+		spin_unlock_irqrestore(&agdev->ctrl_events_lock, flags);
+		return 0;
+	}
+
+	/* Use GFP_ATOMIC here. Can not sleep. */
+	kevent = kzalloc(sizeof(struct uac_kevent_list), GFP_ATOMIC);
+	if (!kevent) {
+		spin_unlock_irqrestore(&agdev->ctrl_events_lock, flags);
+		return -ENOMEM;
+	}
+
+	/* Copy the event to kevent. */
+	kevent->event.request = ev->request;
+	/* Copy payload. */
+	kevent->event.u = ev->u;
+
+	list_add_tail(&kevent->list, &agdev->ctrl_events_avail);
+
+	agdev->nctrl_events_avail++;
+
+	/* Wake up the poll. */
+	wake_up_all(&agdev->ctrl_events_wait);
+
+	spin_unlock_irqrestore(&agdev->ctrl_events_lock, flags);
+
+	return 0;
+}
+
+int __uac_ctrl_event_dequeue(struct audio_dev *agdev, struct uac_ctrl_event *ev)
+{
+	unsigned long flags;
+	struct uac_kevent_list *kevent = NULL;
+
+	spin_lock_irqsave(&agdev->ctrl_events_lock, flags);
+
+	if (list_empty(&agdev->ctrl_events_avail)) {
+		spin_unlock_irqrestore(&agdev->ctrl_events_lock, flags);
+		pr_warn("Ctrl event list is empty\n");
+		return -ENOENT;
+	}
+
+	WARN_ON(agdev->nctrl_events_avail == 0);
+
+	kevent = list_first_entry(&agdev->ctrl_events_avail, struct uac_kevent_list, list);
+	list_del(&kevent->list);
+	agdev->nctrl_events_avail--;
+
+	*ev = kevent->event;
+
+	spin_unlock_irqrestore(&agdev->ctrl_events_lock, flags);
+
+	if (kevent)
+		kfree(kevent);
+
+	return 0;
+}
+
+int uac_ctrl_event_dequeue(struct audio_dev *agdev,
+	struct uac_ctrl_event *ev, int nonblocking)
+{
+	int ret;
+
+	if (nonblocking)
+		return __uac_ctrl_event_dequeue(agdev, ev);
+
+	do {
+		ret = wait_event_interruptible(agdev->ctrl_events_wait,
+			agdev->nctrl_events_avail != 0);
+
+		if (ret < 0)
+			break;
+
+		ret = __uac_ctrl_event_dequeue(agdev, ev);
+	} while(ret == -ENOENT);
+
+	return ret;
+}
+
+static int uac_ctrl_node_open(struct inode *inode, struct file *filp)
+{
+	struct audio_dev *agdev = container_of(filp->private_data,
+		struct audio_dev, miscdev);
+	int ret;
+
+	filp->private_data = agdev;
+	ret = nonseekable_open(inode, filp);
+	if (ret) {
+		pr_err("nonseekable-open failed\n");
+	}
+
+	return ret;
+}
+
+static int uac_ctrl_node_release(struct inode *inode, struct file *filp)
+{
+	filp->private_data = NULL;
+	return 0;
+}
+
+static unsigned int uac_ctrl_node_poll(struct file *filp, poll_table *wait)
+{
+	unsigned int ret = 0;
+	struct audio_dev *agdev = filp->private_data;
+
+	poll_wait(filp, &agdev->ctrl_events_wait, wait);
+
+	if (!list_empty(&agdev->ctrl_events_avail))
+		ret = POLL_IN | POLLRDNORM;
+
+	return ret;
+}
+
+static long uac_ctrl_node_ioctl(struct file *filp, unsigned int cmd,
+				unsigned long arg)
+{
+	struct audio_dev *agdev = filp->private_data;
+	u8 __user *uarg = (u8 __user *)arg;
+	struct uac_feature_unit_value fu_value;
+	struct uac_ctrl_event ctrl_event;
+	struct usb_composite_dev *cdev = agdev->func.config->cdev;
+	struct usb_request *req = cdev->req;
+	int err;
+	unsigned int n = 0, count = 0;
+
+	switch(cmd) {
+	case UAC_IOC_SEND_FU_VALUE:
+		if (!(filp->f_mode & FMODE_WRITE)) {
+			err = -EBADF;
+			break;
+		}
+
+		n = _IOC_SIZE(cmd);
+
+		if (copy_from_user(&fu_value, uarg, n)) {
+			err = -EFAULT;
+			break;
+		}
+
+		count = fu_value.length;
+
+		memcpy(req->buf, fu_value.data, count);
+
+		req->zero = 0;
+		req->length = count;
+		err = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
+		if (err < 0)
+			ERROR(cdev, "usb_ep_queue error on ep0 err=%d,length=%d\n",
+				err, req->length);
+		break;
+
+	case UAC_IOC_DQEVENT:
+		if (!(filp->f_mode & FMODE_READ)) {
+			err = -EBADF;
+			break;
+		}
+
+		err = uac_ctrl_event_dequeue(agdev, &ctrl_event,
+			filp->f_mode & O_NONBLOCK);
+
+		if (err)
+			break;
+
+		n = _IOC_SIZE(cmd);
+
+		if (copy_to_user(uarg, &ctrl_event, n)) {
+			err = -EFAULT;
+			break;
+		}
+
+		break;
+
+	default:
+		err = -ENOTTY;
+		break;
+	}
+
+	return err;
+}
+
+/*---------------------File Operations--------------------------*/
+const struct file_operations uac_ctrl_node_fops = {
+	.owner				= THIS_MODULE,
+	.open 				= uac_ctrl_node_open,
+	.release 			= uac_ctrl_node_release,
+	.poll				= uac_ctrl_node_poll,
+	.unlocked_ioctl		= uac_ctrl_node_ioctl,
+};
 
 static void agdev_iso_complete(struct usb_ep *ep, struct usb_request *req)
 {
@@ -1224,7 +1459,7 @@ static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsi
 	struct audio_dev *agdev = func_to_agdev(fn);
 	unsigned long flags;
 
-	spin_lock_irqsave(&agdev->lock, flags);
+	spin_lock_irqsave(&agdev->status_lock, flags);
 	if (source == 1) {
 		agdev->source_status_changed = 1;
 		if (alt)
@@ -1240,7 +1475,7 @@ static void snd_uac_plcm_event_send(struct usb_function *fn, unsigned sink, unsi
 	}
 
 	schedule_work(&agdev->status_notify_work);
-	spin_unlock_irqrestore(&agdev->lock, flags);
+	spin_unlock_irqrestore(&agdev->status_lock, flags);
 }
 
 static void audio_status_notify(struct work_struct *data)
@@ -1255,7 +1490,7 @@ static void audio_status_notify(struct work_struct *data)
 
 	dev = uac_plcm_config->dev;
 
-	spin_lock_irqsave(&agdev->lock, flags);
+	spin_lock_irqsave(&agdev->status_lock, flags);
 	if (agdev->suspended)
 		uevent_envp = uac_suspend;
 	else if (agdev->source_status_changed) {
@@ -1271,7 +1506,7 @@ static void audio_status_notify(struct work_struct *data)
 			uevent_envp = uac_sink_deactive;
 		agdev->sink_status_changed = 0;
 	}
-	spin_unlock_irqrestore(&agdev->lock, flags);
+	spin_unlock_irqrestore(&agdev->status_lock, flags);
 
 	if (uevent_envp) {
 		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uevent_envp);
@@ -1416,9 +1651,9 @@ static void afunc_resume(struct usb_function *fn)
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
 
-	spin_lock_irqsave(&agdev->lock, flags);
+	spin_lock_irqsave(&agdev->status_lock, flags);
 	agdev->suspended = 0;
-	spin_unlock_irqrestore(&agdev->lock, flags);
+	spin_unlock_irqrestore(&agdev->status_lock, flags);
 }
 
 static void afunc_suspend(struct usb_function *fn)
@@ -1428,16 +1663,18 @@ static void afunc_suspend(struct usb_function *fn)
 
 	pr_trace("%s:%d\n", __func__, __LINE__);
 
-	spin_lock_irqsave(&agdev->lock, flags);
+	spin_lock_irqsave(&agdev->status_lock, flags);
 	agdev->suspended = 1;
 	schedule_work(&agdev->status_notify_work);
-	spin_unlock_irqrestore(&agdev->lock, flags);
+	spin_unlock_irqrestore(&agdev->status_lock, flags);
 }
 
 
 static void audio_intf_req_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct uac_plcm_rtd_params *prm = req->context;
+	struct snd_uac_plcm_chip *uac_plcmc = prm->uac_plcmc;
+	struct audio_dev *agdev = uac_plcmc_to_agdev(uac_plcmc);
 	int status = req->status;
 	u32 data = 0;
 
@@ -1448,6 +1685,11 @@ static void audio_intf_req_complete(struct usb_ep *ep, struct usb_request *req)
 				memcpy(&data, req->buf, req->length);
 				prm->set_con->set(prm->set_con, prm->set_cmd,	le16_to_cpu(data));
 				prm->set_con = NULL;
+			}
+			if (prm->ctrl_event_set) {
+				prm->ctrl_event.u.fu.value = le16_to_cpu(data);
+				uac_ctrl_event_queue(agdev, &prm->ctrl_event);
+				prm->ctrl_event_set = 0;
 			}
 			break;
 		default:
@@ -1480,6 +1722,14 @@ static int audio_set_intf_req(struct usb_function *fn,
 				"%s:%d Error!\n", __func__, __LINE__);
 		return -EINVAL;
 	}
+
+	/*
+	 * Test. Enqueue the event.
+	 */
+	prm->ctrl_event.request = ctrl->bRequest;
+	prm->ctrl_event.u.fu.unit_id = id;
+	prm->ctrl_event.u.fu.control_selector = con_sel;
+	prm->ctrl_event_set = 1;
 
 	list_for_each_entry(cs, &prm->cs, list) {
 		if (cs->id == id) {
@@ -1517,6 +1767,17 @@ static int audio_get_intf_req(struct usb_function *fn,
 	u8			cmd = (ctrl->bRequest & 0x0F);
 	struct usb_audio_control_selector *cs;
 	struct usb_audio_control *con;
+	struct uac_ctrl_event ctrl_event;
+
+	/*
+	 * Test. Enqueue the event.
+	 */
+	memset(&ctrl_event, 0, sizeof(ctrl_event));
+	ctrl_event.request = ctrl->bRequest;
+	ctrl_event.u.fu.unit_id = id;
+	ctrl_event.u.fu.control_selector = con_sel;
+
+	uac_ctrl_event_queue(agdev, &ctrl_event);
 
 	if (id == SPK_FEATURE_UNIT_ID) {
 		prm = &uac_plcmc->cs_prm;
@@ -1630,6 +1891,30 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 		mic_as_intf_alt1_desc.iInterface = strings_fn[STR_AS_IN_ALT1].id;
 	}
 
+	/* Initialize the status lock */
+	spin_lock_init(&agdev_g->status_lock);
+
+	/* Initialize the work queue */
+	INIT_WORK(&agdev_g->status_notify_work, audio_status_notify);
+
+	/* Initialize the uac control events related. */
+	spin_lock_init(&agdev_g->ctrl_events_lock);
+	INIT_LIST_HEAD(&agdev_g->ctrl_events_avail);
+	init_waitqueue_head(&agdev_g->ctrl_events_wait);
+
+	/* Register the Misc Device. */
+	agdev_g->miscdev.minor = MISC_DYNAMIC_MINOR;
+	agdev_g->miscdev.name = "uac_plcm_control";
+	agdev_g->miscdev.fops = &uac_ctrl_node_fops;
+
+	res = misc_register(&agdev_g->miscdev);
+	if (res) {
+		pr_err("Failed to register the misc device. ret = %d\n",
+			res);
+		kfree(agdev_g);
+		return res;
+	}
+
 	agdev_g->func.name = "uac_plcm_func";
 	agdev_g->func.strings = fn_strings;
 	agdev_g->func.bind = afunc_bind;
@@ -1642,14 +1927,11 @@ static int audio_composite_bind_config(struct usb_configuration *cfg,
 	agdev_g->func.setup = afunc_setup;
 
 	res = usb_add_function(cfg, &agdev_g->func);
-	if (res < 0)
+	if (res < 0) {
+		pr_err("Failed to add usb functions\n");
+		misc_deregister(&agdev_g->miscdev);
 		kfree(agdev_g);
-
-	/* Initialize the lock */
-	spin_lock_init(&agdev_g->lock);
-
-	/* Initialize the work queue */
-	INIT_WORK(&agdev_g->status_notify_work, audio_status_notify);
+	}
 
 	return res;
 }
@@ -1664,6 +1946,16 @@ static void audio_unbind_config(struct usb_configuration *cfg)
 	pr_trace("%s:%d\n", __func__, __LINE__);
 	strings_fn[STR_ASSOC].id = 0;
 	uac_plcm_config = NULL;
+	misc_deregister(&agdev_g->miscdev);
+	/* FIXME. Remove the list?. */
+	while (!list_empty(&agdev_g->ctrl_events_avail)) {
+		struct uac_kevent_list *kevent;
+
+		kevent = list_first_entry(&agdev_g->ctrl_events_avail,
+				struct uac_kevent_list, list);
+		list_del(&kevent->list);
+		kfree(kevent);
+	}
 	kfree(agdev_g);
 	agdev_g = NULL;
 }

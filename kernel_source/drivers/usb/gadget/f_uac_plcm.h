@@ -1,5 +1,5 @@
 /*
- * f_hidg.h -- Header file for USB HID gadget driver
+ * f_uac_plcm.h -- Header file for PLCM UAC gadget driver
  *
  * Copyright (C) 2016 Jerry Zhang <Jerry.Zhang@polycom.com>
  *
@@ -18,34 +18,35 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef __LINUX_USB_F_HIDG_H
-#define __LINUX_USB_F_HIDG_H
+#ifndef __LINUX_USB_F_UAC_PLCM_H
+#define __LINUX_USB_F_UAC_PLCM_H
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define HID_REPORT_DESC_MAX_LENGTH	2048
-#define USB_STRING_MAX_LENGTH 126
+#define MAX_UAC_CTRL_EVENTS_COUNT	10
 
-struct hidg_device_config {
-	int	device;
-	struct device *dev;
-
-	unsigned char bInterfaceSubClass;
-	unsigned char bInterfaceProtocol;
-
-	unsigned short report_length;
-	unsigned short report_desc_length;
-	unsigned char report_desc[HID_REPORT_DESC_MAX_LENGTH];
-	unsigned char lync_ucq_string[USB_STRING_MAX_LENGTH];
+struct uac_feature_unit {
+    __u8 unit_id;
+	__u8 control_selector;
+	__u16 value;
 };
 
-struct hidg_report_data
-{
-	__s32 length;
-	__u8 data[60];
+struct uac_ctrl_event {
+	__u8 request;
+	union {
+		struct uac_feature_unit fu;
+		__u8 data[64];
+	}u;
+	__u8 reserved[3];
 };
 
-#define HIDG_IOC_SEND_VENDOR_REPORT		_IOW('H', 1, struct hidg_report_data)
+struct uac_feature_unit_value {
+	__u32 length;
+	__u8 data[16];
+};
 
-#endif /* __LINUX_USB_F_HIDG_H */
+#define UAC_IOC_SEND_FU_VALUE			_IOW('U', 0, struct uac_feature_unit_value)
+#define UAC_IOC_DQEVENT					_IOR('U', 1, struct uac_ctrl_event)
+
+#endif /* __LINUX_USB_F_UAC_PLCM_H */
