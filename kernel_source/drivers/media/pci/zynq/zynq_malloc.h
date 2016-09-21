@@ -24,6 +24,7 @@ struct zynq_malloc_conf {
 	unsigned int channel_id;
 	unsigned int available_buffer_size;
 	void *context;
+	unsigned int en_non_cache_map;
 };
 
 typedef struct zynq_malloc_conf  zynq_malloc_conf_t;

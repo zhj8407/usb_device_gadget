@@ -93,6 +93,9 @@ static u32 ch3_bufsize = 1920 * 1080 * 1.5;
 static u32 ch4_bufsize = 1920 * 1080 * 1.5;
 static u32 ch5_bufsize = 1920 * 1080 * 1.5;
 
+static int destroy_control_sysfs(struct kobject *kobj);
+static int create_control_sysfs(struct kobject *kobj);
+
 #define CAP_VIDEO_FORMAT V4L2_PIX_FMT_NV12
 #define CAP_VIDEO_FORMAT_STR "4:2:0, planner, NV12"
 
@@ -493,6 +496,21 @@ exit:
     return status;
 }
 
+static int is_vaild_buffer(int channel_id, dma_addr_t addr) {
+	int j = 0;
+	int i = channel_id;
+	unsigned int buffer_num = capture_dma_buffer_nums[channel_id];
+	int is_valid = 0;
+	
+	for (j  = 0; j < buffer_num; j++) {
+		if (capture_dam_framebuffer_handles[i][j] == addr) {
+			is_valid = 1;
+		}
+	}
+
+	return is_valid;
+}
+
 #endif
 ///////////////////////////////////////////////////////////////////////////////////////
 #ifdef VIRTUAL_CAPTURE_DEVICE
@@ -785,6 +803,7 @@ static int vpif_buffer_queue_setup(struct vb2_queue *vq,
 		//////////////////////////////////////////////////////////////////////////////////
 		{
         	zynq_malloc_conf_t  ctx;
+			ctx.en_non_cache_map = ch->en_non_cache_map ;
 			ctx.is_always_get_first_memory = 0;
 			ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
 			ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
@@ -908,6 +927,7 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
                                          struct vpif_cap_buffer, list);
     /* Remove buffer from the buffer queue */
     list_del(&common->cur_frm->list);
+
     spin_unlock_irqrestore(&common->irqlock, flags);
     /* Mark state of the current frame to active */
     common->cur_frm->vb.state = VB2_BUF_STATE_ACTIVE;
@@ -986,6 +1006,12 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
     addr = vb2_dma_contig_plane_dma_addr(&common->cur_frm->vb, 0);
 #endif
     if ((addr != 0) && (common->set_addr != NULL)) {
+#if defined(USE_ZYNQ_MALLOC)
+		 if (is_vaild_buffer(ch->channel_id, addr) == 0) {
+			 zynq_printk(0, "[zynq_capture](%d) jeff The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
+			 goto  exit;
+		 }
+#endif
         common->set_addr(addr+common->y_off,  addr+common->uv_off);
         if (common->set_res != NULL) {
 			if (common->set_res(fmt_ptr->fmt.pix.width, fmt_ptr->fmt.pix.height) != 0)
@@ -1046,7 +1072,7 @@ static int vpif_stop_streaming(struct vb2_queue *vq)
     common->is_start_streaming = 0;
     common->is_stop_streaming = 1;
 	if (debug_print >= 2) {
-		zynq_printk(2,  "[zynq_capture]xxx Interrupt count:  (intr, dummy) ---> (%u, %u) for channel %u\n", ch->interrupt_count, ch->interrupt_dummy_buffer_count, (unsigned int)ch->channel_id);
+		zynq_printk(2,  "[zynq_capture]jeff Interrupt count:  (intr, dummy) ---> (%u, %u) for channel %u\n", ch->interrupt_count, ch->interrupt_dummy_buffer_count, (unsigned int)ch->channel_id);
 		ch->interrupt_count = 0;
 		ch->interrupt_dummy_buffer_count = 0;
 	}
@@ -1482,12 +1508,13 @@ static int vpif_reqbufs(struct file *file, void *priv,
         zynq_malloc_conf_t  ctx;
 
         ctx.is_always_get_first_memory = 0;
-		
+		ctx.en_non_cache_map = ch->en_non_cache_map ;
 		ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
 		ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
 		ctx.buffer_num = capture_dma_buffer_nums[ch->channel_id];
 		ctx.channel_id = ch->channel_id;
 		ctx.available_buffer_size = capture_dma_size;
+		  zynq_printk(1, "[zynq_capture](%d)jeff1234----------------> ctx.en_non_cache_map = %u\n", __LINE__, ctx.en_non_cache_map);
         zynq_printk(1, "[zynq_capture](%d)ctx.buffer_num = %u\n", __LINE__, ctx.buffer_num);
 		common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
         if (IS_ERR(common->alloc_ctx)) {
@@ -2205,20 +2232,22 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 			fmt = get_format(f);
 		}else { 
 			fmt = &default_formats[default_cap_video_format];
-			f->fmt.pix.pixelformat = fmt->fourcc;  
+			f->fmt.pix.pixelformat = fmt->fourcc; 
 		}
-		zynq_printk(0, "[zynq_capture](%d)Because getting the format error, use the defult format %s !!\n", __LINE__, fmt->name);
+		zynq_printk(0, "[zynq_capture](%d)xx Because getting the format error, use the defult format %s !!(width = %u)\n", __LINE__, fmt->name, f->fmt.pix.width);
 	} else {
-		zynq_printk(0, "[zynq_capture](%d)Get the format %s !!\n", __LINE__, fmt->name);
+		zynq_printk(0, "[zynq_capture](%d)Get the format %s !! (width = %u)\n", __LINE__, fmt->name, f->fmt.pix.width);
 	}
 
 	f->fmt.pix.field = V4L2_FIELD_INTERLACED;
 	v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
 			      &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
-	f->fmt.pix.bytesperline =
-		(f->fmt.pix.width * fmt->depth) >> 3;
-	f->fmt.pix.sizeimage =
-		f->fmt.pix.height * f->fmt.pix.bytesperline;
+	f->fmt.pix.bytesperline =f->fmt.pix.width;
+	if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ) {
+		f->fmt.pix.sizeimage = (f->fmt.pix.height * f->fmt.pix.width * 3) >> 1;
+	} else if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
+		f->fmt.pix.sizeimage = f->fmt.pix.height * f->fmt.pix.width * 2;
+	}
 	if (fmt->is_yuv)
 		f->fmt.pix.colorspace = V4L2_COLORSPACE_SMPTE170M;
 	else
@@ -2917,18 +2946,20 @@ vpif_init_free_channel_objects:
     return err;
 }
 /////////////////////////////////////////////////////////////////////////////////////
+//#define SINGLE_BUF 1
 
-
-static void vpif_process_buffer_complete(struct common_obj *common)
+static void vpif_process_buffer_complete(int channel_id, struct common_obj *common)
 {
-    v4l2_get_timestamp(&common->cur_frm->vb.v4l2_buf.timestamp);
+	v4l2_get_timestamp(&common->cur_frm->vb.v4l2_buf.timestamp);
+
     vb2_buffer_done(&common->cur_frm->vb,
                     VB2_BUF_STATE_DONE);
+
     /* Make curFrm pointing to nextFrm */
     common->cur_frm = common->next_frm;
 }
 
-static void vpif_schedule_next_buffer(struct common_obj *common)
+static void vpif_schedule_next_buffer(int channel_id, struct common_obj *common)
 {
     dma_addr_t  addr = 0;
 
@@ -2949,16 +2980,27 @@ static void vpif_schedule_next_buffer(struct common_obj *common)
     common->next_frm->vb.state = VB2_BUF_STATE_ACTIVE;
 
 #if defined(USE_ZYNQ_MALLOC)
-    addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);
+    /*addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);*/
+	/*DST: should be cur_frm since cur_frm has been set to next_frm*/
+	//addr =	zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
+	 addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);
 #elif defined(USE_DMA_COUNTING)
     addr = vb2_dma_contig_plane_dma_addr(&common->next_frm->vb, 0);
+	//addr =	 vb2_dma_contig_plane_dma_addr(&common->cur_frm->vb, 0);
 #endif
     if ((addr != (dma_addr_t)NULL) && (common->set_addr != NULL)) {
+#if defined(USE_ZYNQ_MALLOC)
+		 if (is_vaild_buffer(channel_id, addr) == 0) {
+			 zynq_printk(0, "[zynq_capture](%d)jeff  The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
+			 goto  exit;
+		 }
+#endif
         common->set_addr(addr+common->y_off,  addr+common->uv_off);
         if (common->enable_channel != NULL) common->enable_channel(1);
         if (common->enable_channel_video != NULL)common->enable_channel_video(1);
     }
-
+exit:
+	return;
 }
 
 static void set_to_dummy_buffer(struct common_obj *common)
@@ -3035,19 +3077,21 @@ static irqreturn_t vpif_channel_isr(int irq, void *dev_id)
         spin_lock(&common->irqlock);
 		
         if (debug_print >= 2) ch->interrupt_count++;
-		
+	
 		if (list_empty(&common->dma_queue)) {
             spin_unlock(&common->irqlock);
             set_to_dummy_buffer(common);
 			 if (debug_print >= 2) ch->interrupt_dummy_buffer_count++;
             goto exit;
         }
+
         spin_unlock(&common->irqlock);
 
-        if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id]) vpif_process_buffer_complete(common);
+        if (!channel_first_int[VPIF_VIDEO_INDEX][channel_id]) vpif_process_buffer_complete(channel_id, common);
 
         channel_first_int[VPIF_VIDEO_INDEX][channel_id] = 0;
-        vpif_schedule_next_buffer(common);
+
+        vpif_schedule_next_buffer(channel_id, common);
     }
 exit:
     atomic_dec(&common->refcount);
@@ -3072,6 +3116,8 @@ int vpif_capture_release(struct pci_dev *pdev)
 
     if (vpif_obj.sd_of_sd) kfree(vpif_obj.sd_of_sd);
 
+	destroy_control_sysfs(&pdev->dev.kobj);
+	
     /* un-register device */
     for (i = 0; i < video_cap_dev_num; i++) {
         /* Get the pointer to the channel object */
@@ -3108,6 +3154,7 @@ int vpif_capture_release(struct pci_dev *pdev)
 #ifdef USE_ZYNQ_MALLOC
     release_reserved_memory(&pdev->dev);
 #endif
+	
     zynq_printk(1,  "[zynq_capture]The capture function is released !! \n");
     return 0;
 }
@@ -3491,6 +3538,7 @@ int vpif_capture_init(struct pci_dev *pdev)
 		
         if (err) goto rls_sd_obj;
 
+		ch->en_non_cache_map = 0;
         initialize_channel_video_obj(ch);
         initialize_channel_pxiel_format(ch);
         initial_channel_vpif_parameters(ch);
@@ -3514,7 +3562,11 @@ int vpif_capture_init(struct pci_dev *pdev)
 #endif
 	
 	fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG);
-    zynq_printk(1,  "[zynq_capture]The capture function is  initialized !! (fpga_release_date = 0x%08x)\n", fpga_release_date);
+	
+	create_control_sysfs(&pdev->dev.kobj);
+	
+	
+    zynq_printk(1,  "[zynq_capture]jeff The capture function is  initialized !! (fpga_release_date = 0x%08x)\n", fpga_release_date);
 	
     if (err == 0)
         is_initial_vpif_obj = 1;
@@ -3586,3 +3638,81 @@ int vpif_capture_resume(void) {
     return 0;
 }
 #endif
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+static void set_en_non_cache_map_for_one_channel(unsigned int channel_id, unsigned int  set_val){
+	
+	   struct channel_obj *ch = NULL;
+	    struct mutex *lock_ptr = NULL;
+	   ch = vpif_obj.dev[channel_id];
+		if (ch) {
+				lock_ptr = &ch->chan_lock;
+				printk(KERN_INFO "[zynq_capture] (channel_id, ch, lock, set_val) = (%u, %p, %p, %u)\n", channel_id, ch, lock_ptr,  set_val);
+				if (lock_ptr) mutex_lock(lock_ptr);
+				ch->en_non_cache_map = set_val;
+				if (lock_ptr) mutex_unlock(lock_ptr);
+		}
+		return;
+}
+
+static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
+
+	const char *name =  attr->attr.name;
+	unsigned int set_val = 0;
+	unsigned int channel_id = (unsigned int)-1;
+	printk(KERN_INFO "[zynq_capture] jeff sysfs  (name, buf, count, strlen(buf)) = (%s, %s, %u, %u)\n", name, buf, count,  strlen(buf));
+
+	if (name && buf)  {
+			set_val = simple_strtoul(buf, NULL, 16);
+		    if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO0") == 0) {
+				 channel_id = 0;
+			} else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO1") == 0) {
+				channel_id = 1;
+			} else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO2") == 0) {
+				channel_id = 2;
+			} 
+			if (channel_id != (unsigned int)-1) 
+				set_en_non_cache_map_for_one_channel(channel_id, set_val);
+	}
+	 return count;
+};
+
+static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
+//	const char *name =  attr->attr.name;
+	return  0;
+};
+
+static struct kobj_attribute en_non_cache_map_video0_attribute = __ATTR(EN_NON_CACHE_MAP_VIDEO0,  S_IRUGO |  S_IWUGO, b_show, b_store);
+static struct kobj_attribute en_non_cache_map_video1_attribute = __ATTR(EN_NON_CACHE_MAP_VIDEO1,  S_IRUGO |  S_IWUGO, b_show, b_store);
+static struct kobj_attribute en_non_cache_map_video2_attribute = __ATTR(EN_NON_CACHE_MAP_VIDEO2,  S_IRUGO |  S_IWUGO, b_show, b_store);
+
+
+static struct attribute *attrs[] = {
+	    (struct attribute *)&en_non_cache_map_video0_attribute,
+	    (struct attribute *)&en_non_cache_map_video1_attribute,
+	    (struct attribute *)&en_non_cache_map_video2_attribute,
+	    NULL
+};
+
+static struct attribute_group attr_group = {
+    .attrs = attrs,
+};
+
+static int create_control_sysfs(struct kobject *kobj) {
+	   int retval  = -1;
+	
+	if (kobj != NULL) {
+        retval = sysfs_create_group(kobj, &attr_group);
+	}
+	  return retval;
+}
+
+static int destroy_control_sysfs(struct kobject *kobj) {
+    
+	if (!kobj) return -1;
+
+    sysfs_remove_group(kobj, &attr_group);
+
+    return 0;
+}
+///////////////////////////////////////////////////////////////////////////////////////////////
