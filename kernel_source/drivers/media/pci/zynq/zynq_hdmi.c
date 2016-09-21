@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
+#include <linux/delay.h>
 #include "zynq_adv762x.h"
 
 #define ADV762X_I2C_BUS 0x2
@@ -18,10 +19,7 @@
 
 #define ZYNQ_HDMI_VERSION "0.0.1"
 
-//insmod  ./zynqhdmi.ko  adv762x_id=1 adv762x_i2c_bus=0x2 adv762x_i2c_addr=0x4c 
 
-unsigned int adv762x_id = 0; //0: adv7625, 1:adv7627
-module_param(adv762x_id, int, 0644);
 
 unsigned int adv762x_i2c_bus =  (unsigned int)(-1);
 module_param(adv762x_i2c_bus, int, 0644);
@@ -40,6 +38,11 @@ module_param(adv762x_hdmi_src, int, 0644);
 unsigned int adv762x_mode=(unsigned int)(-1);//0:mux mode, 1:transceiver mode, 2:unknown mode
 module_param(adv762x_mode, int, 0644);
 
+unsigned int adv762x_use_fixed_edid= 0;
+module_param(adv762x_use_fixed_edid, int, 0644);
+EXPORT_SYMBOL_GPL(adv762x_use_fixed_edid);
+
+
 
 MODULE_DESCRIPTION("Driver for zynq based HDMI  module");
 MODULE_AUTHOR("Jeff Liao <qustion@gmail.com>");
@@ -49,119 +52,23 @@ MODULE_VERSION( ZYNQ_HDMI_VERSION);
 static struct i2c_client * g_client = NULL;
 static struct i2c_adapter *g_adapter = NULL;
 
-#define ADV7625_I2C_ID_NAME  "adv7625"
 #define ADV7627_I2C_ID_NAME  "adv7627"
-/*
-B0 EC 68 ; default=0x00, Set HDMI_Rx1_Map address
-B0 F0 58 ; default=0x00, Set HDMI_Rx2_Map address
-B0 EE 64 ; default=0x00, Set EDID_Config_and_Rx1_Repeater_Map address
-B0 F2 F4 ; default=0x00, Set Rx2_Repeater_Map_Address
-B0 EF 62 ; default=0x00, Set Rx1_Infoframe_Map address
-B0 F3 F6 ; default=0x00, Set Rx2_Infoframe_Map address
-B0 E8 44 ; default=0x00, Set CP_Lite_A_Map address
-B0 E9 94 ; default=0x00, Set CP_Lite_B_Map address
-B0 E6 4E ; default=0x00, Set DPLL_A_Map address 
-B0 E7 90 ; default=0x00, Set DPLL_B_Map address 
-B0 EA F0 ; default=0x00, Set OSD_Map address
-B0 F4 B8 ; default=0x00, Set TxA_Main_Map address
-B0 F9 F8 ; default=0x00, Set TxB_Main_Map address
-B0 F7 70 ; default=0x00, Set TxA_Packet_Memory_Map address
-B0 FC FA ; default=0x00, Set TxB_Packet_Memory_Map address
-B0 F8 80 ; default=0x00, Set TxA_CEC_Map address
-B0 FD 8C ; default=0x00, Set TxB_CEC_Map address
-B0 F5 7E ; default=0x00, Set TxA_Edid_Map address
-B0 FA 84 ; default=0x00, Set TxB_Edid_Map address
-B0 F6 7C ; default=0x00, Set TxA_Test_Map address
-B0 FB C0 ; default=0x00, Set TxB_Test_Map address
- */
-struct adv762x_platform_data  adv7625_data = {
-	.id = ADV7625,
-	.rx_main_map[0]  = (0x68 >> 1), 
-	.rx_main_map[1]  = (0x58 >> 1),
-	.rx_repeater_map[0] =  (0x64>> 1), 
-	.rx_repeater_map[1] =(0xf4 >> 1),
-	.rx_information_map[0] =  (0x62 >> 1),
-	.rx_information_map[1] = (0xf6 >> 1),
-	.rx_edid_map[0] = (0x6c >> 1),
-	.rx_edid_map[1] = (0xd6>> 1),
-	.rx_test_map = (0x82  >> 1),
-	.cp_lite_map[0] = (0x44 >> 1), 
-	.cp_lite_map[1] =	(0x94 >> 1),
-	.dpll_map[0] = (0x4e >> 1), 
-	.dpll_map[1] = (0x90 >> 1),
-	.osd_map = (0xf0 >> 1),
-	.tx_main_map[0] = (0xb8 >> 1),
-	.tx_main_map[1] = (0xf8 >> 1),
-	.tx_packet_map[0] =  (0x70 >> 1), 
-	.tx_packet_map[1] =  (0xfa >> 1),
-	.tx_cec_map[0] =  (0x80 >> 1),
-	.tx_cec_map[1] = (0x8c >> 1),
-	.tx_edid_map[0] = (0x7e >> 1), 
-	.tx_edid_map[1] =(0x84 >> 1),
-	.tx_test_map[0] = (0x7c >> 1), 
-	.tx_test_map[1] = (0xc0>> 1)
-};
-
 
 struct adv762x_platform_data  adv7627_data = {
-	.id = ADV7627,
-	.rx_main_map[0]  = (0x68 >> 1), 
-	.rx_main_map[1]  = (0x58 >> 1),
-	.rx_repeater_map[0] =  (0x64>> 1), 
-	.rx_repeater_map[1] =(0xf4 >> 1),
-	.rx_information_map[0] =  (0x62 >> 1),
-	.rx_information_map[1] = (0xf6 >> 1),
-	.rx_edid_map[0] = (0x6c >> 1),
-	.rx_edid_map[1] = (0xd6 >> 1),
-	.rx_test_map = (0x82  >> 1),
-	.cp_lite_map[0] = (0x44 >> 1), 
-	.cp_lite_map[1] =	(0x94 >> 1),
-	.dpll_map[0] = (0x4e >> 1), 
-	.dpll_map[1] = (0x90 >> 1),
+	.dpll_map = (0x90 >> 1),//dpll_b_map
+	.cp_lite_map =	(0x94 >> 1),//cp_b_map
 	.osd_map = (0xf0 >> 1),
-	.tx_main_map[0] = (0xb8 >> 1),
-	.tx_main_map[1] = (0xf8 >> 1),
-	.tx_packet_map[0] =  (0x70 >> 1), 
-	.tx_packet_map[1] =  (0xfa >> 1),
-	.tx_cec_map[0] =  (0x80 >> 1),
-	.tx_cec_map[1] = (0x8c >> 1),
-	.tx_edid_map[0] = (0x7e >> 1), 
-	.tx_edid_map[1] =(0x84 >> 1),
-	.tx_test_map[0] = (0x7c >> 1), 
-	.tx_test_map[1] = (0xc0>> 1)
-};
-
-struct adv762x_platform_data  adv762x_data = {
-	.id = ADV762X,
-	.rx_main_map[0]  = (0x68 >> 1), 
-	.rx_main_map[1]  = (0x58 >> 1),
-	.rx_repeater_map[0] =  (0x64>> 1), 
-	.rx_repeater_map[1] =(0xf4 >> 1),
-	.rx_information_map[0] =  (0x62 >> 1),
-	.rx_information_map[1] = (0xf6 >> 1),
-	.rx_edid_map[0] = (0x6c >> 1),
-	.rx_edid_map[1] = (0xd6 >> 1),
+	.edid_config_map =  (0x6a >> 1), //edid_config_map
+	.rx_repeater_map =(0x66 >> 1),//rx2_repeater_map
+	.rx_main_map  = (0x58 >> 1),//hdmi_rx2_map
+	.rx_information_map = (0x62 >> 1), //rx2_infoframe_map
+	.rx_edid_map = (0x7e >> 1), //edid_mem_map
 	.rx_test_map = (0x82  >> 1),
-	.cp_lite_map[0] = (0x44 >> 1), 
-	.cp_lite_map[1] =	(0x94 >> 1),
-	.dpll_map[0] = (0x4e >> 1), 
-	.dpll_map[1] = (0x90 >> 1),
-	.osd_map = (0xf0 >> 1),
-	.tx_main_map[0] = (0xb8 >> 1),
-	.tx_main_map[1] = (0xf8 >> 1),
-	.tx_packet_map[0] =  (0x70 >> 1), 
-	.tx_packet_map[1] =  (0xfa >> 1),
-	.tx_cec_map[0] =  (0x80 >> 1),
-	.tx_cec_map[1] = (0x8c >> 1),
-	.tx_edid_map[0] = (0x7e >> 1), 
-	.tx_edid_map[1] =(0x84 >> 1),
-	.tx_test_map[0] = (0x7c >> 1), 
-	.tx_test_map[1] = (0xc0>> 1)
-};
-
-struct i2c_board_info g_board_info_adv7625 = {
-	       I2C_BOARD_INFO( ADV7625_I2C_ID_NAME, ADV762X_I2C_ADDR),
-            .platform_data =  &adv7625_data
+	.tx_main_map = (0xb8 >> 1), //txb_main_map
+	.tx_edid_map =(0x84 >> 1),//txb_edid_map
+	.tx_test_map = (0xc0>> 1), //txb_test_map
+	.tx_packet_map =  (0x70 >> 1),//txb_packet_memory_map
+	.tx_cec_map = (0x8c >> 1)//txb_cec_map
 };
 
 struct i2c_board_info g_board_info_adv7627 = {
@@ -169,34 +76,21 @@ struct i2c_board_info g_board_info_adv7627 = {
             .platform_data =  &adv7627_data
 };
 
-struct i2c_board_info g_board_info_adv762x = {
-	       I2C_BOARD_INFO( ADV7627_I2C_ID_NAME, ADV762X_I2C_ADDR),
-            .platform_data =  &adv762x_data
-};
+static void power_up_sequence(void);
+static void reset_sequence() ;
+static inline void hdmi_delay(unsigned int msec);
 
-#if 0
-//Refence from : http://lxr.free-electrons.com/source/drivers/i2c/i2c-core.c#L2195
-static int i2c_clients_probe(struct i2c_adapter * adap, unsigned short addr) {
-	int err;
-    union i2c_smbus_data dummy;
-    err = i2c_smbus_xfer(adap, addr, 0, I2C_SMBUS_READ, 0, I2C_SMBUS_BYTE, &dummy);
-    return err >= 0;
-}
-#endif
 static int __init zynq_hdmi_init(void) {
+
 
 	struct i2c_board_info *info = NULL;
 	unsigned int bus = (unsigned int)ADV762X_I2C_BUS;
 	struct adv762x_platform_data  *pdata = NULL;
 	
-	printk(KERN_INFO "[zynq_hdmi]xxx  Enter  zynq_hdmi_init()\n");
+	printk(KERN_INFO "[zynq_hdmi]Enter  zynq_hdmi_init()\n");
 	
-	if (adv762x_id == 0)
-		info = &g_board_info_adv7625;
-	else if (adv762x_id == 1)
-		info = &g_board_info_adv7627;
-	else 
-		info = &g_board_info_adv762x;
+	info = &g_board_info_adv7627;
+
 	
 	if (adv762x_i2c_addr  != (unsigned int)-1)
 		info->addr  = adv762x_i2c_addr;
@@ -220,12 +114,29 @@ static int __init zynq_hdmi_init(void) {
 	else 
 		pdata->mode = UNKNOWNMODE  ; //UNKNOWNMODE
 		
-	printk(KERN_INFO "[zynq_hdmi] (id, src, mode, bus, addr) = (%u, %u, %u, 0x%02x, 0x%02x)\n", pdata->id, pdata->hdmi_src_id,  pdata->mode, bus, info->addr);
-	
+	printk(KERN_INFO "[zynq_hdmi] xxx (src, mode, bus, addr) = (%u, %u, 0x%02x, 0x%02x)\n", pdata->hdmi_src_id,  pdata->mode, bus, info->addr);
+#if 0
+	power_up_sequence();
+	reset_sequence();
+	pdata->is_initial_interrupt = 0;
+	pdata->adv762x_use_fixed_edid = 1;
 	g_adapter = i2c_get_adapter(bus);
 	g_client =   i2c_new_device(g_adapter, info);
+	if (g_client) i2c_unregister_device(g_client);
+	if (g_adapter)i2c_put_adapter(g_adapter);
+
+	hdmi_delay(1000);
+#endif
+	//power_up_sequence();
+	//reset_sequence();
+	pdata->is_initial_interrupt = 1;
+	pdata->adv762x_use_fixed_edid = adv762x_use_fixed_edid;
+	g_adapter = i2c_get_adapter(bus);
+	g_client =   i2c_new_device(g_adapter, info);
+	
+	
 	printk(KERN_INFO "[zynq_hdmi] I2C client object is = 0x%p\n", g_client);
-	printk(KERN_INFO "[zynq_hdmi] xxx Leave  zynq_hdmi_init()\n");
+	printk(KERN_INFO "[zynq_hdmi] [jeff@12345]Leave  zynq_hdmi_init()(adv762x_use_fixed_edid = %u)\n",adv762x_use_fixed_edid);
  	return 0;
 }
 
@@ -240,6 +151,94 @@ static void __exit zynq_hdmi_fini(void) {
 	printk(KERN_INFO "[zynq_hdmi] Leave zynq_hdmi_fini()\n");
 
     return;
+}
+
+static inline void hdmi_delay(unsigned int msec) {
+	
+	//unsigned long timeout = jiffies + HZ * sec; 
+	//while (time_before(jiffies, timeout)) cpu_relax(  );
+	 msleep_interruptible(msec);
+}
+
+/*
+ #/bin/bash
+
+reset_pin=83 #GPIO_PK3
+
+
+#default low -->high-->low-->delay 5 msec--->high
+cd /sys/class/gpio
+echo $reset_pin > export
+echo out > gpio$reset_pin/direction
+echo 1 > gpio$reset_pin/value
+echo 0 > gpio$reset_pin/value
+sleep 0.05
+echo 1 > gpio$reset_pin/value
+cd - > /dev/null
+
+cd /sys/class/gpio
+#echo 0  > gpio$hpd_pin/value
+echo $reset_pin >  unexport
+cd - > /dev/n
+ 
+ */
+static void power_up_sequence() {
+	int ret = -1;
+	unsigned int reset_gpio_pin = 83; //GPIO_PK3
+	ret = gpio_request(reset_gpio_pin, "ADV7627  Reset  pin");
+	if (ret) {
+		printk(KERN_INFO"[zynq_hdmi] Call gpio_request() for %u  error\n", __func__, reset_gpio_pin);
+		return;
+	}
+	gpio_direction_output(reset_gpio_pin, 1);
+	gpio_direction_output(reset_gpio_pin, 0);
+	hdmi_delay(50);
+	gpio_direction_output(reset_gpio_pin, 1);
+	
+	gpio_free(reset_gpio_pin);
+	return;
+}
+
+/*
+ 
+ #/bin/bash
+
+reset_pin=83 #GPIO_PK3
+
+#The ADV7625 includes an active low reset pin, RESETB. The ADV7625 can be reset by applying a low reset pulse to the RESETB pin with
+#a minimum width of 5 ms. It is recommended to wait 5 ms after the low pulse before an I2C write is performed to the ADV7625.
+#RESETB  is always used. Level of pin should be controlled by external control processor.
+
+#default low -->low-->delay 5 msec
+cd /sys/class/gpio
+echo $reset_pin > export
+echo out > gpio$reset_pin/direction
+echo 0 > gpio$reset_pin/value
+sleep 0.05
+echo 1 > gpio$reset_pin/value
+cd - > /dev/null
+
+cd /sys/class/gpio
+#echo 0  > gpio$hpd_pin/value
+echo $reset_pin >  unexport
+cd - > /dev/nul
+
+ */
+
+static void reset_sequence() {
+	int ret = -1;
+	unsigned int reset_gpio_pin = 83; //GPIO_PK3
+	ret = gpio_request(reset_gpio_pin, "ADV7627  Reset  pin");
+	if (ret) {
+		printk(KERN_INFO"[zynq_hdmi] Call gpio_request() for %u  error\n", __func__, reset_gpio_pin);
+		return;
+	}
+	gpio_direction_output(reset_gpio_pin, 0);
+	hdmi_delay(50);
+	gpio_direction_output(reset_gpio_pin, 1);
+	
+	gpio_free(reset_gpio_pin);
+	
 }
 
 module_init(zynq_hdmi_init);

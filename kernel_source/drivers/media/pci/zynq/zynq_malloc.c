@@ -143,6 +143,7 @@ struct vb2_vmalloc_buf {
 	unsigned int channel_id;
 	unsigned int available_buffer_size;
 	 struct zynq_mem_pool  *pool;
+	 unsigned int en_non_cache_map;
 };
 
 static void vb2_vmalloc_put(void *buf_priv);
@@ -169,6 +170,7 @@ static void *vb2_vmalloc_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_fl
         //printk(KERN_INFO"[zynq_malloc](%d)\n",__LINE__);
     }
     
+    buf->en_non_cache_map = conf->en_non_cache_map;
     buf->channel_id = conf->channel_id;
 	buf->available_buffer_size = conf->available_buffer_size;
     buf->size = size;
@@ -306,7 +308,7 @@ static int vb2_vmalloc_mmap(void *buf_priv, struct vm_area_struct *vma) {
 			}
 #endif	
   
-  if (en_non_cache_map) {
+  if (en_non_cache_map || buf->en_non_cache_map) {
 	printk(KERN_INFO"[zynq_malloc](%d) map  the vma pages as non cached!!\n", __LINE__);
   	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
   }
@@ -403,6 +405,7 @@ void *zynq_malloc_init_ctx(zynq_malloc_conf_t *ctx)
 	conf->channel_id = ctx->channel_id;
 	conf->available_buffer_size = ctx->available_buffer_size;
 	conf->context = (void *)pool_ctx;
+	conf->en_non_cache_map = ctx->en_non_cache_map;
 	
 	//printk(KERN_INFO"[zynq_malloc]jefff  memory pool address : 0x%p\n", pool_ctx->mem_pool);
 	

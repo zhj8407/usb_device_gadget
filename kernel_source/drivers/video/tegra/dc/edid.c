@@ -206,18 +206,22 @@ int tegra_edid_read_block(struct tegra_edid *edid, int block, u8 *data)
 
 	if (status != msg_len)
 		return -EIO;
-
-	for (i = 0 ; i < 128; i++)
-		data[i] = VX239_edid_bin[i + 128 * block];
 	
 
 	for (i = 0; i < 128; i++)
 		checksum += data[i];
+	
 	if (checksum != 0) {
-		pr_err("%s: checksum failed (use VX239_edid_bin)\n", __func__);
-		return -EIO;
+		pr_err("%s: The checksum is  failed. Use default edid to calculate the checksum  again !!\n", __func__);
+		for (i = 0 ; i < 128; i++)
+			data[i] = VX239_edid_bin[i + 128 * block];
+		for (i = 0; i < 128; i++)
+			checksum += data[i];
+		if (checksum != 0){
+			pr_err("%s: The checksum is really  failed\n", __func__);
+			return -EIO;
+		}
 	}
-
 	return 0;
 }
 

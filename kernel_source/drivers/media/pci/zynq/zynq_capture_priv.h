@@ -130,6 +130,8 @@ struct channel_obj {
 	
 	u32 interrupt_count;
 	u32 interrupt_dummy_buffer_count;
+	
+	unsigned int en_non_cache_map;
 };
 
 /* File handle structure */

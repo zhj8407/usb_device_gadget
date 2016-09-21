@@ -53,6 +53,7 @@ static irqreturn_t tegra_hier_ictlr_irq_handler(int irq, void *data)
 		pr_err("MSELECT error detected! status=0x%x\n",
 			(unsigned int)status);
 		WARN_ON(1);
+		writel(MSELECT_ERROR_STATUS_CLEAR, ictlr->mselect_base + MSELECT_ERROR_STATUS_0); //Clear Err INT status
 	}
 
 	return IRQ_HANDLED;

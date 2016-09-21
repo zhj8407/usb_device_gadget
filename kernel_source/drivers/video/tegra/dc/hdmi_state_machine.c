@@ -42,7 +42,7 @@
  * state machine internal constants
  *
  ************************************************************/
-#define MAX_EDID_READ_ATTEMPTS 5
+#define MAX_EDID_READ_ATTEMPTS 10
 #define HDMI_EDID_MAX_LENGTH 512
 
 /* how long of an HPD drop before we consider it gone for good.

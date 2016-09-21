@@ -42,14 +42,7 @@
 #define en_vdd_bl	TEGRA_GPIO_PG0
 #define lvds_en		TEGRA_GPIO_PG3
 
-static bool reg_requested;
-static bool gpio_requested;
 static struct platform_device *disp_device;
-static struct regulator *avdd_lcd_3v3;
-static struct regulator *vdd_lcd_bl;
-static struct regulator *vdd_lcd_bl_en;
-static struct regulator *dvdd_lcd_1v8;
-static struct regulator *vdd_ds_1v8;
 
 #define en_vdd_bl	TEGRA_GPIO_PG0
 #define lvds_en		TEGRA_GPIO_PG3
@@ -189,7 +182,7 @@ static struct tegra_dsi_out dsi_p_wuxga_10_1_pdata = {
 	.n_init_cmd = ARRAY_SIZE(dsi_p_wuxga_10_1_init_cmd),
 	.pkt_seq = panasonic_1920_1200_vnb_syne,
 };
-
+/*
 static int dalmore_dsi_regulator_get(struct device *dev)
 {
 	int err = 0;
@@ -233,136 +226,15 @@ fail:
 	return err;
 }
 
-static int dalmore_dsi_gpio_get(void)
-{
-	int err = 0;
 
-	if (gpio_requested)
-		return 0;
-
-	err = gpio_request(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio,
-		"panel rst");
-	if (err < 0) {
-		pr_err("panel reset gpio request failed\n");
-		goto fail;
-	}
-
-	/* free pwm GPIO */
-	err = gpio_request(dsi_p_wuxga_10_1_pdata.dsi_panel_bl_pwm_gpio,
-		"panel pwm");
-	if (err < 0) {
-		pr_err("panel pwm gpio request failed\n");
-		goto fail;
-	}
-	gpio_free(dsi_p_wuxga_10_1_pdata.dsi_panel_bl_pwm_gpio);
-	gpio_requested = true;
-	return 0;
-fail:
-	return err;
-}
-
+*/
 static int dsi_p_wuxga_10_1_enable(struct device *dev)
 {
-	int err = 0;
-
-	err = dalmore_dsi_regulator_get(dev);
-	if (err < 0) {
-		pr_err("dsi regulator get failed\n");
-		goto fail;
-	}
-
-	err = tegra_panel_gpio_get_dt("p,wuxga-10-1", &panel_of);
-	if (err < 0) {
-		/* try to request gpios from board file */
-		err = dalmore_dsi_gpio_get();
-		if (err < 0) {
-			pr_err("dsi gpio request failed\n");
-			goto fail;
-		}
-	}
-
-	if (vdd_ds_1v8) {
-		err = regulator_enable(vdd_ds_1v8);
-		if (err < 0) {
-			pr_err("vdd_ds_1v8 regulator enable failed\n");
-			goto fail;
-		}
-	}
-
-	if (dvdd_lcd_1v8) {
-		err = regulator_enable(dvdd_lcd_1v8);
-		if (err < 0) {
-			pr_err("dvdd_lcd regulator enable failed\n");
-			goto fail;
-		}
-	}
-
-	if (avdd_lcd_3v3) {
-		err = regulator_enable(avdd_lcd_3v3);
-		if (err < 0) {
-			pr_err("avdd_lcd regulator enable failed\n");
-			goto fail;
-		}
-	}
-
-	if (vdd_lcd_bl) {
-		err = regulator_enable(vdd_lcd_bl);
-		if (err < 0) {
-			pr_err("vdd_lcd_bl regulator enable failed\n");
-			goto fail;
-		}
-	}
-
-	if (vdd_lcd_bl_en) {
-		err = regulator_enable(vdd_lcd_bl_en);
-		if (err < 0) {
-			pr_err("vdd_lcd_bl_en regulator enable failed\n");
-			goto fail;
-		}
-	}
-	
-#if 0
-	msleep(100);
-#if DSI_PANEL_RESET
-	err = tegra_panel_reset(&panel_of, 20);
-	if (err < 0) {
-		/* use platform data */
-		gpio_direction_output(
-		dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio, 1);
-		usleep_range(1000, 5000);
-		gpio_set_value(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio, 0);
-		msleep(150);
-		gpio_set_value(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio, 1);
-		msleep(20);
-	}
-#endif
-#endif
-
 	return 0;
-fail:
-	return err;
 }
 
 static int dsi_p_wuxga_10_1_disable(void)
 {
-	if (gpio_is_valid(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio))
-		gpio_set_value(dsi_p_wuxga_10_1_pdata.dsi_panel_rst_gpio, 0);
-
-	if (vdd_lcd_bl)
-		regulator_disable(vdd_lcd_bl);
-
-	if (vdd_lcd_bl_en)
-		regulator_disable(vdd_lcd_bl_en);
-
-	if (avdd_lcd_3v3)
-		regulator_disable(avdd_lcd_3v3);
-
-	if (dvdd_lcd_1v8)
-		regulator_disable(dvdd_lcd_1v8);
-
-	if (vdd_ds_1v8)
-		regulator_disable(vdd_ds_1v8);
-
 	return 0;
 }
 
