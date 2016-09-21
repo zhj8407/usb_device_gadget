@@ -6,20 +6,22 @@ CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/rootfs/lib/arm-linux-gnueabihf
 CC		:= $(CROSS_COMPILE)gcc
 #KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
 KERNEL_INCLUDE	:=
-INC_FOLDER	:=../include/
 DBUS_INCLUDE := /usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include
-CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(INC_FOLDER) -I$(DBUS_INCLUDE)
-LDFLAGS		:= -g -L. -ldbus-1 -ludev
+DBUS_UTILS_INCLUDE := ../utils/dbus_utils
+CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(DBUS_UTILS_INCLUDE) -I$(DBUS_INCLUDE)
+#LDFLAGS		:= -g -L. -ldbus-1 -ludev -L../utils/dbus_utils -ldbus_utils
+#Static linked the libdbus_utils
+LDFLAGS		:= -g -L../utils/dbus_utils -Wl,-Bstatic -ldbus_utils -Wl,-Bdynamic -L. -ldbus-1 -ludev
 
 all: udm
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $< -o $@
 
-udm: dbus_utils.o udev_utils.o file_utils.o main.o
+udm: udev_utils.o file_utils.o main.o
 	ln -sf $(CROSS_LIB_PATH)/libudev.so.1.3.5 ./libudev.so
 	ln -sf $(CROSS_LIB_PATH)/libdbus-1.so.3.7.6 ./libdbus-1.so
-	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -f *.o

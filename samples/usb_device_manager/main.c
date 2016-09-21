@@ -51,7 +51,7 @@ DBusHandlerResult object_visage_handler(DBusConnection* conn,
             return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
         case DBUS_MESSAGE_TYPE_METHOD_RETURN:
-            return handle_method_return(conn, msg);
+            return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
         case DBUS_MESSAGE_TYPE_METHOD_CALL:
             printf("object_visage_handler: method call\n");
@@ -206,7 +206,7 @@ void listen_to_dbus_udev(struct usb_device_manager * usb_dev)
         max_fd = 0;
 
         // Add dbus watcher fds
-        max_fd = setupListenFds(&rfds, &wfds, &efds);
+        max_fd = dbus_setup_listen_fds(&rfds, &wfds, &efds);
 
         // Add udev fd
         udev_mon_fd = udev_monitor_get_fd(usb_dev->mon);
@@ -230,11 +230,11 @@ void listen_to_dbus_udev(struct usb_device_manager * usb_dev)
                 continue;
         } else {
             //printf("Select was woken up by dbus message\n");
-            handleListenFds(&rfds, &wfds, &efds);
+            dbus_handle_listen_fds(&rfds, &wfds, &efds);
 
-            watchHandle(usb_dev->conn);
+            dbus_handle_all_watches(usb_dev->conn);
 
-            timeoutHandle();
+            dbus_handle_all_timeout();
         }
     }
 }
@@ -255,7 +255,7 @@ int main(void)
 
     memset(usb_dev, 0, sizeof(*usb_dev));
 
-    ret = setup_dbus_connection(&usb_dev->conn, "com.polycom.visage.udm",
+    ret = dbus_setup_connection(&usb_dev->conn, "com.polycom.visage.udm",
                                 "type='signal',interface='test.signal.Type'");
 
     if (ret) {
@@ -286,7 +286,7 @@ exit:
 
         cleanup_udev(usb_dev->udev);
 
-        cleanup_dbus_connection(usb_dev->conn);
+        dbus_cleanup_connection(usb_dev->conn);
 
         free(usb_dev);
     }
