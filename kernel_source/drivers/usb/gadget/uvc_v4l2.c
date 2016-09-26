@@ -50,18 +50,42 @@ uvc_send_response(struct uvc_device *uvc, struct uvc_request_data *data)
 /* --------------------------------------------------------------------------
  * V4L2
  */
+#define FORMAT_FLAGS_PLANAR       0x01
+#define FORMAT_FLAGS_COMPRESSED   0x02
 
 struct uvc_format
 {
-	u8 bpp;
+	char *name;
 	u32 fcc;
+	u8 bpp;
+	u32 flags;
 };
 
 static struct uvc_format uvc_formats[] = {
-	{ 16, V4L2_PIX_FMT_YUYV   },
-	{ 12, V4L2_PIX_FMT_YUV420 },
-	{ 12, V4L2_PIX_FMT_NV12 },
-	{ 0,  V4L2_PIX_FMT_MJPEG  },
+	{
+		.name	= "4:2:2, packed, YUYV",
+		.fcc	= V4L2_PIX_FMT_YUYV,
+		.bpp	= 16,
+		.flags	= 0,
+	},
+	{
+		.name	= "4:2:0, planar, Y-Cb-Cr",
+		.fcc	= V4L2_PIX_FMT_YUV420,
+		.bpp	= 12,
+		.flags	= FORMAT_FLAGS_PLANAR,
+	},
+	{
+		.name	= "4:2:0, planner, NV12",
+		.fcc	= V4L2_PIX_FMT_NV12,
+		.bpp	= 12,
+		.flags	= FORMAT_FLAGS_PLANAR,
+	},
+	{
+		.name	= "Motion-JPEG",
+		.fcc	= V4L2_PIX_FMT_MJPEG,
+		.bpp	= 32,
+		.flags	= FORMAT_FLAGS_COMPRESSED,
+	},
 };
 
 static int
@@ -71,7 +95,15 @@ uvc_v4l2_get_format(struct uvc_video *video, struct v4l2_format *fmt)
 	fmt->fmt.pix.width = video->width;
 	fmt->fmt.pix.height = video->height;
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
-	fmt->fmt.pix.bytesperline = video->bpp * video->width / 8;
+	/* In GStreamer, for the I420 or NV12 format, the
+	 * bytesperline needs to be equal to the width.
+	 */
+	if (video->fcc == V4L2_PIX_FMT_YUV420 ||
+			video->fcc == V4L2_PIX_FMT_NV12)
+		fmt->fmt.pix.bytesperline = video->width;
+	else
+		fmt->fmt.pix.bytesperline = video->bpp * video->width / 8;
+
 	fmt->fmt.pix.sizeimage = video->imagesize;
 	fmt->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
 	fmt->fmt.pix.priv = 0;
@@ -109,7 +141,11 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 	video->imagesize = imagesize;
 
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
-	fmt->fmt.pix.bytesperline = bpl;
+	if (video->fcc == V4L2_PIX_FMT_YUV420 ||
+			video->fcc == V4L2_PIX_FMT_NV12)
+		fmt->fmt.pix.bytesperline = video->width;
+	else
+		fmt->fmt.pix.bytesperline = bpl;
 	fmt->fmt.pix.sizeimage = imagesize;
 	fmt->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
 	fmt->fmt.pix.priv = 0;
@@ -118,7 +154,7 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 }
 
 static int
-uvc_v4l2_open(struct file *file)
+uvc_v4l2_ctrl_open(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
@@ -139,7 +175,14 @@ uvc_v4l2_open(struct file *file)
 }
 
 static int
-uvc_v4l2_release(struct file *file)
+uvc_v4l2_strm_open(struct file *file)
+{
+	/* TODO. Add something here?. */
+	return 0;
+}
+
+static int
+uvc_v4l2_ctrl_release(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
@@ -159,12 +202,91 @@ uvc_v4l2_release(struct file *file)
 	return 0;
 }
 
+static int
+uvc_v4l2_strm_release(struct file *file)
+{
+	struct video_device *vdev = video_devdata(file);
+	struct uvc_device *uvc = video_get_drvdata(vdev);
+	struct uvc_video *video = &uvc->video;
+
+	uvc_video_enable(video, 0);
+	uvc_free_buffers(&video->queue);
+
+	return 0;
+}
+
 static long
-uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+uvc_v4l2_ctrl_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
 	struct uvc_file_handle *handle = to_uvc_file_handle(file->private_data);
+	struct uvc_video *video = &uvc->video;
+	int ret = 0;
+
+	switch (cmd) {
+	/* Events */
+	case VIDIOC_DQEVENT:
+	{
+		struct v4l2_event *event = arg;
+
+		ret = v4l2_event_dequeue(&handle->vfh, event,
+					 file->f_flags & O_NONBLOCK);
+		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
+			struct uvc_event *uvc_event = (void *)&event->u.data;
+
+			uvc->event_length = uvc_event->req.wLength;
+		}
+
+		return ret;
+	}
+
+	case VIDIOC_SUBSCRIBE_EVENT:
+	{
+		struct v4l2_event_subscription *sub = arg;
+
+		if (sub->type < UVC_EVENT_FIRST || sub->type > UVC_EVENT_LAST)
+			return -EINVAL;
+
+		return v4l2_event_subscribe(&handle->vfh, arg, 2, NULL);
+	}
+
+	case VIDIOC_UNSUBSCRIBE_EVENT:
+		return v4l2_event_unsubscribe(&handle->vfh, arg);
+
+	case UVCIOC_SEND_RESPONSE:
+		ret = uvc_send_response(uvc, arg);
+		break;
+
+	case VIDIOC_STREAMOFF:
+	{
+		int *type = arg;
+
+		if (*type != video->queue.queue.type)
+			return -EINVAL;
+
+		/* Can not disable the ep in the suspend callback because
+		 * of the potential deadlock.
+		 * So do it here to make sure the ep is disabled.
+		 */
+		if (uvc->suspended && uvc->video.ep)
+			usb_ep_disable(uvc->video.ep);
+
+		return uvc_video_enable(video, 0);
+	}
+
+	default:
+		return -ENOIOCTLCMD;
+	}
+
+	return ret;
+}
+
+static long
+uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+{
+	struct video_device *vdev = video_devdata(file);
+	struct uvc_device *uvc = video_get_drvdata(vdev);
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	struct uvc_video *video = &uvc->video;
 	int ret = 0;
@@ -295,38 +417,23 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		return uvc_video_enable(video, 0);
 	}
 
-	/* Events */
-	case VIDIOC_DQEVENT:
+	case VIDIOC_ENUM_FMT:
 	{
-		struct v4l2_event *event = arg;
+		struct v4l2_fmtdesc *f = arg;
+		const struct uvc_format *uvc_fmt;
 
-		ret = v4l2_event_dequeue(&handle->vfh, event,
-					 file->f_flags & O_NONBLOCK);
-		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
-			struct uvc_event *uvc_event = (void *)&event->u.data;
-
-			uvc->event_length = uvc_event->req.wLength;
-		}
-
-		return ret;
-	}
-
-	case VIDIOC_SUBSCRIBE_EVENT:
-	{
-		struct v4l2_event_subscription *sub = arg;
-
-		if (sub->type < UVC_EVENT_FIRST || sub->type > UVC_EVENT_LAST)
+		if (f->index < 0 || f->index >= ARRAY_SIZE(uvc_formats))
 			return -EINVAL;
 
-		return v4l2_event_subscribe(&handle->vfh, arg, 2, NULL);
-	}
+		uvc_fmt = &uvc_formats[f->index];
 
-	case VIDIOC_UNSUBSCRIBE_EVENT:
-		return v4l2_event_unsubscribe(&handle->vfh, arg);
+		f->pixelformat = uvc_fmt->fcc;
+		f->flags = uvc_fmt->flags;
 
-	case UVCIOC_SEND_RESPONSE:
-		ret = uvc_send_response(uvc, arg);
+		snprintf(f->description, sizeof(f->description), "%s", uvc_fmt->name);
+
 		break;
+	}
 
 	default:
 		return -ENOIOCTLCMD;
@@ -336,9 +443,15 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 }
 
 static long
-uvc_v4l2_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+uvc_v4l2_ctrl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	return video_usercopy(file, cmd, arg, uvc_v4l2_do_ioctl);
+	return video_usercopy(file, cmd, arg, uvc_v4l2_ctrl_do_ioctl);
+}
+
+static long
+uvc_v4l2_strm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	return video_usercopy(file, cmd, arg, uvc_v4l2_strm_do_ioctl);
 }
 
 static int
@@ -371,13 +484,25 @@ static unsigned long uvc_v4l2_get_unmapped_area(struct file *file,
 }
 #endif
 
-static struct v4l2_file_operations uvc_v4l2_fops = {
+static struct v4l2_file_operations uvc_v4l2_ctrl_fops = {
 	.owner		= THIS_MODULE,
-	.open		= uvc_v4l2_open,
-	.release	= uvc_v4l2_release,
-	.ioctl		= uvc_v4l2_ioctl,
+	.open		= uvc_v4l2_ctrl_open,
+	.release	= uvc_v4l2_ctrl_release,
+	.ioctl		= uvc_v4l2_ctrl_ioctl,
 	.mmap		= uvc_v4l2_mmap,
 	.poll		= uvc_v4l2_poll,
+#ifndef CONFIG_MMU
+	.get_unmapped_area = uvc_v4l2_get_unmapped_area,
+#endif
+};
+
+static struct v4l2_file_operations uvc_v4l2_strm_fops = {
+	.owner		= THIS_MODULE,
+	.open 		= uvc_v4l2_strm_open,
+	.release 	= uvc_v4l2_strm_release,
+	.ioctl 		= uvc_v4l2_strm_ioctl,
+	.mmap 		= uvc_v4l2_mmap,
+	.poll 		= uvc_v4l2_poll,
 #ifndef CONFIG_MMU
 	.get_unmapped_area = uvc_v4l2_get_unmapped_area,
 #endif
