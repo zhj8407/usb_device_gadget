@@ -39,7 +39,7 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 #include <time.h>
-#include <turbojpeg.h>
+//#include <turbojpeg.h>
 #include <stdio.h>
 
 #include "uvc.h"
@@ -48,6 +48,7 @@
 #include "scale.h"
 #include "visage_shared_mem.h"
 #include "plcm_usb_intf.h"
+#include "dbus_utils.h"
 
 #define clamp(val, min, max) ({                 \
         typeof(val) __val = (val);              \
@@ -68,6 +69,14 @@
 #define WEBCAM_HEADERSIZE_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize"
 #define WEBCAM_BULKMODE_SYS_PATH    "/sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode"
 #define WEBCAM_MAXPAYLOAD_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpayload"
+
+
+char *objectPaths[] = {
+    PLCM_USB_VISAGE_UVC_OBJ_PATH
+};
+
+DBusConnection *dbus_con;
+
 
 #define JPEG_QUALITY        80
 #define COLOR_COMPONENTS    3
@@ -168,7 +177,6 @@ inline unsigned long GetTimeInUSec()
     return (tv.tv_sec * 1000 * 1000) + (tv.tv_nsec);
 }
 int g_gst_connect_flag = 0;
-
 
 void close_gst_socket()
 {
@@ -516,12 +524,10 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
         frame_count = 0;
         stream_on = 0;
 
-        //FD_CLR(main_socket, &fds);
-        //close(main_socket);
-        //main_socket = -1;
         close_gst_socket();
         max_fd = dev->fd > app2stack ? dev->fd : app2stack;
         ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
+        notifyApplication(dbus_con, e_stop_stream, dev->fcc, camera_width, camera_height);
 
         if (ret < 0)
             printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
@@ -541,6 +547,7 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
 
     stream_on = 1;
     ret = sendEvent2Fifo(stack2app, e_start_stream, dev->fcc, dev->width, dev->height);
+    notifyApplication(dbus_con, e_start_stream, dev->fcc, dev->width, dev->height);
 
     if (ret < 0)
         printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_start_stream), camera_width, camera_height, errno, strerror(errno));
@@ -1194,8 +1201,6 @@ void sig_handle(int sig)
     }
 }
 
-
-
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
@@ -1293,9 +1298,22 @@ int main(int argc, char *argv[])
         printf("open fifo file faiedl app2stack[%d], stack2app[%d]\n", app2stack, stack2app);
     }
 
-    /*****inter process communication end *****/
+
     //printf("=========fifo init done======\n");
 
+    //setup dbus connection
+
+    ret = dbus_setup_connection(&dbus_con, "com.polycom.visage.uvc",
+                                "type='signal',interface='test.signal.Type'");
+
+    if (ret) {
+        fprintf(stderr, "No dbus connection. Exit: (%d)\n", ret);
+
+    } else printf("dbus connection setup successfully\n");
+
+    printf("dbus reguster setup successfully\n");
+
+    /*****inter process communication end *****/
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
     FD_SET(app2stack, &fds);
@@ -1314,6 +1332,8 @@ int main(int argc, char *argv[])
         fd_set efds = fds;
         fd_set wfds = fds;
         fd_set rfds = fds;
+        int dbus_fd = dbus_setup_listen_fds(&rfds, &wfds, &efds);
+        max_fd = max_fd > dbus_fd ? max_fd : dbus_fd;
         max_fd = max_fd > main_socket ? max_fd : main_socket;
         //ret = select(max_fd + 1, &rfds, &wfds, &efds, NULL);
         ret = select(max_fd + 1, &rfds, NULL, &efds, NULL);
@@ -1326,9 +1346,7 @@ int main(int argc, char *argv[])
         } else {
             if (FD_ISSET(dev->fd, &efds)) {
                 uvc_events_process(dev);
-            }
-
-            if (FD_ISSET(app2stack, &rfds)) {
+            } else if (FD_ISSET(app2stack, &rfds)) {
                 char buf[256];
                 memset(buf, 0, sizeof(buf));
                 int len = read(app2stack, buf, sizeof(buf));
@@ -1343,6 +1361,7 @@ int main(int argc, char *argv[])
 
                     if (event->m_event == e_app_ready) {
                         sendEvent2Fifo(stack2app, e_stack_ready, dev->fcc, camera_width, camera_height);
+
                     }
 
                     if (event->m_event == e_stream_ready) {
@@ -1378,28 +1397,6 @@ int main(int argc, char *argv[])
                         printf("receive shm cmd: new shm area id=%d\n", recvCB.area_id);
                         awaiting_shm = 1;
                         sharedMemSize = recvCB.payload.new_shm_area.size;
-                        /*char shmName[64];
-                        ret = recv(main_socket, shmName, 64, MSG_DONTWAIT);
-                        while(ret<0) {
-                            printf("receive error %d, %s\n", errno, strerror(errno));
-                            ret = recv(main_socket, shmName, 64, MSG_DONTWAIT);
-                        }
-                        printf("path=%s ret=%d\n", shmName, ret);
-                        pSharedMem = allocSharedMem(shmName, recvCB.payload.new_shm_area.size);
-
-                        if (pSharedMem == NULL) {
-                            printf("Cannot alloc shared memory\n");
-                            return -1;
-                        }
-
-                        shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
-
-                        if (shm_lock == NULL) {
-                            printf("Cannot alloc shared memory mutex\n");
-                            return -1;
-                        }
-
-                        printf("=========share memory init done %p, size=%u======\n", pSharedMem, recvCB.payload.new_shm_area.size);*/
                     } else if (recvCB.type == 2) {
                         printf("closing shared memory\n");
                         awaiting_shm = 0;
@@ -1453,13 +1450,15 @@ int main(int argc, char *argv[])
                                 return -1;
                             }
 
-                            printf("=========share memory init done %p, size=%u======\n", pSharedMem, pSharedMemName);
+                            printf("=========share memory init done %p, name=%s======\n", pSharedMem, pSharedMemName);
                             awaiting_shm = 0;
                         } else
                             printf("Receive a cmd from gst ret[%d]: msg.type=%u areaid=%u\n",
                                    ret, recvCB.type, recvCB.area_id);
                     }
                 }
+            } else {
+                //do nothing.
             }
         }
     }

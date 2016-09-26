@@ -312,6 +312,7 @@ int main(int argc, char *argv[])
     event.m_format.m_height = camera_height;
     event.m_format.m_width = camera_width;
     write(app2stack, &event, sizeof(struct plcm_uvc_event_msg_t));
+
     /*****inter process communication end*****/
     printf("=========visage camera-usb sample app init done w=%u h=%u, imagesize=%u======\n",  camera_width, camera_height, imagesize);
 

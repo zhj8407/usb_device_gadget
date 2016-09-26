@@ -1,6 +1,11 @@
 #ifndef __PLCM_USB_INTF_H__
 #define __PLCM_USB_INTF_H__
 
+#include "dbus_utils.h"
+#define PLCM_USB_VISAGE_UVC_OBJ_PATH        "/com/polycom/visage/uvc"
+#define PLCM_USB_VISAGE_UVC_INTF_NAME       "com.polycom.visage.uvc"
+#define PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL  "video_control"
+
 /*************USB video Events Begin********/
 enum plcm_usb_video_event {
     e_app_ready      = 0,
@@ -58,6 +63,15 @@ static inline const char * getEventDescStr(enum plcm_usb_video_event event)
         return plcm_usb_video_event_str[e_last_event];;
 }
 
+inline int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
+{
+    const char * tmp = getEventDescStr(e_stack_ready);
+    return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                    PLCM_USB_VISAGE_UVC_INTF_NAME,
+                    PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,
+                    DBUS_TYPE_STRING, &tmp,
+                    DBUS_TYPE_INVALID);
+}
 inline int sendEvent2Fifo(int fd, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
 {
     struct plcm_uvc_event_msg_t event_msg;
