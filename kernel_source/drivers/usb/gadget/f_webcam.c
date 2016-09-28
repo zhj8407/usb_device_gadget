@@ -50,6 +50,7 @@ unsigned int uvc_gadget_trace_param;
 struct webcam_config {
 	int	device;
 	struct device *dev;
+	bool *soft_connected_ptr;
 
 	unsigned int interval;
 	unsigned int maxpacket;
@@ -860,6 +861,11 @@ uvc_function_connect(struct uvc_device *uvc)
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	int ret;
 
+	/* If the global switch is off. Do not connect here. */
+	if (_webcam_config && _webcam_config->soft_connected_ptr
+		&& (!*(_webcam_config->soft_connected_ptr)))
+		return;
+
 	if ((ret = usb_function_activate(&uvc->func)) < 0)
 		INFO(cdev, "UVC connect failed with %d\n", ret);
 }
@@ -869,6 +875,11 @@ uvc_function_disconnect(struct uvc_device *uvc)
 {
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	int ret;
+
+	/* If the global switch is off. Do not do it again here. */
+	if (_webcam_config && _webcam_config->soft_connected_ptr
+		&& (!*(_webcam_config->soft_connected_ptr)))
+		return;
 
 	if ((ret = usb_function_deactivate(&uvc->func)) < 0)
 		INFO(cdev, "UVC disconnect failed with %d\n", ret);
@@ -1246,8 +1257,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	/* Avoid letting this gadget enumerate until the userspace server is
 	 * active.
 	 */
-	if ((ret = usb_function_deactivate(f)) < 0)
-		goto error;
+	uvc_function_disconnect(uvc);
 
 	/* Initialise video. */
 	ret = uvc_video_init(&uvc->video, bulkmode, bulksize,

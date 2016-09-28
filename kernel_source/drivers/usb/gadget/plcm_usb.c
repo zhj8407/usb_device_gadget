@@ -105,6 +105,7 @@ struct plcm_usb_dev {
 
 	bool enabled;
 	int disable_depth;
+	bool soft_connected;
 	struct mutex mutex;
 	bool connected;
 	bool sw_connected;
@@ -212,6 +213,22 @@ static void plcm_usb_work(struct work_struct *data)
 	}
 }
 
+static void plcm_usb_soft_connect(struct plcm_usb_dev *dev)
+{
+	struct usb_composite_dev *cdev = dev->cdev;
+
+	usb_gadget_connect(cdev->gadget);
+}
+
+static void plcm_usb_soft_disconnect(struct plcm_usb_dev *dev)
+{
+	struct usb_composite_dev *cdev = dev->cdev;
+
+	usb_gadget_disconnect(cdev->gadget);
+	/* Cancel pending control requests */
+	usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+}
+
 static void plcm_usb_enable(struct plcm_usb_dev *dev)
 {
 	struct usb_composite_dev *cdev = dev->cdev;
@@ -222,7 +239,8 @@ static void plcm_usb_enable(struct plcm_usb_dev *dev)
 	if (--dev->disable_depth == 0) {
 		usb_add_config(cdev, &plcm_usb_config_driver,
 					plcm_usb_bind_config);
-		usb_gadget_connect(cdev->gadget);
+		if (dev->soft_connected)
+			usb_gadget_connect(cdev->gadget);
 	}
 }
 
@@ -232,6 +250,7 @@ static void plcm_usb_disable(struct plcm_usb_dev *dev)
 
 	if (dev->disable_depth++ == 0) {
 		usb_gadget_disconnect(cdev->gadget);
+		dev->soft_connected = false;
 		/* Cancel pending control requests */
 		usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
 		usb_remove_config(cdev, &plcm_usb_config_driver);
@@ -880,6 +899,7 @@ static int
 webcam_function_init(struct plcm_usb_function *f,
 		struct usb_composite_dev *cdev)
 {
+	struct plcm_usb_dev *dev = _plcm_usb_dev;
 	struct webcam_config *config;
 
 	config = kzalloc(sizeof(struct webcam_config), GFP_KERNEL);
@@ -887,6 +907,7 @@ webcam_function_init(struct plcm_usb_function *f,
 		return -ENOMEM;
 	config->device = -1;
 	config->dev = f->dev;
+	config->soft_connected_ptr = &dev->soft_connected;
 
 	config->interval = 1;
 	config->maxpacket = 1024;
@@ -923,6 +944,7 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 	struct webcam_config *config = f->config;
 
 	config->device = -1;
+	config->soft_connected_ptr = NULL;
 
 	config->interval = 1;
 	config->maxpacket = 1024;
@@ -1252,6 +1274,44 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	return size;
 }
 
+static ssize_t soft_connected_show(struct device *pdev,
+	struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_dev *dev = dev_get_drvdata(pdev);
+	return sprintf(buf, "%d\n", dev->soft_connected);
+}
+
+static ssize_t soft_connected_store(struct device *pdev,
+	struct device_attribute *attr, const char *buff,
+	size_t size)
+{
+	struct plcm_usb_dev *dev = dev_get_drvdata(pdev);
+	struct usb_composite_dev *cdev = dev->cdev;
+	int soft_connected = 0;
+	ssize_t retval = size;
+
+	if (!cdev)
+		return -ENODEV;
+
+	mutex_lock(&dev->mutex);
+
+	sscanf(buff, "%d", &soft_connected);
+	if (soft_connected && !dev->soft_connected) {
+		plcm_usb_soft_connect(dev);
+		dev->soft_connected = true;
+	} else if (!soft_connected && dev->soft_connected) {
+		plcm_usb_soft_disconnect(dev);
+		dev->soft_connected = false;
+	} else {
+		pr_err("plcm_usb: usb soft already %s\n",
+				dev->soft_connected ? "connected" : "disconnect");
+		retval = -EINVAL;
+	}
+
+	mutex_unlock(&dev->mutex);
+	return retval;
+}
+
 static ssize_t enable_show(struct device *pdev, struct device_attribute *attr,
 			   char *buf)
 {
@@ -1399,6 +1459,7 @@ DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
 static DEVICE_ATTR(functions, S_IRUGO | S_IWUSR, functions_show,
 						 functions_store);
 static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, enable_show, enable_store);
+static DEVICE_ATTR(soft_connected, S_IRUGO | S_IWUSR, soft_connected_show, soft_connected_store);
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 
 static struct device_attribute *plcm_usb_attributes[] = {
@@ -1413,6 +1474,7 @@ static struct device_attribute *plcm_usb_attributes[] = {
 	&dev_attr_iSerial,
 	&dev_attr_functions,
 	&dev_attr_enable,
+	&dev_attr_soft_connected,
 	&dev_attr_state,
 	NULL
 };
@@ -1663,6 +1725,7 @@ static int __init init(void)
 	}
 
 	dev->disable_depth = 1;
+	dev->soft_connected = true;
 	dev->functions = supported_functions;
 	INIT_LIST_HEAD(&dev->enabled_functions);
 	INIT_WORK(&dev->work, plcm_usb_work);
