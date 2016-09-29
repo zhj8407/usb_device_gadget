@@ -227,6 +227,9 @@ static void plcm_usb_soft_disconnect(struct plcm_usb_dev *dev)
 	usb_gadget_disconnect(cdev->gadget);
 	/* Cancel pending control requests */
 	usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+	/* Set the connected flag to false. */
+	dev->connected = 0;
+	schedule_work(&dev->work);
 }
 
 static void plcm_usb_enable(struct plcm_usb_dev *dev)
