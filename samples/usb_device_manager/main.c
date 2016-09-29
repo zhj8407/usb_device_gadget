@@ -9,7 +9,7 @@
 
 #define PLCM_USB_VISAGE_UDM_STATE_SYSFS     "/sys/class/plcm_usb/plcm0/state"
 #define PLCM_USB_VISAGE_UDM_FUNCTIONS_SYSFS "/sys/class/plcm_usb/plcm0/functions"
-#define PLCM_USB_VISAGE_UDM_ENABLE_SYSFS    "/sys/class/plcm_usb/plcm0/enable"
+#define PLCM_USB_VISAGE_UDM_ENABLE_SYSFS    "/sys/class/plcm_usb/plcm0/soft_connected"
 
 #define PLCM_USB_VISAGE_UDM_OBJ_PATH        "/com/polycom/visage/udm"
 #define PLCM_USB_VISAGE_UDM_INTF_NAME       "com.polycom.visage.udm"
@@ -108,7 +108,7 @@ DBusHandlerResult object_visage_handler(DBusConnection* conn,
                 return DBUS_HANDLER_RESULT_HANDLED;
             } else if (!strcmp(dbus_message_get_member(msg), "StartUsbDevice") ||
                        !strcmp(dbus_message_get_member(msg), "StopUsbDevice")) {
-                int enabled = !(strcmp(dbus_message_get_member(msg), "startUsbDevice"));
+                int enabled = !(strcmp(dbus_message_get_member(msg), "StartUsbDevice"));
                 printf("USB Device enable: %d\n", enabled);
                 int ret = write_value_to_file(PLCM_USB_VISAGE_UDM_ENABLE_SYSFS, "%d", enabled);
 
