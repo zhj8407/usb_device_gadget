@@ -1,0 +1,4 @@
+*.o
+uvc-gadget-v4l2sink
+.tags
+.tags*
