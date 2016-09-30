@@ -2240,7 +2240,7 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 		zynq_printk(0, "[zynq_capture](%d)Get the format %s !! (width = %u)\n", __LINE__, fmt->name, f->fmt.pix.width);
 	}
 
-	f->fmt.pix.field = V4L2_FIELD_INTERLACED;
+	f->fmt.pix.field = V4L2_FIELD_NONE;
 	v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
 			      &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
 	f->fmt.pix.bytesperline =f->fmt.pix.width;
