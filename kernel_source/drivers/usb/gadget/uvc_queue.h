@@ -11,7 +11,7 @@
 /* Maximum frame size in bytes, for sanity checking. */
 #define UVC_MAX_FRAME_SIZE	(16*1024*1024)
 /* Maximum number of video buffers. */
-#define UVC_MAX_VIDEO_BUFFERS	32
+#define UVC_MAX_VIDEO_BUFFERS	2
 
 /* ------------------------------------------------------------------------
  * Structures.
