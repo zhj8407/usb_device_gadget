@@ -2223,7 +2223,6 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 #endif
 	//	struct vivi_dev *dev = video_drvdata(file);
 	const struct vivi_fmt *fmt;
-	int stride = 0;
 
 	fmt = get_format(f);
 	
