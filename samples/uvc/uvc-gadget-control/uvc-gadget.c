@@ -239,7 +239,7 @@ uvc_close(struct uvc_device *dev)
 #ifdef VIDEO_TEST_SRC
 #define CAM_DEF_FRAMERATE 30
 #else
-#define CAM_DEF_FRAMERATE 15
+#define CAM_DEF_FRAMERATE 60
 #endif
 
 #ifdef VIDEO_TEST_SRC
@@ -293,7 +293,7 @@ static const char *get_gst_camera_cmd(const char *v4l2_camera_dev,
 {
     memset(gst_camera_cmd, 0, sizeof(gst_camera_cmd));
 #ifdef VIDEO_TEST_SRC
-    (void)v4l2_camera_devnum;
+    (void)v4l2_camera_dev;
     snprintf(gst_camera_cmd, GST_CMD_LEN,
              "videotestsrc pattern=smpte ! %s, width='(int)'%u, height='(int)'%u, framerate='(fraction)'%u/1",
              v4l2format2gstformat(format), width, height, framerate);
@@ -370,7 +370,7 @@ static unsigned int get_gst_running_cmd(char *gst_cmd,
                                         unsigned int height,
                                         unsigned int v4l2_output_devnum)
 {
-    return snprintf(gst_cmd, GST_CMD_TOTAL_LEN, "sleep 1 && gst-launch-1.0 -e -v --gst-debug=3 %s%s%s%s%s",
+    return snprintf(gst_cmd, GST_CMD_TOTAL_LEN, "sleep 2 && gst-launch-1.0 -e -v --gst-debug=3 %s%s%s%s%s",
                     get_gst_camera_cmd(v4l2_src_dev, camera_format, camera_width, camera_height, CAM_DEF_FRAMERATE),
                     get_gst_scaler_cmd(camera_format, width, height),
                     get_gst_convertor_cmd(format),
