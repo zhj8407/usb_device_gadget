@@ -39,6 +39,9 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
+#include <gst/gst.h>
+#include <glib.h>
+
 #include "uvc.h"
 
 #include "log_str.h"
@@ -66,8 +69,11 @@
 
 #define VISAGE_LED_NOTIFICATION 1
 
+#define MAX_GST_LINKED_ELEMENTS_COUNT 6
+
 struct uvc_device {
     const char *v4l2_src_device;
+    char v4l2_sink_device[32];
     int fd;
 
     struct uvc_streaming_control probe;
@@ -91,8 +97,22 @@ struct uvc_device {
     unsigned int headersize;
     unsigned int maxpayloadsize;
 
-    pid_t streaming_pid;
+    //Gstreamer related.
+    GstElement *pipeline;
+    GstElement *video_source;
+    GstElement *video_scaler;
+    GstElement *video_converter;
+    GstElement *video_encoder;
+    GstElement *video_sink;
+
+    //GLib timer
+    guint timeout_watch_id;
 };
+
+static int start_gst_video_stream(struct uvc_device *dev);
+static void stop_gst_video_stream(struct uvc_device *dev);
+
+static void uvc_set_timeout(struct uvc_device *dev, guint timeout_in_ms);
 
 static int
 uvc_read_value_from_file(const char* filename,
@@ -167,7 +187,7 @@ static struct uvc_device *
 uvc_open(const char *devname)
 {
     struct uvc_device *dev;
-    char v4ldevname[64];
+    char v4lctrlname[64];
     int fd = 0;
 
     dev = malloc(sizeof * dev);
@@ -193,11 +213,15 @@ uvc_open(const char *devname)
         return NULL;
     }
 
-    snprintf(v4ldevname, sizeof(v4ldevname), "/dev/video%d", dev->v4l2_ctrl_devnum);
+    snprintf(dev->v4l2_sink_device, sizeof(dev->v4l2_sink_device),
+             "/dev/video%d", dev->v4l2_strm_devnum);
 
-    printf("We are trying to open the dev: %s\n", v4ldevname);
+    snprintf(v4lctrlname, sizeof(v4lctrlname),
+             "/dev/video%d", dev->v4l2_ctrl_devnum);
 
-    fd = open(v4ldevname, O_RDWR | O_NONBLOCK);
+    printf("We are trying to open the dev: %s\n", v4lctrlname);
+
+    fd = open(v4lctrlname, O_RDWR | O_NONBLOCK);
 
     if (fd == -1) {
         printf("v4l2 open failed: %s (%d)\n", strerror(errno), errno);
@@ -229,7 +253,6 @@ uvc_close(struct uvc_device *dev)
  */
 
 //#define VIDEO_TEST_SRC             1
-//#define FORK_GST_LAUNCH_CHILD      1
 
 #define CAM_DEF_WIDTH 1920
 #define CAM_DEF_HEIGHT 1080
@@ -378,33 +401,9 @@ static unsigned int get_gst_running_cmd(char *gst_cmd,
                     get_gst_v4l2output_cmd(v4l2_output_devnum));
 }
 
-pid_t start_uvc_stream(struct uvc_device *dev)
+void start_uvc_stream(struct uvc_device *dev)
 {
-#ifdef FORK_GST_LAUNCH_CHILD
-    pid_t child;
-    char gst_running_cmd[GST_CMD_TOTAL_LEN];
-
-    if ((child = fork()) == 0) {
-        get_gst_running_cmd(gst_running_cmd,
-                            dev->v4l2_src_device,
-                            dev->fcc,
-                            dev->width,
-                            dev->height,
-                            dev->v4l2_strm_devnum);
-        printf("gstreamer running cmd: %s\n", gst_running_cmd);
-        //Child process
-        execl("/bin/sh", "sh", "-c",
-              gst_running_cmd, (char *) 0);
-        perror("gst-launch-1.0");
-        exit(errno);
-    } else {
-        //Parent process
-    }
-
-    dev->streaming_pid = child;
-
-    return child;
-#else
+#if 0
     char gst_running_cmd[GST_CMD_TOTAL_LEN];
     get_gst_running_cmd(gst_running_cmd,
                         dev->v4l2_src_device,
@@ -417,10 +416,8 @@ pid_t start_uvc_stream(struct uvc_device *dev)
     printf("gstreamer running cmd: %s\n", gst_running_cmd);
 
     system(gst_running_cmd);
-
-    dev->streaming_pid = 999;
-
-    return dev->streaming_pid;
+#else
+    start_gst_video_stream(dev);
 #endif
 }
 
@@ -428,18 +425,14 @@ void stop_uvc_stream(struct uvc_device *dev)
 {
     int type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
     ioctl(dev->fd, VIDIOC_STREAMOFF, &type);
-#ifdef FORK_GST_LAUNCH_CHILD
-
-    if (dev->streaming_pid > 0)
-        kill(dev->streaming_pid, SIGKILL);
-
-#else
+#if 0
 
     if (dev->streaming_pid > 0)
         system("sudo killall -9 gst-launch-1.0");
 
+#else
+    stop_gst_video_stream(dev);
 #endif
-    dev->streaming_pid = -1;
 }
 
 /* ---------------------------------------------------------------------------
@@ -791,11 +784,13 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         if (dev->bulk) {
             stop_uvc_stream(dev);
             start_uvc_stream(dev);
-            alarm(8);
+
+            uvc_set_timeout(dev, 1000);
         }
     } else if (dev->control == UVC_VS_PROBE_CONTROL) {
         if (dev->bulk) {
-            alarm(0);
+            //Cacel the timer
+            uvc_set_timeout(dev, 0);
             stop_uvc_stream(dev);
         }
     }
@@ -843,7 +838,7 @@ static void handle_frame_done_event(struct uvc_device *dev)
 
     if (dev->bulk) {
         // Reset the alarm.
-        alarm(1);
+        uvc_set_timeout(dev, 1000);
     }
 }
 
@@ -888,17 +883,17 @@ uvc_events_process(struct uvc_device *dev)
             return;
 
         case UVC_EVENT_STREAMON:
-            //TODO Start uvc video stream
+            // Start uvc video stream
             start_uvc_stream(dev);
-            alarm(8);
+            uvc_set_timeout(dev, 3000);
 
             return;
 
         case UVC_EVENT_STREAMOFF:
             // Cacel the alarm.
-            alarm(0);
+            uvc_set_timeout(dev, 0);
 
-            //TODO Stop the uvc video stream
+            // Stop the uvc video stream
             stop_uvc_stream(dev);
 
             return;
@@ -967,38 +962,280 @@ static void usage(const char *argv0)
 }
 
 static struct uvc_device *global_uvc = NULL;
+static GMainLoop *_global_loop = NULL;
 
 void sig_handle(int sig)
 {
-#ifdef FORK_GST_LAUNCH_CHILD
-    pid_t pid;
-    int status;
-#endif
-
     printf("Received signal: %d(%s)\n", sig, strsignal(sig));
 
     // Alarm timeout. Stop the video
-    if (sig == SIGALRM) {
-        if (global_uvc)
-            stop_uvc_stream(global_uvc);
+    if (_global_loop)
+        g_main_loop_quit(_global_loop);
+}
+
+static gboolean
+io_watch(GIOChannel *channel, GIOCondition condition, gpointer data)
+{
+    struct uvc_device *dev = (struct uvc_device *)data;
+
+    if (!(condition & (G_IO_PRI))) {
+        g_print("Wrong events\n");
+        return TRUE;
     }
 
-#ifdef FORK_GST_LAUNCH_CHILD
-    else if (sig == SIGCHLD) {
-        printf("Child process has been killed, Sig: %d\n", sig);
+    (void)channel;
 
-        while ((pid = waitpid(-1, &status, WNOHANG)) > 0);
+    uvc_events_process(dev);
+
+    return TRUE;
+}
+
+/*
+ * GStreamer related.
+ */
+
+static gboolean
+tiemout_callback(gpointer arg)
+{
+    struct uvc_device *dev = (struct uvc_device *)arg;
+
+    g_print("Timeout. Stop the stream\n");
+
+    stop_uvc_stream(dev);
+
+    /* FALSE means the timer will be destroyed. */
+    return FALSE;
+}
+
+static void uvc_set_timeout(struct uvc_device *dev, guint timeout_in_ms)
+{
+    if (dev->timeout_watch_id) {
+        g_source_remove(dev->timeout_watch_id);
+        dev->timeout_watch_id = 0;
     }
 
+    if (timeout_in_ms) {
+        dev->timeout_watch_id =
+            g_timeout_add(timeout_in_ms, tiemout_callback, dev);
+    }
+}
+
+static gboolean
+bus_call(GstBus *bus,
+         GstMessage *msg,
+         gpointer data)
+{
+    struct uvc_device *dev = (struct uvc_device *)data;
+
+    (void)bus;
+
+    switch (GST_MESSAGE_TYPE(msg)) {
+        case GST_MESSAGE_EOS:
+            g_print("End of stream\n");
+            break;
+
+        case GST_MESSAGE_ERROR: {
+            gchar *debug;
+            GError *error;
+
+            gst_message_parse_error(msg, &error, &debug);
+            g_free(debug);
+
+            g_print("Error: %s\n", error->message);
+            g_error_free(error);
+
+            //Stop the stream
+            stop_gst_video_stream(dev);
+
+            break;
+        }
+
+        case GST_MESSAGE_STATE_CHANGED: {
+#if 0
+            GstState old_state, new_state;
+
+            gst_message_parse_state_changed(msg, &old_state, &new_state, NULL);
+            g_print("Element %s state changed from %s to %s.\n",
+                    GST_OBJECT_NAME(msg->src),
+                    gst_element_state_get_name(old_state),
+                    gst_element_state_get_name(new_state));
 #endif
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    return TRUE;
+}
+
+static gboolean
+link_elements_with_video_formats(
+    GstElement *element1,
+    GstElement *element2,
+    int width,
+    int height,
+    int framerate,
+    unsigned int fcc)
+{
+    gboolean link_ok;
+    GstCaps *caps;
+    GstStructure *caps_structure;
+
+    if (fcc != V4L2_PIX_FMT_MJPEG)
+        caps_structure = gst_structure_new_empty("video/x-raw");
+    else
+        caps_structure = gst_structure_new_empty("image/jpeg");
+
+    switch (fcc) {
+        case V4L2_PIX_FMT_YUYV:
+            gst_structure_set(caps_structure, "format", G_TYPE_STRING, "YUY2", NULL);
+            break;
+
+        case V4L2_PIX_FMT_YUV420:
+            gst_structure_set(caps_structure, "format", G_TYPE_STRING, "I420", NULL);
+            break;
+
+        case V4L2_PIX_FMT_NV12:
+            gst_structure_set(caps_structure, "format", G_TYPE_STRING, "NV12", NULL);
+            break;
+
+        case V4L2_PIX_FMT_MJPEG:
+            break;
+
+        default:
+            g_warning("Unknown video format!\n");
+            break;
+    }
+
+    if (width != -1)
+        gst_structure_set(caps_structure, "width", G_TYPE_INT, width, NULL);
+
+    if (height != -1)
+        gst_structure_set(caps_structure, "height", G_TYPE_INT, height, NULL);
+
+    if (framerate != -1)
+        gst_structure_set(caps_structure, "framerate", GST_TYPE_FRACTION, framerate, 1, NULL);
+
+    caps = gst_caps_new_full(caps_structure, NULL);
+
+    link_ok = gst_element_link_filtered(element1, element2, caps);
+    gst_caps_unref(caps);
+
+    if (!link_ok)
+        g_warning("Failed to link element: %s and element: %s\n",
+                  GST_ELEMENT_NAME(element1),
+                  GST_ELEMENT_NAME(element2));
+
+    return link_ok;
+}
+
+static int start_gst_video_stream(struct uvc_device *dev)
+{
+    int retval = 0;
+
+    dev->video_source = gst_element_factory_make("v4l2src", "v4l2 source");
+    dev->video_scaler = gst_element_factory_make("videoscale", "video scaler");
+    dev->video_converter = gst_element_factory_make("videoconvert", "video converter");
+    dev->video_encoder = gst_element_factory_make("nvjpegenc", "jpeg encoder");
+    dev->video_sink = gst_element_factory_make("v4l2sink", "v4l2 sink");
+
+    if (!dev->video_source || !dev->video_sink ||
+            !dev->video_scaler || !dev->video_converter || !dev->video_encoder) {
+        g_printerr("One of the elements could not be created, Exiting. \n");
+        return -1;
+    }
+
+    /* We set the video capture device name to the source element. */
+    g_object_set(G_OBJECT(dev->video_source), "device", dev->v4l2_src_device, NULL);
+    /* We set the video output device name to the sink element. */
+    g_object_set(G_OBJECT(dev->video_sink), "device", dev->v4l2_sink_device, NULL);
+
+    /* Add the elements. */
+    gst_bin_add_many(GST_BIN(dev->pipeline), dev->video_source, dev->video_scaler,
+                     dev->video_converter, dev->video_encoder, dev->video_sink, NULL);
+
+    switch (dev->fcc) {
+        case V4L2_PIX_FMT_YUYV:
+        case V4L2_PIX_FMT_YUV420: {
+            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
+                                                 dev->width, dev->height, -1, -1);
+            } else {
+                link_elements_with_video_formats(dev->video_source, dev->video_converter,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+            }
+
+            link_elements_with_video_formats(dev->video_converter, dev->video_sink,
+                                             -1, -1, -1, dev->fcc);
+            break;
+        }
+
+        case V4L2_PIX_FMT_NV12: {
+            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                link_elements_with_video_formats(dev->video_scaler, dev->video_sink,
+                                                 dev->width, dev->height, -1, -1);
+            } else {
+                link_elements_with_video_formats(dev->video_source, dev->video_sink,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+            }
+
+            break;
+        }
+
+        case V4L2_PIX_FMT_MJPEG: {
+            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
+                                                 dev->width, dev->height, -1, -1);
+            } else {
+                link_elements_with_video_formats(dev->video_source, dev->video_converter,
+                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+            }
+
+            link_elements_with_video_formats(dev->video_converter, dev->video_encoder,
+                                             -1, -1, -1, V4L2_PIX_FMT_YUV420);
+            link_elements_with_video_formats(dev->video_encoder, dev->video_sink,
+                                             -1, -1, -1, dev->fcc);
+            break;
+        }
+
+        default:
+            g_warning("Unknown video format\n");
+            return -1;
+    }
+
+    gst_element_set_state(dev->pipeline, GST_STATE_PLAYING);
+
+    return retval;
+}
+
+static void stop_gst_video_stream(struct uvc_device *dev)
+{
+    gst_element_set_state(dev->pipeline, GST_STATE_NULL);
+
+    gst_bin_remove_many(GST_BIN(dev->pipeline), dev->video_source, dev->video_scaler,
+                        dev->video_converter, dev->video_encoder, dev->video_sink, NULL);
 }
 
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video2";
     struct uvc_device *dev = NULL;
-    fd_set fds;
-    int ret, opt;
+    int opt;
+    /* Glib relevant. */
+    GMainContext *context;
+    GMainLoop *loop;
+    GIOChannel *channel;
+
+    GstBus *bus;
+    guint bus_watch_id, io_watch_id;
 
     while ((opt = getopt(argc, argv, "d:h")) != -1) {
         switch (opt) {
@@ -1027,10 +1264,9 @@ int main(int argc, char *argv[])
      * video and clean the buffer.
      */
 
-    signal(SIGALRM, sig_handle);
-#ifdef FORK_GST_LAUNCH_CHILD
-    signal(SIGCHLD, sig_handle);
-#endif
+    signal(SIGINT, sig_handle);
+    signal(SIGTERM, sig_handle);
+    signal(SIGABRT, sig_handle);
 
     dev = uvc_open(device);
 
@@ -1040,24 +1276,61 @@ int main(int argc, char *argv[])
     global_uvc = dev;
 
     uvc_events_init(dev);
-    FD_ZERO(&fds);
-    FD_SET(dev->fd, &fds);
 
-    while (1) {
-        fd_set efds = fds;
-        ret = select(dev->fd + 1, NULL, NULL, &efds, NULL);
+    /* Initialize the g_main_loop. */
+    loop = g_main_loop_new(NULL, FALSE);
 
-        if (ret == -1) {
-            if (errno != EINTR) {
-                printf("Error in select\n");
-                break;
-            }
-        } else {
-            if (FD_ISSET(dev->fd, &efds)) {
-                uvc_events_process(dev);
-            }
-        }
+    _global_loop = loop;
+
+    context = g_main_loop_get_context(loop);
+
+    /* Add io watch function. */
+    channel = g_io_channel_unix_new(dev->fd);
+
+    /* The poll return type of v4l2 event is POLLPRI.
+     * So add G_IO_PRI here.
+     */
+    io_watch_id = g_io_add_watch(channel, G_IO_PRI, io_watch, dev);
+
+    /* Intialize the gstreamer */
+    gst_init(&argc, &argv);
+
+    /* Create gstreamer elements. */
+    dev->pipeline = gst_pipeline_new("video-looper");
+
+    if (!dev->pipeline) {
+        g_printerr("Failed to allocate the gstreamer pipeline. Exiting. \n");
+        goto exit;
     }
+
+    bus = gst_pipeline_get_bus(GST_PIPELINE(dev->pipeline));
+    bus_watch_id = gst_bus_add_watch(bus, bus_call, dev);
+    gst_object_unref(bus);
+
+    /* Iterate. */
+    g_print("Running...\n");
+    g_main_loop_run(loop);
+
+    g_print("Loop returned\n");
+    gst_element_set_state(dev->pipeline, GST_STATE_NULL);
+    g_print("Deleting the pipeline\n");
+
+    gst_object_unref(GST_OBJECT(dev->pipeline));
+
+    g_source_remove(bus_watch_id);
+
+    if (dev->timeout_watch_id) {
+        g_source_remove(dev->timeout_watch_id);
+        dev->timeout_watch_id = 0;
+    }
+
+exit:
+    g_source_remove(io_watch_id);
+    g_io_channel_shutdown(channel, TRUE, NULL);
+    g_io_channel_unref(channel);
+
+    g_main_context_unref(context);
+    g_main_loop_unref(loop);
 
     uvc_close(dev);
 
