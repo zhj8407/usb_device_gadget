@@ -45,6 +45,7 @@ uint8_t * allocSharedMem(const char * shm_name, uint32_t shmSize)
 
 void freeSharedMem(const char * shm_name, uint8_t * shm_addr, size_t shmSize)
 {
+    printf("try free shared mem: %s at %p of size %u\n", shm_name, shm_addr, shmSize);
     int retv = munmap(shm_addr, shmSize);
 
     if (retv == -1) {

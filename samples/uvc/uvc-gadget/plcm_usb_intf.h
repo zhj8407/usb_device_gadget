@@ -65,7 +65,7 @@ static inline const char * getEventDescStr(enum plcm_usb_video_event event)
 
 inline int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
 {
-    const char * tmp = getEventDescStr(e_stack_ready);
+    const char * tmp = getEventDescStr(event);
     return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
                     PLCM_USB_VISAGE_UVC_INTF_NAME,
                     PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,

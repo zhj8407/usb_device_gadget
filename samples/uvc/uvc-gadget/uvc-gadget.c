@@ -154,7 +154,7 @@ char * fifo_in_name = "/tmp/to_usb_stack";
 int stack2app;
 char * fifo_out_name = "/tmp/from_usb_stack";
 
-pthread_mutex_t * shm_lock = NULL;
+//pthread_mutex_t * shm_lock = NULL;
 
 
 inline long GetTimeInMicroSec()
@@ -194,7 +194,8 @@ void close_gst_socket()
 
 int connect_socket_block(const char * so_path)
 {
-    int connectRetry = 0;
+    int connectRetry = -1;
+    int ret = 0;
     struct sockaddr_un sock_un;
     sock_un.sun_family = AF_UNIX;
     strncpy(sock_un.sun_path, so_path, sizeof(sock_un.sun_path) - 1);
@@ -207,20 +208,41 @@ int connect_socket_block(const char * so_path)
         return -1;
     }
 
-    while (connectRetry < 1) {
-        if (connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un)) < 0) {
-            //printf("[%u]connect socket failed %d %s\n", connectRetry, errno, strerror(errno));
+    while (connectRetry <= 256 && g_gst_connect_flag==0) {
+        ret = connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un));
+        if (ret < 0) {
+            //printf("[%u]connect socket [%s] failed %d %s\n", connectRetry, sock_un.sun_path, errno, strerror(errno));
             //usleep(1000);
+            //unlink (sock_un.sun_path);
+            //free (sock_un.sun_path);
             connectRetry++;
+            snprintf (sock_un.sun_path, sizeof (sock_un.sun_path), "%s.%d", so_path, connectRetry);
         } else { //connected
             g_gst_connect_flag = 1;
-            printf("connect socket success!\n");
-            return main_socket;
+            printf("connect socket [%s] success!\n", sock_un.sun_path);
+            break;
+            //return main_socket;
         }
     }
-
-    close_gst_socket();
-    return -1;
+    if (g_gst_connect_flag==1 ){
+        char tempName[64];
+        memset(tempName, 0, sizeof(tempName));
+        //int ret=0;
+        if (connectRetry!=-1) {
+            ret=unlink(so_path);
+            printf("unlink %s gets ret= %d %d %s\n", so_path, ret, errno, strerror(errno));
+        }
+        for (;connectRetry>0;connectRetry--) {
+            snprintf (tempName, sizeof (tempName), "%s.%d", so_path, connectRetry-1);
+            ret = unlink(tempName);
+            printf("unlink %s gets ret= %d %d %s\n", so_path, ret, errno, strerror(errno));
+        }
+        return main_socket;
+    }
+    else {
+        close_gst_socket();
+        return -1;
+    }
 }
 
 
@@ -533,14 +555,14 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
             printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
 
         if (pSharedMem != NULL) {
-            freeSharedMem(USB_SHM_VIDEO_IN_BUFFER, pSharedMem, VBUF_LEN);
+            freeSharedMem(pSharedMemName, pSharedMem, sharedMemSize);
             pSharedMem = NULL;
         }
 
-        if (shm_lock != NULL) {
-            freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
-            shm_lock = NULL;
-        }
+        //if (shm_lock != NULL) {
+        //    freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
+        //    shm_lock = NULL;
+        //}
 
         return 0;
     }
@@ -1326,7 +1348,7 @@ int main(int argc, char *argv[])
     printf("=========stack shim init done======\n");
     unsigned long getFrameTime = 0; //GetTimeInMilliSec();
     unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
-    unsigned int wfd_count = 0;
+    //unsigned int wfd_count = 0;
 
     while (1) {
         fd_set efds = fds;
@@ -1354,10 +1376,15 @@ int main(int argc, char *argv[])
                 if (len > 0) {
                     struct plcm_uvc_event_msg_t *event = (struct plcm_uvc_event_msg_t*)(buf);
 
-                    if (event != NULL)
-                        printf("a message from app 2 stack: event=%u[%s], format=[%ux%u]\n", event->m_event, plcm_usb_video_event_str[event->m_event], event->m_format.m_width, event->m_format.m_height);
-                    else
+                    if (event != NULL) {
+                        /*printf("a message from app 2 stack: event=%u[%s], format=[%ux%u] streamon=%d\n"
+                            , event->m_event, plcm_usb_video_event_str[event->m_event]
+                            , event->m_format.m_width, event->m_format.m_height
+                            , stream_on);*/
+                    }
+                    else {
                         printf("a message from app 2 stack: wrong format!\n");
+                    }
 
                     if (event->m_event == e_app_ready) {
                         sendEvent2Fifo(stack2app, e_stack_ready, dev->fcc, camera_width, camera_height);
@@ -1443,12 +1470,12 @@ int main(int argc, char *argv[])
                                 return -1;
                             }
 
-                            shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
+                            //shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
 
-                            if (shm_lock == NULL) {
-                                printf("Cannot alloc shared memory mutex\n");
-                                return -1;
-                            }
+                            //if (shm_lock == NULL) {
+                            //    printf("Cannot alloc shared memory mutex\n");
+                            //    return -1;
+                            //}
 
                             printf("=========share memory init done %p, name=%s======\n", pSharedMem, pSharedMemName);
                             awaiting_shm = 0;
@@ -1464,7 +1491,7 @@ int main(int argc, char *argv[])
     }
 
     uvc_close(dev);
-    freeSharedMem(USB_SHM_VIDEO_IN_BUFFER, pSharedMem, VBUF_LEN);
-    freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
+    freeSharedMem(pSharedMemName, pSharedMem, VBUF_LEN);
+    //freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
     return 0;
 }
