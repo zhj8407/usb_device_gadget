@@ -277,6 +277,8 @@ unsigned int camera_framerate = CAM_DEF_FRAMERATE;
 unsigned int output_framerate = CAM_DEF_FRAMERATE;
 unsigned int encoder_quality = 85;
 
+#ifdef USE_EXTERNAL_GST_LAUNCH
+
 static const char FST_FMT_YUY2[] = "video/x-raw, format='(string)'YUY2";
 static const char FST_FMT_NV12[] = "video/x-raw, format='(string)'NV12";
 static const char FST_FMT_I420[] = "video/x-raw, format='(string)'I420";
@@ -400,10 +402,11 @@ static unsigned int get_gst_running_cmd(char *gst_cmd,
                     get_gst_encoder_cmd(format, encoder_quality),
                     get_gst_v4l2output_cmd(v4l2_output_devnum));
 }
+#endif
 
 void start_uvc_stream(struct uvc_device *dev)
 {
-#if 0
+#ifdef USE_EXTERNAL_GST_LAUNCH
     char gst_running_cmd[GST_CMD_TOTAL_LEN];
     get_gst_running_cmd(gst_running_cmd,
                         dev->v4l2_src_device,
@@ -425,7 +428,7 @@ void stop_uvc_stream(struct uvc_device *dev)
 {
     int type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
     ioctl(dev->fd, VIDIOC_STREAMOFF, &type);
-#if 0
+#ifdef USE_EXTERNAL_GST_LAUNCH
 
     if (dev->streaming_pid > 0)
         system("sudo killall -9 gst-launch-1.0");
@@ -785,7 +788,7 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             stop_uvc_stream(dev);
             start_uvc_stream(dev);
 
-            uvc_set_timeout(dev, 1000);
+            uvc_set_timeout(dev, 5000);
         }
     } else if (dev->control == UVC_VS_PROBE_CONTROL) {
         if (dev->bulk) {
@@ -885,13 +888,13 @@ uvc_events_process(struct uvc_device *dev)
         case UVC_EVENT_STREAMON:
             // Start uvc video stream
             start_uvc_stream(dev);
-            uvc_set_timeout(dev, 3000);
 
             return;
 
         case UVC_EVENT_STREAMOFF:
             // Cacel the alarm.
-            uvc_set_timeout(dev, 0);
+            if (dev->bulk)
+                uvc_set_timeout(dev, 0);
 
             // Stop the uvc video stream
             stop_uvc_stream(dev);
@@ -949,19 +952,6 @@ uvc_events_init(struct uvc_device *dev)
     ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 }
 
-/* ---------------------------------------------------------------------------
- * main
- */
-
-static void usage(const char *argv0)
-{
-    fprintf(stderr, "Usage: %s [options]\n", argv0);
-    fprintf(stderr, "Available options are\n");
-    fprintf(stderr, " -d device	Video device\n");
-    fprintf(stderr, " -h		Print this help screen and exit\n");
-}
-
-static struct uvc_device *global_uvc = NULL;
 static GMainLoop *_global_loop = NULL;
 
 void sig_handle(int sig)
@@ -990,7 +980,7 @@ io_watch(GIOChannel *channel, GIOCondition condition, gpointer data)
     return TRUE;
 }
 
-/*
+/* ---------------------------------------------------------------------------
  * GStreamer related.
  */
 
@@ -1224,6 +1214,18 @@ static void stop_gst_video_stream(struct uvc_device *dev)
                         dev->video_converter, dev->video_encoder, dev->video_sink, NULL);
 }
 
+/* ---------------------------------------------------------------------------
+ * main
+ */
+
+static void usage(const char *argv0)
+{
+    fprintf(stderr, "Usage: %s [options]\n", argv0);
+    fprintf(stderr, "Available options are\n");
+    fprintf(stderr, " -d device Video device\n");
+    fprintf(stderr, " -h        Print this help screen and exit\n");
+}
+
 int main(int argc, char *argv[])
 {
     char *device = "/dev/video2";
@@ -1272,8 +1274,6 @@ int main(int argc, char *argv[])
 
     if (dev == NULL)
         return 1;
-
-    global_uvc = dev;
 
     uvc_events_init(dev);
 
