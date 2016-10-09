@@ -3,6 +3,8 @@
 
 #include "stdio.h"
 
+#define ARRAY_SIZE(a)   ((sizeof(a) / sizeof(a[0])))
+
 /* A.9.7. VideoStreaming Interface Control Selectors */
 static const char * VSIntfControlSelectorStr[] = {
     "[UVC_VS_CONTROL_UNDEFINED_0x00]",
@@ -55,13 +57,14 @@ static const char * UVCOpsStr [] = {
     "[UVC_GET_INFO_0x86]",
     "[UVC_GET_DEF_0x87]"
 };
+
 inline const char * getUVCOpStr(unsigned int uOp)
 {
     if (uOp > UVC_RC_LOG_INDEX_BASE)
         return UVCOpsStr[uOp - UVC_RC_LOG_INDEX_BASE + 1];
     else
         return UVCOpsStr[uOp];
-};
+}
 
 static const char * V4L2PixFormatStr [] = {
     "[V4L2_PIX_FMT_YUYV]",
@@ -71,6 +74,85 @@ static const char * V4L2PixFormatStr [] = {
     "[V4L2_PIX_FMT_YUV420]",
     "[Unknown Format]"
 };
+
+static const char * UVCReqStr [] = {
+    "UVC_REQ_UNDEFINED",
+    "UVC_SET_CUR",
+    "UVC_GET_CUR",
+    "UVC_GET_MIN",
+    "UVC_GET_MAX",
+    "UVC_GET_RES",
+    "UVC_GET_LEN",
+    "UVC_GET_INFO",
+    "UVC_GET_DEF"
+};
+
+inline const char * getUVCReqStr(unsigned int uReq)
+{
+    if (uReq > UVC_RC_LOG_INDEX_BASE)
+        return UVCReqStr[uReq - UVC_RC_LOG_INDEX_BASE + 1];
+    else
+        return UVCReqStr[uReq];
+}
+
+static const char * UVCPUControlSelectorsStr [] = {
+    "PU_Undefined",
+    "PU_Backlight_Compensation",
+    "PU_Brightness",
+    "PU_Contrast",
+    "PU_Gain",
+    "PU_Power_Line_Frequency",
+    "PU_Hue",
+    "PU_Saturation",
+    "PU_Sharpness",
+    "PU_Gamma",
+    "PU_White_Balance_Temperature",
+    "PU_White_Balance_Temperature_Auto",
+    "PU_White_Balance_Component",
+    "PU_White_Balance_Component_Auto",
+    "PU_Digital_Multiplier",
+    "PU_Digital_Multiplier_Limit",
+    "PU_Hue_Auto",
+    "PU_Analog_Video_Standard",
+    "PU_Analog_Lock_Status"
+};
+
+inline const char * getUVCPUCS(unsigned int cs)
+{
+    if (cs >= ARRAY_SIZE(UVCPUControlSelectorsStr))
+        return NULL;
+
+    return UVCPUControlSelectorsStr[cs];
+}
+
+static const char * UVCCTControlSelectorsStr [] = {
+    "CT_Undefined",
+    "CT_Scanning_Mode",
+    "CT_AE_Mode",
+    "CT_AE_Priority",
+    "CT_Exposure_Time_Absolute",
+    "CT_Exposure_Time_Relative",
+    "CT_Focus_Absolute",
+    "CT_Focus_Relative",
+    "CT_Focus_Auto",
+    "CT_IRIS_Absolute",
+    "CT_IRIS_Relative",
+    "CT_Zoom_Absolute",
+    "CT_Zoom_Relative",
+    "CT_Pantilt_Absolute",
+    "CT_Pantilt_Relative",
+    "CT_Roll_Absolute",
+    "CT_Roll_Relative",
+    "CT_Privacy"
+};
+
+inline const char * getUVCCTCS(unsigned int cs)
+{
+    if (cs >= ARRAY_SIZE(UVCCTControlSelectorsStr))
+        return NULL;
+
+    return UVCCTControlSelectorsStr[cs];
+}
 
 inline const char * getV4L2FormatStr(unsigned int fcc)
 {

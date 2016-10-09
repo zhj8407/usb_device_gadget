@@ -39,8 +39,9 @@
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
-#include <gst/gst.h>
+#include <gio/gio.h>
 #include <glib.h>
+#include <gst/gst.h>
 
 #include "uvc.h"
 
@@ -53,8 +54,6 @@
         (void) (&__val == &__max);              \
         __val = __val < __min ? __min: __val;   \
         __val > __max ? __max: __val; })
-
-#define ARRAY_SIZE(a)   ((sizeof(a) / sizeof(a[0])))
 
 #define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID     (1)
 #define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID     (2)
@@ -107,12 +106,23 @@ struct uvc_device {
 
     //GLib timer
     guint timeout_watch_id;
+
+    //GDBusConnection
+    GDBusConnection *conn;
 };
 
 static int start_gst_video_stream(struct uvc_device *dev);
 static void stop_gst_video_stream(struct uvc_device *dev);
 
 static void uvc_set_timeout(struct uvc_device *dev, guint timeout_in_ms);
+
+static void
+send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
+                         uint8_t unit_id, uint16_t length);
+
+static void
+send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
+                         uint8_t unit_id, uint16_t length, uint8_t *data);
 
 static int
 uvc_read_value_from_file(const char* filename,
@@ -548,72 +558,23 @@ uvc_events_process_standard(struct uvc_device *dev, struct usb_ctrlrequest *ctrl
     resp->length = 0;
 }
 
-__u16 brightness = 0x0004;
-
 static void
 uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
-                           uint8_t unit_id, struct uvc_request_data *resp)
+                           uint8_t unit_id, uint16_t length, struct uvc_request_data *resp)
 {
-    __u16 *wValuePtr = (__u16 *)(resp->data);
     printf("control request (req %02x cs %02x)\n", req, cs);
     (void)dev;
 
-    switch (cs) {
-        case UVC_PU_BRIGHTNESS_CONTROL:
-            switch (req) {
-                case UVC_GET_INFO:
-                    resp->data[0] = 0x03;
-                    resp->length = 1;
-                    break;
-
-                case UVC_GET_MIN:
-                    *wValuePtr = 0x0000;
-                    resp->length = 2;
-                    break;
-
-                case UVC_GET_MAX:
-                    *wValuePtr = 0x0009;
-                    resp->length = 2;
-                    break;
-
-                case UVC_GET_RES:
-                    *wValuePtr = 0x0001;
-                    resp->length = 2;
-                    break;
-
-                case UVC_GET_DEF:
-                    *wValuePtr = 0x0004;
-                    resp->length = 2;
-                    break;
-
-                case UVC_GET_CUR:
-                    *wValuePtr = brightness;
-                    resp->length = 2;
-                    break;
-
-                case UVC_GET_LEN:
-                    *wValuePtr = sizeof(brightness);
-                    resp->length = 2;
-                    break;
-
-                case UVC_SET_CUR:
-                    //TODO
-                    dev->control = cs;
-                    dev->unit = unit_id;
-                    resp->length = 2;
-                    break;
-
-                default:
-                    resp->length = 0;
-                    break;
-            }
-
-            break;
-
-        default:
-            resp->length = 0;
-            break;
+    if (req != UVC_SET_CUR) {
+        send_get_property_signal(dev, req, cs, unit_id, length);
+    } else {
+        dev->control = cs;
+        dev->unit = unit_id;
     }
+
+    // Do not send the reply here.
+    // We have posted a singal. The client will do it.
+    resp->length = -EL2HLT;
 }
 
 static void
@@ -678,7 +639,7 @@ uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
 
     if ((ctrl->wIndex >> 8) & 0xff) {
         //has unit id. Control event
-        uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wIndex >> 8, resp);
+        uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wIndex >> 8, ctrl->wLength, resp);
     } else {
         uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
     }
@@ -732,13 +693,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             target = &dev->commit;
             break;
 
-        case UVC_PROCESSING_UNIT_CONTROL_UNIT_ID << 8 | UVC_PU_BRIGHTNESS_CONTROL:
-            printf("setting UVC_PU_BRIGHTNESS_CONTROL, length = %d\n", data->length);
-            brightness = *(__u16 *)(data->data);
-            return;
-
         default:
-            printf("setting unknown control, length = %d\n", data->length);
+            send_set_property_signal(dev, UVC_SET_CUR, dev->control, dev->unit, data->length, data->data);
             return;
     }
 
@@ -870,7 +826,7 @@ uvc_events_process(struct uvc_device *dev)
     switch (v4l2_event.type) {
         case UVC_EVENT_CONNECT:
         case UVC_EVENT_DISCONNECT:
-            return;
+            break;
 
         case UVC_EVENT_SETUP:
             printf("bRequestType %02x bRequest %02x wValue %04x wIndex %04x wLength %04x [intf=]\n",
@@ -883,15 +839,16 @@ uvc_events_process(struct uvc_device *dev)
         case UVC_EVENT_DATA:
             printHexData((char *)&uvc_event->data, sizeof(uvc_event->data), getUVCEventStr(v4l2_event.type));
             uvc_events_process_data(dev, &uvc_event->data);
-            return;
+            break;
 
         case UVC_EVENT_STREAMON:
             // Start uvc video stream
             start_uvc_stream(dev);
 
-            return;
+            break;
 
         case UVC_EVENT_STREAMOFF:
+
             // Cacel the alarm.
             if (dev->bulk)
                 uvc_set_timeout(dev, 0);
@@ -899,11 +856,15 @@ uvc_events_process(struct uvc_device *dev)
             // Stop the uvc video stream
             stop_uvc_stream(dev);
 
-            return;
+            break;
 
         case UVC_EVENT_FRAMEDONE:
             handle_frame_done_event(dev);
-            return;
+            break;
+    }
+
+    if (resp.length < 0) {
+        return;
     }
 
     //Ignore the SET_CUR event. Because we have triggle the transfer
@@ -1215,6 +1176,223 @@ static void stop_gst_video_stream(struct uvc_device *dev)
 }
 
 /* ---------------------------------------------------------------------------
+ * GDBus related
+ */
+static GDBusNodeInfo *introspection_data = NULL;
+
+/* Introspection data for the service we are exporting */
+static const gchar introspection_xml[] =
+    "<node>"
+    "  <interface name='com.polycom.visage.uvc'>"
+    "    <method name='SendResponse'>"
+    "      <arg type='i' name='length' direction='in'/>"
+    "      <arg type='ay' name='data' direction='in'/>"
+    "      <arg type='i' name='retval' direction='out'/>"
+    "    </method>"
+    "    <signal name='GetCameraProperty'>"
+    "      <annotation name='org.gtk.GDBus.Annotation' value='Onsignal'/>"
+    "      <arg type='s' name='prop_name'/>"
+    "      <arg type='s' name='request_type'/>"
+    "      <arg type='q' name='request_length'/>"
+    "    </signal>"
+    "    <signal name='SetCameraProperty'>"
+    "      <annotation name='org.gtk.GDBus.Annotation' value='Onsignal'/>"
+    "      <arg type='s' name='prop_name'/>"
+    "      <arg type='s' name='request_type'/>"
+    "      <arg type='q' name='prop_length'/>"
+    "      <arg type='ay' name='prop_data'/>"
+    "    </signal>"
+    "  </interface>"
+    "</node>";
+
+/* ---------------------------------------------------------------------------------------------------- */
+
+static void
+send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
+                         uint8_t unit_id, uint16_t length)
+{
+    GError *error;
+    const char *prop_name, *request_type;
+
+    error = NULL;
+    request_type = getUVCReqStr(req);
+
+    if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
+        prop_name = getUVCPUCS(cs);
+    else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
+        prop_name = getUVCCTCS(cs);
+
+    if (dev->conn) {
+        g_dbus_connection_emit_signal(dev->conn,
+                                      NULL,
+                                      "/com/polycom/visage/uvc",
+                                      "com.polycom.visage.uvc",
+                                      "GetCameraProperty",
+                                      g_variant_new("(ssq)",
+                                              prop_name,
+                                              request_type,
+                                              length),
+                                      &error);
+
+        if (error != NULL) {
+            g_printerr("Failed to emit signals. error: %s\n", error->message);
+            g_clear_error(&error);
+        }
+    }
+}
+
+static void
+send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
+                         uint8_t unit_id, uint16_t length, uint8_t *data)
+{
+    GError *error;
+    const char *prop_name, *request_type;
+    GVariantBuilder *builder;
+    uint16_t i = 0;
+
+    error = NULL;
+    request_type = getUVCReqStr(req);
+
+    if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
+        prop_name = getUVCPUCS(cs);
+    else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
+        prop_name = getUVCCTCS(cs);
+
+    builder = g_variant_builder_new(G_VARIANT_TYPE("ay"));
+
+    for (i = 0; i < length; i++)
+        g_variant_builder_add(builder, "y", data[i]);
+
+    if (dev->conn) {
+        g_dbus_connection_emit_signal(dev->conn,
+                                      NULL,
+                                      "/com/polycom/visage/uvc",
+                                      "com.polycom.visage.uvc",
+                                      "SetCameraProperty",
+                                      g_variant_new("(ssqay)",
+                                              prop_name,
+                                              request_type,
+                                              length,
+                                              builder),
+                                      &error);
+
+        g_variant_builder_unref(builder);
+
+        if (error != NULL) {
+            g_printerr("Failed to emit signals. error: %s\n", error->message);
+            g_clear_error(&error);
+        }
+    }
+}
+
+static void
+handle_method_call(GDBusConnection       *connection,
+                   const gchar           *sender,
+                   const gchar           *object_path,
+                   const gchar           *interface_name,
+                   const gchar           *method_name,
+                   GVariant              *parameters,
+                   GDBusMethodInvocation *invocation,
+                   gpointer               user_data)
+{
+    struct uvc_device *dev = (struct uvc_device *)user_data;
+    int retval = 0;
+    int len = 0;
+    struct uvc_request_data resp;
+
+    GVariantIter *iter;
+    guchar str;
+
+    (void)connection;
+    (void)sender;
+    (void)object_path;
+    (void)interface_name;
+
+    if (g_strcmp0(method_name, "SendResponse") == 0) {
+
+
+        g_variant_get(parameters, "(iay)", &resp.length, &iter);
+
+        if ((uint32_t)resp.length > sizeof(resp.data)) {
+            g_printerr("length: %u is out of boundary\n", resp.length);
+            g_dbus_method_invocation_return_error(invocation,
+                                                  G_IO_ERROR,
+                                                  G_IO_ERROR_FAILED_HANDLED,
+                                                  "length is too big. Out of boundary");
+            g_variant_iter_free(iter);
+            return;
+        }
+
+        while (g_variant_iter_loop(iter, "y", &str))
+            resp.data[len++] = str;
+
+        g_variant_iter_free(iter);
+
+        retval = ioctl(dev->fd, UVCIOC_SEND_RESPONSE, &resp);
+
+        if (retval < 0) {
+            g_printerr("SendResponse failed: %s (%d)\n", strerror(errno),
+                       errno);
+        }
+
+        g_dbus_method_invocation_return_value(invocation,
+                                              g_variant_new("(i)", retval));
+    }
+}
+
+/* for now */
+static const GDBusInterfaceVTable interface_vtable = {
+    .method_call = handle_method_call,
+    .get_property = NULL,
+    .set_property = NULL,
+    .padding = { NULL }
+};
+
+static void
+on_bus_acquired(GDBusConnection *connection,
+                const gchar     *name,
+                gpointer         user_data)
+{
+    struct uvc_device *dev = (struct uvc_device *)user_data;
+    guint registration_id;
+
+    (void)name;
+
+    dev->conn = connection;
+
+    registration_id = g_dbus_connection_register_object(connection,
+                      "/com/polycom/visage/uvc",
+                      introspection_data->interfaces[0],
+                      &interface_vtable,
+                      user_data,
+                      NULL,  /* user_data_free_func */
+                      NULL); /* GError** */
+    g_assert(registration_id > 0);
+}
+
+static void
+on_name_acquired(GDBusConnection *connection,
+                 const gchar     *name,
+                 gpointer         user_data)
+{
+    (void)connection;
+    (void)user_data;
+
+    g_print("bus name acquired :%s\n", name);
+}
+
+static void
+on_name_lost(GDBusConnection *connection,
+             const gchar     *name,
+             gpointer         user_data)
+{
+    (void)connection;
+    (void)user_data;
+
+    g_print("bus name lost :%s\n", name);
+}
+
+/* ---------------------------------------------------------------------------
  * main
  */
 
@@ -1238,6 +1416,8 @@ int main(int argc, char *argv[])
 
     GstBus *bus;
     guint bus_watch_id, io_watch_id;
+
+    guint owner_id;
 
     while ((opt = getopt(argc, argv, "d:h")) != -1) {
         switch (opt) {
@@ -1307,16 +1487,40 @@ int main(int argc, char *argv[])
     bus_watch_id = gst_bus_add_watch(bus, bus_call, dev);
     gst_object_unref(bus);
 
+    /* We are lazy here - we don't want to manually provide
+    * the introspection data structures - so we just build
+    * them from XML.
+    */
+    introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, NULL);
+    g_assert(introspection_data != NULL);
+
+    owner_id = g_bus_own_name(G_BUS_TYPE_SYSTEM,
+                              "com.polycom.visage.uvc",
+                              G_BUS_NAME_OWNER_FLAGS_NONE,
+                              on_bus_acquired,
+                              on_name_acquired,
+                              on_name_lost,
+                              dev,
+                              NULL);
+
     /* Iterate. */
     g_print("Running...\n");
     g_main_loop_run(loop);
 
     g_print("Loop returned\n");
+
+    /* Clean up the dbus. */
+    g_bus_unown_name(owner_id);
+    g_dbus_node_info_unref(introspection_data);
+
+    /* Clean up the gstreamer. */
+    g_print("Stop the video looper pipeline\n");
     gst_element_set_state(dev->pipeline, GST_STATE_NULL);
     g_print("Deleting the pipeline\n");
 
     gst_object_unref(GST_OBJECT(dev->pipeline));
 
+    /* Clean up the gstreamer bus. */
     g_source_remove(bus_watch_id);
 
     if (dev->timeout_watch_id) {
