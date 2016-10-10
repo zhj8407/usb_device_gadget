@@ -1491,7 +1491,7 @@ int main(int argc, char *argv[])
     }
 
     uvc_close(dev);
-    freeSharedMem(pSharedMemName, pSharedMem, VBUF_LEN);
+    freeSharedMem(pSharedMemName, pSharedMem, sharedMemSize);
     //freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
     return 0;
 }
