@@ -1,0 +1,6 @@
+*.o
+udm
+.tags
+.tags*
+*.patch
+*.so
