@@ -87,6 +87,11 @@ def set_property_signal_handler(prop_name, request_type, length, data):
     global_uvc_cs_table[prop_name][0] = value
 
 
+def streaming_status_change_signal_handler(status, format, width, height):
+    print("%s, format: %s, width: %d, height: %d" %
+          (status, format, width, height))
+
+
 def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
@@ -107,6 +112,10 @@ def main():
 
     bus.add_signal_receiver(set_property_signal_handler,
                             "SetCameraProperty",
+                            "com.polycom.visage.uvc")
+
+    bus.add_signal_receiver(streaming_status_change_signal_handler,
+                            "video_control",
                             "com.polycom.visage.uvc")
 
     loop = GLib.MainLoop()

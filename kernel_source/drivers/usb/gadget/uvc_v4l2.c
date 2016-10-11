@@ -216,6 +216,9 @@ uvc_v4l2_strm_release(struct file *file)
 }
 
 static long
+uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg);
+
+static long
 uvc_v4l2_ctrl_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 {
 	struct video_device *vdev = video_devdata(file);
@@ -223,6 +226,13 @@ uvc_v4l2_ctrl_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 	struct uvc_file_handle *handle = to_uvc_file_handle(file->private_data);
 	struct uvc_video *video = &uvc->video;
 	int ret = 0;
+
+	/* To be compatible with previous uvc-gadget app. We also need to
+	 * handle streaming relevant here.
+	 */
+	ret = uvc_v4l2_strm_do_ioctl(file, cmd, arg);
+	if (ret != -ENOIOCTLCMD)
+		return ret;
 
 	switch (cmd) {
 	/* Events */

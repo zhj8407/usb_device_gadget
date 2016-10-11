@@ -74,6 +74,7 @@ struct uvc_device {
     const char *v4l2_src_device;
     char v4l2_sink_device[32];
     int fd;
+    unsigned char stream_on;
 
     struct uvc_streaming_control probe;
     struct uvc_streaming_control commit;
@@ -123,6 +124,9 @@ send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
 static void
 send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
                          uint8_t unit_id, uint16_t length, uint8_t *data);
+
+static void
+send_uvc_stream_status_signal(struct uvc_device *dev);
 
 static int
 uvc_read_value_from_file(const char* filename,
@@ -432,6 +436,7 @@ void start_uvc_stream(struct uvc_device *dev)
 #else
     start_gst_video_stream(dev);
 #endif
+    dev->stream_on = 1;
 }
 
 void stop_uvc_stream(struct uvc_device *dev)
@@ -446,6 +451,8 @@ void stop_uvc_stream(struct uvc_device *dev)
 #else
     stop_gst_video_stream(dev);
 #endif
+
+    dev->stream_on = 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -743,6 +750,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         if (dev->bulk) {
             stop_uvc_stream(dev);
             start_uvc_stream(dev);
+            //Notify the app with the streaming status
+            send_uvc_stream_status_signal(dev);
 
             uvc_set_timeout(dev, 5000);
         }
@@ -844,6 +853,8 @@ uvc_events_process(struct uvc_device *dev)
         case UVC_EVENT_STREAMON:
             // Start uvc video stream
             start_uvc_stream(dev);
+            //Notify the app with the streaming status
+            send_uvc_stream_status_signal(dev);
 
             break;
 
@@ -855,6 +866,8 @@ uvc_events_process(struct uvc_device *dev)
 
             // Stop the uvc video stream
             stop_uvc_stream(dev);
+            //Notify the app with the streaming status
+            send_uvc_stream_status_signal(dev);
 
             break;
 
@@ -953,6 +966,9 @@ tiemout_callback(gpointer arg)
     g_print("Timeout. Stop the stream\n");
 
     stop_uvc_stream(dev);
+
+    //Notify the app with the streaming status
+    send_uvc_stream_status_signal(dev);
 
     /* FALSE means the timer will be destroyed. */
     return FALSE;
@@ -1180,6 +1196,12 @@ static void stop_gst_video_stream(struct uvc_device *dev)
  */
 static GDBusNodeInfo *introspection_data = NULL;
 
+#define PLCM_USB_VISAGE_UVC_OBJ_PATH        "/com/polycom/visage/uvc"
+#define PLCM_USB_VISAGE_UVC_INTF_NAME       "com.polycom.visage.uvc"
+#define PLCM_USB_VISAGE_UVC_GET_PROP_SIGNAL  "GetCameraProperty"
+#define PLCM_USB_VISAGE_UVC_SET_PROP_SIGNAL  "SetCameraProperty"
+#define PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL  "video_control"
+
 /* Introspection data for the service we are exporting */
 static const gchar introspection_xml[] =
     "<node>"
@@ -1202,10 +1224,47 @@ static const gchar introspection_xml[] =
     "      <arg type='q' name='prop_length'/>"
     "      <arg type='ay' name='prop_data'/>"
     "    </signal>"
+    "    <signal name='video_control'>"
+    "      <annotation name='org.gtk.GDBus.Annotation' value='Onsignal'/>"
+    "      <arg type='s' name='streaming_status'/>"
+    "      <arg type='s' name='image_format'/>"
+    "      <arg type='u' name='image_width'/>"
+    "      <arg type='u' name='image_height'/>"
+    "    </signal>"
     "  </interface>"
     "</node>";
 
 /* ---------------------------------------------------------------------------------------------------- */
+
+static void
+send_uvc_stream_status_signal(struct uvc_device *dev)
+{
+    GError *error;
+    const char *streaming_status =
+        dev->stream_on ? "start stream" : "stop stream";
+    const char *format_str = getV4L2FormatStr(dev->fcc);
+
+    error = NULL;
+
+    if (dev->conn) {
+        g_dbus_connection_emit_signal(dev->conn,
+                                      NULL,
+                                      PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                                      PLCM_USB_VISAGE_UVC_INTF_NAME,
+                                      PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,
+                                      g_variant_new("(ssuu)",
+                                              streaming_status,
+                                              format_str,
+                                              dev->width,
+                                              dev->height),
+                                      &error);
+
+        if (error != NULL) {
+            g_printerr("Failed to emit signals. error: %s\n", error->message);
+            g_clear_error(&error);
+        }
+    }
+}
 
 static void
 send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
@@ -1225,9 +1284,9 @@ send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
     if (dev->conn) {
         g_dbus_connection_emit_signal(dev->conn,
                                       NULL,
-                                      "/com/polycom/visage/uvc",
-                                      "com.polycom.visage.uvc",
-                                      "GetCameraProperty",
+                                      PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                                      PLCM_USB_VISAGE_UVC_INTF_NAME,
+                                      PLCM_USB_VISAGE_UVC_GET_PROP_SIGNAL,
                                       g_variant_new("(ssq)",
                                               prop_name,
                                               request_type,
@@ -1266,9 +1325,9 @@ send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
     if (dev->conn) {
         g_dbus_connection_emit_signal(dev->conn,
                                       NULL,
-                                      "/com/polycom/visage/uvc",
-                                      "com.polycom.visage.uvc",
-                                      "SetCameraProperty",
+                                      PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                                      PLCM_USB_VISAGE_UVC_INTF_NAME,
+                                      PLCM_USB_VISAGE_UVC_SET_PROP_SIGNAL,
                                       g_variant_new("(ssqay)",
                                               prop_name,
                                               request_type,
