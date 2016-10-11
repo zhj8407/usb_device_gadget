@@ -48,7 +48,8 @@ unsigned int uvc_gadget_trace_param;
 #endif
 
 struct webcam_config {
-	int	device;
+	int	v4l2_ctrl_device;
+	int	v4l2_strm_device;
 	struct device *dev;
 	bool *soft_connected_ptr;
 
@@ -643,7 +644,7 @@ uvc_function_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 		v4l2_event.type = UVC_EVENT_DATA;
 		uvc_event->data.length = req->actual;
 		memcpy(&uvc_event->data.data, req->buf, req->actual);
-		v4l2_event_queue(uvc->vdev, &v4l2_event);
+		v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 	}
 }
 
@@ -674,7 +675,7 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	memset(&v4l2_event, 0, sizeof(v4l2_event));
 	v4l2_event.type = UVC_EVENT_SETUP;
 	memcpy(&uvc_event->req, ctrl, sizeof(uvc_event->req));
-	v4l2_event_queue(uvc->vdev, &v4l2_event);
+	v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 
 	/* Tell the complete callback to generate an event for
 	 * the next request that will be enqueued by
@@ -738,7 +739,7 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 			memset(&v4l2_event, 0, sizeof(v4l2_event));
 			v4l2_event.type = UVC_EVENT_CONNECT;
 			uvc_event->speed = f->config->cdev->gadget->speed;
-			v4l2_event_queue(uvc->vdev, &v4l2_event);
+			v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 
 			uvc->state = UVC_STATE_CONNECTED;
 		}
@@ -779,7 +780,7 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 
 			memset(&v4l2_event, 0, sizeof(v4l2_event));
 			v4l2_event.type = UVC_EVENT_STREAMOFF;
-			v4l2_event_queue(uvc->vdev, &v4l2_event);
+			v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 
 			uvc->state = UVC_STATE_CONNECTED;
 			return 0;
@@ -798,7 +799,7 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 
 			memset(&v4l2_event, 0, sizeof(v4l2_event));
 			v4l2_event.type = UVC_EVENT_STREAMON;
-			v4l2_event_queue(uvc->vdev, &v4l2_event);
+			v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 			return USB_GADGET_DELAYED_STATUS;
 
 		default:
@@ -830,7 +831,7 @@ uvc_function_suspend(struct usb_function *f)
 	if (uvc->state == UVC_STATE_STREAMING) {
 		memset(&v4l2_event, 0, sizeof(v4l2_event));
 		v4l2_event.type = UVC_EVENT_STREAMOFF;
-		v4l2_event_queue(uvc->vdev, &v4l2_event);
+		v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 	}
 
 	uvc->state = UVC_STATE_DISCONNECTED;
@@ -846,7 +847,7 @@ uvc_function_disable(struct usb_function *f)
 
 	memset(&v4l2_event, 0, sizeof(v4l2_event));
 	v4l2_event.type = UVC_EVENT_DISCONNECT;
-	v4l2_event_queue(uvc->vdev, &v4l2_event);
+	v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
 
 	uvc->state = UVC_STATE_DISCONNECTED;
 }
@@ -893,26 +894,54 @@ static int
 uvc_register_video(struct uvc_device *uvc)
 {
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
-	struct video_device *video;
+	struct video_device *ctrl_video, *strm_video;
 	int ret = 0;
 
 	/* TODO reference counting. */
-	video = video_device_alloc();
-	if (video == NULL)
+	/* Allocate the video control device. */
+	ctrl_video = video_device_alloc();
+	if (ctrl_video == NULL)
 		return -ENOMEM;
 
-	video->parent = &cdev->gadget->dev;
-	video->fops = &uvc_v4l2_fops;
-	video->release = video_device_release;
-	strlcpy(video->name, cdev->gadget->name, sizeof(video->name));
+	/* Register the video control device. */
+	ctrl_video->parent = &cdev->gadget->dev;
+	ctrl_video->fops = &uvc_v4l2_ctrl_fops;
+	ctrl_video->release = video_device_release;
+	snprintf(ctrl_video->name, sizeof(ctrl_video->name),
+		"%s UVC Control", cdev->gadget->name);
 
-	uvc->vdev = video;
-	video_set_drvdata(video, uvc);
+	uvc->ctrl_vdev = ctrl_video;
+	video_set_drvdata(ctrl_video, uvc);
 
-	ret = video_register_device(video, VFL_TYPE_GRABBER, -1);
+	ret = video_register_device(ctrl_video, VFL_TYPE_GRABBER, -1);
 
-	if (_webcam_config)
-		_webcam_config->device = video->num;
+	/* Allocate the video stream device. */
+	strm_video = video_device_alloc();
+	if (strm_video == NULL) {
+		video_unregister_device(uvc->ctrl_vdev);
+		return -ENOMEM;
+	}
+
+	/* Register the video stream device. */
+	strm_video->parent = &cdev->gadget->dev;
+	strm_video->fops = &uvc_v4l2_strm_fops;
+	strm_video->release = video_device_release;
+	snprintf(strm_video->name, sizeof(strm_video->name),
+		"%s UVC Stream", cdev->gadget->name);
+
+	uvc->strm_vdev = strm_video;
+	video_set_drvdata(strm_video, uvc);
+
+	ret = video_register_device(strm_video, VFL_TYPE_GRABBER, -1);
+
+	if (ret < 0) {
+		video_unregister_device(uvc->ctrl_vdev);
+	}
+
+	if (_webcam_config) {
+		_webcam_config->v4l2_ctrl_device = ctrl_video->num;
+		_webcam_config->v4l2_strm_device = strm_video->num;
+	}
 
 	return ret;
 }
@@ -1080,7 +1109,8 @@ uvc_function_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	INFO(cdev, "uvc_function_unbind\n");
 
-	video_unregister_device(uvc->vdev);
+	video_unregister_device(uvc->ctrl_vdev);
+	video_unregister_device(uvc->strm_vdev);
 	uvc->control_ep->driver_data = NULL;
 	uvc->video.ep->driver_data = NULL;
 
@@ -1275,8 +1305,11 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	return 0;
 
 error:
-	if (uvc->vdev)
-		video_device_release(uvc->vdev);
+	if (uvc->ctrl_vdev)
+		video_device_release(uvc->ctrl_vdev);
+
+	if (uvc->strm_vdev)
+		video_device_release(uvc->strm_vdev);
 
 	if (uvc->control_ep)
 		uvc->control_ep->driver_data = NULL;

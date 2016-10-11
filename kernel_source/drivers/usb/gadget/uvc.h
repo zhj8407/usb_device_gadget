@@ -161,7 +161,8 @@ enum uvc_state
 
 struct uvc_device
 {
-	struct video_device *vdev;
+	struct video_device *ctrl_vdev;
+	struct video_device *strm_vdev;
 	enum uvc_state state;
 	struct usb_function func;
 	struct uvc_video video;

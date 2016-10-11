@@ -64,7 +64,7 @@
 #define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID     (1)
 #define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID     (2)
 
-#define WEBCAM_DEVICE_SYS_PATH      "/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
+#define WEBCAM_DEVICE_SYS_PATH      "/sys/class/plcm_usb/plcm0/f_webcam/webcam_v4l2_ctrl_device"
 #define WEBCAM_MAXPACKET_SYS_PATH   "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
 #define WEBCAM_HEADERSIZE_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize"
 #define WEBCAM_BULKMODE_SYS_PATH    "/sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode"

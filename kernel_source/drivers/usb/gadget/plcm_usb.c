@@ -908,7 +908,8 @@ webcam_function_init(struct plcm_usb_function *f,
 	config = kzalloc(sizeof(struct webcam_config), GFP_KERNEL);
 	if (!config)
 		return -ENOMEM;
-	config->device = -1;
+	config->v4l2_ctrl_device = -1;
+	config->v4l2_strm_device = -1;
 	config->dev = f->dev;
 	config->soft_connected_ptr = &dev->soft_connected;
 
@@ -946,7 +947,8 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 
 	struct webcam_config *config = f->config;
 
-	config->device = -1;
+	config->v4l2_ctrl_device = -1;
+	config->v4l2_strm_device = -1;
 	config->soft_connected_ptr = NULL;
 
 	config->interval = 1;
@@ -961,17 +963,22 @@ webcam_function_unbind_config(struct plcm_usb_function *f,
 	webcam_config_unbind(c);
 }
 
-static ssize_t webcam_device_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct plcm_usb_function *f = dev_get_drvdata(dev);
-	struct webcam_config *config = f->config;
+#define WEBCAM_SHOW_ATTR(field, format_string)				\
+static ssize_t								\
+webcam_ ## field ## _show(struct device *dev, struct device_attribute *attr,	\
+		char *buf)							\
+{											\
+	struct plcm_usb_function *f = dev_get_drvdata(dev);		\
+	struct webcam_config *config = f->config;				\
+	return sprintf(buf, format_string, config->field);		\
+}											\
+static DEVICE_ATTR(webcam_ ## field,		\
+	S_IRUGO,					\
+	webcam_ ## field ## _show,	\
+	NULL);
 
-	/* print webcam device numbers */
-	return sprintf(buf, "%d\n", config->device);
-}
-
-static DEVICE_ATTR(webcam_device, S_IRUGO, webcam_device_show, NULL);
+WEBCAM_SHOW_ATTR(v4l2_ctrl_device, "%d\n")
+WEBCAM_SHOW_ATTR(v4l2_strm_device, "%d\n")
 
 #define WEBCAM_CONFIG_ATTR(field, format_string, min_value, max_value)				\
 static ssize_t								\
@@ -1042,7 +1049,8 @@ WEBCAM_CONFIG_STRING_ATTR(control)
 WEBCAM_CONFIG_STRING_ATTR(stream)
 
 static struct device_attribute *webcam_function_attributes[] = {
-	&dev_attr_webcam_device,
+	&dev_attr_webcam_v4l2_ctrl_device,
+	&dev_attr_webcam_v4l2_strm_device,
 	&dev_attr_webcam_interval,
 	&dev_attr_webcam_maxpacket,
 	&dev_attr_webcam_maxburst,
