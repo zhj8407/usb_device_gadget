@@ -119,7 +119,7 @@ static const struct uvc_camera_terminal_descriptor uvc_camera_terminal = {
 	.wObjectiveFocalLengthMax	= cpu_to_le16(0),
 	.wOcularFocalLength		= cpu_to_le16(0),
 	.bControlSize		= 3,
-	.bmControls[0]		= 2,
+	.bmControls[0]		= 0,
 	.bmControls[1]		= 0,
 	.bmControls[2]		= 0,
 };
@@ -132,7 +132,7 @@ static const struct uvc_processing_unit_descriptor uvc_processing = {
 	.bSourceID		= 1,
 	.wMaxMultiplier		= cpu_to_le16(16*1024),
 	.bControlSize		= 2,
-	.bmControls[0]		= 1,
+	.bmControls[0]		= 0,
 	.bmControls[1]		= 0,
 	.iProcessing		= 0,
 };
