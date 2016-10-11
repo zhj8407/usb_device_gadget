@@ -2,8 +2,13 @@ CROSS_COMPILE	?= arm-linux-gnueabihf-
 ARCH		?= arm
 KERNEL_DIR	?= ../../../kernel_source
 VISAGE_SOURCE_DIR ?= /home/rdeng/code/visage_byoc/svn/trunk/l4t_21_3
-CROSS_INC_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/include/
-CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/lib/
+#CROSS_INC_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/include/
+#CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/build-output/_rootfs_/usr/lib/
+
+CROSS_INC_PATH ?= $(VISAGE_SOURCE_DIR)/rootfs/usr/include/
+CROSS_USER_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/rootfs/usr/lib/arm-linux-gnueabihf
+CROSS_LIB_PATH ?= $(VISAGE_SOURCE_DIR)/rootfs/lib/arm-linux-gnueabihf
+
 DBUS_INC ?= -I../../utils/dbus_utils -I/usr/include/dbus-1.0 -I/usr/lib/x86_64-linux-gnu/dbus-1.0/include
 DBUS_LIB_PATH ?= ../../utils/dbus_utils/
 
@@ -11,16 +16,18 @@ CC		:= $(CROSS_COMPILE)gcc
 #KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
 KERNEL_INCLUDE	:=
 CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(CROSS_INC_PATH) $(DBUS_INC)
-LDFLAGS		:= -g -L$(CROSS_LIB_PATH) -lturbojpeg -lm -lpthread -lrt -L$(DBUS_LIB_PATH) -ldbus-1 -ldbus_utils
+LDFLAGS		:= -g -L$(CROSS_LIB_PATH) -lm -lpthread -lrt -L$(DBUS_LIB_PATH) -ldbus-1 -ldbus_utils 
 SOURCE_FILE	:= uvc-gadget.c \
 		scale.c \
 		visage_shared_mem.c \
+		plcm_usb_impl.c \
 
 SOURCE_FILE_AIO	:= uvc-gadget-aio.c \
 		scale.c \
 
 APP_SOURCE_FILE	:= visage_webcam.c \
 		visage_shared_mem.c \
+		plcm_usb_impl.c \
 
 APP_SOURCE_FILE_2	:= visage_webcam_v4l2.c \
 			visage_shared_mem.c \

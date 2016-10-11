@@ -61,21 +61,31 @@
 
 #define ARRAY_SIZE(a)   ((sizeof(a) / sizeof(a[0])))
 
-#define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID     (1)
-#define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID     (2)
-
 #define WEBCAM_DEVICE_SYS_PATH      "/sys/class/plcm_usb/plcm0/f_webcam/webcam_v4l2_ctrl_device"
+#define WEBCAM_DEVICE_SYS_PATH_old      "/sys/class/plcm_usb/plcm0/f_webcam/webcam_device"
+
 #define WEBCAM_MAXPACKET_SYS_PATH   "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpacket"
 #define WEBCAM_HEADERSIZE_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_headersize"
 #define WEBCAM_BULKMODE_SYS_PATH    "/sys/class/plcm_usb/plcm0/f_webcam/webcam_bulkmode"
 #define WEBCAM_MAXPAYLOAD_SYS_PATH  "/sys/class/plcm_usb/plcm0/f_webcam/webcam_maxpayload"
 
+//#define SYNC_CON_APP 1
 
+#ifdef SYNC_CON_APP
+DBusHandlerResult object_visage_handler(DBusConnection *, DBusMessage *, void *);
+void object_unregister_handler(DBusConnection *, void *);
+DBusObjectPathVTable objectPathVTable[] = {
+    {
+        .unregister_function = object_unregister_handler,
+        .message_function = object_visage_handler
+    }
+};
+
+#endif
 char *objectPaths[] = {
     PLCM_USB_VISAGE_UVC_OBJ_PATH
 };
 
-DBusConnection *dbus_con;
 
 
 #define JPEG_QUALITY        80
@@ -109,6 +119,7 @@ struct uvc_device {
     unsigned int maxpacketsize;
     unsigned int headersize;
     unsigned int maxpayloadsize;
+    DBusConnection *dbus_con;
 };
 
 //==========for GStreamer usage=======//
@@ -176,6 +187,107 @@ inline unsigned long GetTimeInUSec()
     clock_gettime(CLOCK_REALTIME, &tv);
     return (tv.tv_sec * 1000 * 1000) + (tv.tv_nsec);
 }
+
+static struct uvc_device *global_uvc = NULL;
+#ifdef SYNC_CON_APP
+DBusHandlerResult object_visage_handler(DBusConnection* conn, DBusMessage* msg, void* data)
+{
+    (void)data;
+    int retval = 0;
+    int msg_type = dbus_message_get_type(msg);
+
+    switch (msg_type) {
+        case DBUS_MESSAGE_TYPE_METHOD_CALL:
+            if (strcmp(dbus_message_get_interface(msg), PLCM_USB_VISAGE_UVC_INTF_NAME)) {
+                return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            }
+
+            if (!strcmp(dbus_message_get_member(msg), "SendResponse")) {
+                int value = 0;
+                int len = dbus_extract_int(msg, &value);
+                printf("[object_visage_handler]: value=%d\n", value);
+
+                if (len < 0) {
+                    dbus_send_method_call_reply_with_results(conn, msg, DBUS_TYPE_UINT16, &len, DBUS_TYPE_INVALID);
+                    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+                }
+
+                struct uvc_request_data resp;
+
+                resp.length = sizeof(int);
+
+                memcpy(resp.data, &value, sizeof(int));
+
+                if (global_uvc != NULL)
+                    retval = ioctl(global_uvc->fd, UVCIOC_SEND_RESPONSE, &resp);
+
+                dbus_send_method_call_reply_with_results(conn, msg, DBUS_TYPE_UINT16, &retval, DBUS_TYPE_INVALID);
+            } else {
+                fprintf(stdout, "object_visage_handler(call): cannot handle.\n");
+                return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+            }
+
+        default:
+            return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    }
+}
+
+void object_unregister_handler(DBusConnection* conn, void* data)
+{
+    (void)conn;
+    (void)data;
+    printf("object_unregister_handler:\n");
+}
+
+/**
+ * filter messages that already stayed in the incoming queue,
+ * decide whether a further process is needed.
+ */
+DBusHandlerResult msg_filter(DBusConnection *conn,
+                             DBusMessage *msg, void *data)
+{
+    (void)conn;
+    (void)data;
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    printf("incoming msg: %s\n", _verbose_message(msg));
+
+    switch (dbus_message_get_type(msg)) {
+        case DBUS_MESSAGE_TYPE_METHOD_CALL:
+            if (!strcmp(dbus_message_get_member(msg), "ignore")) {
+                DBusMessage *errMsg;
+                errMsg = dbus_message_new_error(msg,
+                                                "com.redflag.csy.IgnoreService",
+                                                "this demonstrate the filter.");
+                dbus_connection_send(conn, errMsg, NULL);
+                return DBUS_HANDLER_RESULT_HANDLED;
+            } else
+                break;
+
+        case DBUS_MESSAGE_TYPE_METHOD_RETURN:
+            // never reach here.
+
+            break;
+
+        case DBUS_MESSAGE_TYPE_SIGNAL:
+            printf("Signal Received!!! Interface: %s, Member: %s\n",
+                   dbus_message_get_interface(msg),
+                   dbus_message_get_member(msg));
+            break;
+
+        case DBUS_MESSAGE_TYPE_ERROR:
+            break;
+    }
+
+    // set this flag is very important, if not, dbus may not
+
+    // process messages for you. it pass the control to dbus
+
+    // default filter.
+
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+#endif
+
 int g_gst_connect_flag = 0;
 
 void close_gst_socket()
@@ -208,15 +320,16 @@ int connect_socket_block(const char * so_path)
         return -1;
     }
 
-    while (connectRetry <= 256 && g_gst_connect_flag==0) {
+    while (connectRetry <= 256 && g_gst_connect_flag == 0) {
         ret = connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un));
+
         if (ret < 0) {
             //printf("[%u]connect socket [%s] failed %d %s\n", connectRetry, sock_un.sun_path, errno, strerror(errno));
             //usleep(1000);
             //unlink (sock_un.sun_path);
             //free (sock_un.sun_path);
             connectRetry++;
-            snprintf (sock_un.sun_path, sizeof (sock_un.sun_path), "%s.%d", so_path, connectRetry);
+            snprintf(sock_un.sun_path, sizeof(sock_un.sun_path), "%s.%d", so_path, connectRetry);
         } else { //connected
             g_gst_connect_flag = 1;
             printf("connect socket [%s] success!\n", sock_un.sun_path);
@@ -224,22 +337,25 @@ int connect_socket_block(const char * so_path)
             //return main_socket;
         }
     }
-    if (g_gst_connect_flag==1 ){
+
+    if (g_gst_connect_flag == 1) {
         char tempName[64];
         memset(tempName, 0, sizeof(tempName));
+
         //int ret=0;
-        if (connectRetry!=-1) {
-            ret=unlink(so_path);
+        if (connectRetry != -1) {
+            ret = unlink(so_path);
             printf("unlink %s gets ret= %d %d %s\n", so_path, ret, errno, strerror(errno));
         }
-        for (;connectRetry>0;connectRetry--) {
-            snprintf (tempName, sizeof (tempName), "%s.%d", so_path, connectRetry-1);
+
+        for (; connectRetry > 0; connectRetry--) {
+            snprintf(tempName, sizeof(tempName), "%s.%d", so_path, connectRetry - 1);
             ret = unlink(tempName);
             printf("unlink %s gets ret= %d %d %s\n", so_path, ret, errno, strerror(errno));
         }
+
         return main_socket;
-    }
-    else {
+    } else {
         close_gst_socket();
         return -1;
     }
@@ -549,7 +665,7 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
         close_gst_socket();
         max_fd = dev->fd > app2stack ? dev->fd : app2stack;
         ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
-        notifyApplication(dbus_con, e_stop_stream, dev->fcc, camera_width, camera_height);
+        notifyApplication(dev->dbus_con, e_stop_stream, dev->fcc, camera_width, camera_height);
 
         if (ret < 0)
             printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), camera_width, camera_height, errno, strerror(errno));
@@ -569,7 +685,7 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
 
     stream_on = 1;
     ret = sendEvent2Fifo(stack2app, e_start_stream, dev->fcc, dev->width, dev->height);
-    notifyApplication(dbus_con, e_start_stream, dev->fcc, dev->width, dev->height);
+    notifyApplication(dev->dbus_con, e_start_stream, dev->fcc, dev->width, dev->height);
 
     if (ret < 0)
         printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_start_stream), camera_width, camera_height, errno, strerror(errno));
@@ -755,13 +871,25 @@ __u16 brightness = 0x0004;
 
 static void
 uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
-                           uint8_t unit_id, struct uvc_request_data *resp)
+                           uint8_t unit_id, uint16_t length, struct uvc_request_data *resp)
 {
-#if 0
+#if SYNC_CON_APP
     printf("control request (req %02x cs %02x)\n", req, cs);
     (void)dev;
-    resp->length = 0;
+
+    if (req != UVC_SET_CUR) {
+        send_get_property_signal(dev->dbus_con, req, cs, unit_id, length);
+    } else {
+        dev->control = cs;
+        dev->unit = unit_id;
+    }
+
+    // Do not send the reply here.
+    // We have posted a singal. The client will do it.
+    resp->length = -EL2HLT;
+
 #else
+    (void)length;
     __u16 *wValuePtr = (__u16 *)(resp->data);
     printf("control request (req %02x cs %02x)\n", req, cs);
     (void)dev;
@@ -911,7 +1039,7 @@ uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl,
 
     if ((ctrl->wIndex >> 8) & 0xff) {
         //has unit id. Control event
-        uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wIndex >> 8, resp);
+        uvc_events_process_control(dev, ctrl->bRequest, ctrl->wValue >> 8, ctrl->wIndex >> 8, ctrl->wLength, resp);
     } else {
         uvc_events_process_streaming(dev, ctrl->bRequest, ctrl->wValue >> 8, resp);
     }
@@ -967,13 +1095,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             target = &dev->commit;
             break;
 
-        case UVC_PROCESSING_UNIT_CONTROL_UNIT_ID << 8 | UVC_PU_BRIGHTNESS_CONTROL:
-            printf("setting UVC_PU_BRIGHTNESS_CONTROL, length = %d\n", data->length);
-            brightness = *(__u16 *)(data->data);
-            return;
-
         default:
-            printf("setting unknown control, length = %d\n", data->length);
+            send_set_property_signal(dev->dbus_con, UVC_SET_CUR, dev->control, dev->unit, data->length, data->data);
             return;
     }
 
@@ -1050,6 +1173,7 @@ static void handle_frame_done_event(struct uvc_device *dev,
            frame_done_info->bytes_transferred,
            frame_done_info->status);
 #endif
+    (void)frame_done_info;
 
     if (dev->bulk) {
         // Reset the alarm.
@@ -1096,24 +1220,28 @@ uvc_events_process(struct uvc_device *dev)
         case UVC_EVENT_DATA:
             //printHexData((char *)&uvc_event->data, sizeof(uvc_event->data), getUVCEventStr(v4l2_event.type));
             uvc_events_process_data(dev, &uvc_event->data);
-            return;
+            break;
 
         case UVC_EVENT_STREAMON:
             uvc_video_reqbufs(dev, 2);
             uvc_video_stream(dev, 1);
-            return;
+            break;
 
         case UVC_EVENT_STREAMOFF:
             // Cacel the alarm.
             alarm(0);
             uvc_video_stream(dev, 0);
             uvc_video_reqbufs(dev, 0);
-            return;
+            break;
 
         case UVC_EVENT_FRAMEDONE:
             frame_done_info = (void *)&v4l2_event.u.data;
             handle_frame_done_event(dev, frame_done_info);
-            return;
+            break;
+    }
+
+    if (resp.length < 0) {
+        return;
     }
 
     //Ignore the SET_CUR event. Because we have triggle the transfer
@@ -1200,8 +1328,6 @@ static void usage(const char *argv0)
     fprintf(stderr, " -h		Print this help screen and exit\n");
     fprintf(stderr, " -i image	MJPEG image\n");
 }
-
-static struct uvc_device *global_uvc = NULL;
 
 void sig_handle(int sig)
 {
@@ -1325,7 +1451,7 @@ int main(int argc, char *argv[])
 
     //setup dbus connection
 
-    ret = dbus_setup_connection(&dbus_con, "com.polycom.visage.uvc",
+    ret = dbus_setup_connection(&(dev->dbus_con), "com.polycom.visage.uvc",
                                 "type='signal',interface='test.signal.Type'");
 
     if (ret) {
@@ -1333,7 +1459,20 @@ int main(int argc, char *argv[])
 
     } else printf("dbus connection setup successfully\n");
 
-    printf("dbus reguster setup successfully\n");
+#ifdef SYNC_CON_APP
+    dbus_register_message_filter(dev->dbus_con, msg_filter);
+
+    dbus_register_object_patch(dev->dbus_con,
+                               objectPaths, objectPathVTable,
+                               sizeof(objectPaths) / sizeof(objectPaths[0]));
+
+    if (ret) {
+        fprintf(stderr, "Debus register failed. Exit: (%d)\n", ret);
+
+    } else printf("dbus register successfully\n");
+
+#endif
+    printf("dbus init done\n");
 
     /*****inter process communication end *****/
     FD_ZERO(&fds);
@@ -1381,8 +1520,7 @@ int main(int argc, char *argv[])
                             , event->m_event, plcm_usb_video_event_str[event->m_event]
                             , event->m_format.m_width, event->m_format.m_height
                             , stream_on);*/
-                    }
-                    else {
+                    } else {
                         printf("a message from app 2 stack: wrong format!\n");
                     }
 
@@ -1485,7 +1623,14 @@ int main(int argc, char *argv[])
                     }
                 }
             } else {
-                //do nothing.
+#ifdef SYNC_CON_APP
+                //printf("Select was woken up by dbus message\n");
+                dbus_handle_listen_fds(&rfds, &wfds, &efds);
+
+                dbus_handle_all_watches(dev->dbus_con);
+
+                dbus_handle_all_timeout();
+#endif
             }
         }
     }

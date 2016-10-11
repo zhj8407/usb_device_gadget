@@ -1,10 +1,16 @@
 #ifndef __PLCM_USB_INTF_H__
 #define __PLCM_USB_INTF_H__
 
+
+#include "stdint.h"
 #include "dbus_utils.h"
+
 #define PLCM_USB_VISAGE_UVC_OBJ_PATH        "/com/polycom/visage/uvc"
 #define PLCM_USB_VISAGE_UVC_INTF_NAME       "com.polycom.visage.uvc"
 #define PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL  "video_control"
+#define PLCM_USB_VISAGE_UVC_CAMERA_GET_SIGNAL  "GetCameraProperty"
+#define PLCM_USB_VISAGE_UVC_CAMERA_SET_SIGNAL  "SetCameraProperty"
+
 
 /*************USB video Events Begin********/
 enum plcm_usb_video_event {
@@ -62,8 +68,56 @@ static inline const char * getEventDescStr(enum plcm_usb_video_event event)
     else
         return plcm_usb_video_event_str[e_last_event];;
 }
+extern int send_get_property_signal(DBusConnection * dbus_con, uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length);
+extern int send_set_property_signal(DBusConnection * dbus_con, uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data);
+extern int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height);
+extern int sendEvent2Fifo(int fd, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height);
 
-inline int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
+/*#define UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID     (1)
+#define UVC_PROCESSING_UNIT_CONTROL_UNIT_ID     (2)
+
+
+static inline int send_get_property_signal(DBusConnection * dbus_con, uint8_t req, uint8_t cs,
+                         uint8_t unit_id)
+{
+    const char *prop_name;
+    const char *request_type;
+    
+    request_type = getUVCReqStr(req);
+    if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
+        prop_name = getUVCPUCS(cs);
+    else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
+        prop_name = getUVCCTCS(cs);
+    
+    return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                    PLCM_USB_VISAGE_UVC_INTF_NAME,
+                    PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,
+                    DBUS_TYPE_STRING, &request_type,
+                    DBUS_TYPE_STRING, &prop_name,
+                    DBUS_TYPE_INVALID);
+}
+
+static inline int send_set_property_signal(DBusConnection * dbus_con, uint8_t req, uint8_t cs,
+                         uint8_t unit_id, uint16_t length, uint8_t* data)
+{
+    const char *prop_name;
+    const char *request_type;
+    
+    request_type = getUVCReqStr(req);
+    if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
+        prop_name = getUVCPUCS(cs);
+    else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
+        prop_name = getUVCCTCS(cs);
+    
+    return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
+                    PLCM_USB_VISAGE_UVC_INTF_NAME,
+                    PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,
+                    DBUS_TYPE_STRING, &request_type,
+                    DBUS_TYPE_STRING, &prop_name,
+                    DBUS_TYPE_INVALID);
+}
+
+static inline int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
 {
     const char * tmp = getEventDescStr(event);
     return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
@@ -72,7 +126,7 @@ inline int notifyApplication(DBusConnection * dbus_con, enum plcm_usb_video_even
                     DBUS_TYPE_STRING, &tmp,
                     DBUS_TYPE_INVALID);
 }
-inline int sendEvent2Fifo(int fd, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
+static inline int sendEvent2Fifo(int fd, enum plcm_usb_video_event event, unsigned int format, unsigned int width, unsigned int height)
 {
     struct plcm_uvc_event_msg_t event_msg;
     event_msg.m_event = event;
@@ -81,5 +135,7 @@ inline int sendEvent2Fifo(int fd, enum plcm_usb_video_event event, unsigned int 
     event_msg.m_format.m_width = width;
     event_msg.m_format.m_framerate = 60;
     return write(fd, &event_msg, sizeof(struct plcm_uvc_event_msg_t));
-}
+}*/
+
+
 #endif

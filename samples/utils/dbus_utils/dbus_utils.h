@@ -15,6 +15,8 @@
 
 #include <dbus/dbus.h>
 
+int dbus_extract_int(DBusMessage *msg, int * value);
+
 char* _verbose_watch(DBusWatch *watch);
 
 char* _verbose_message(DBusMessage *msg);

@@ -1,6 +1,54 @@
+#include "stdint.h"
 #include "dbus_utils.h"
 
 /* ------------------------------------------------------------ */
+/**
+* dbus parsing utils
+* */
+int dbus_extract_byte_array(DBusMessage *msg, uint8_t byte_array[])
+{
+    DBusMessageIter args, subargs;
+    dbus_message_iter_init(msg, &args);
+    int arg_type = dbus_message_iter_get_arg_type(&args);
+
+    if (dbus_message_iter_get_arg_type(&args) != DBUS_TYPE_ARRAY) {
+        printf("[dbus_extract_byte_array]: invalid arg type. %c\n", arg_type);
+        return -1;
+    }
+
+    int32_t arr_index = 0;
+    uint8_t value = 0;
+
+    while (DBUS_TYPE_INVALID != dbus_message_iter_get_arg_type(&args)) {
+        dbus_message_iter_recurse(&args, &subargs);
+        int subarg_type = dbus_message_iter_get_arg_type(&subargs);
+
+        if (subarg_type == DBUS_TYPE_BYTE) {
+            dbus_message_iter_get_basic(&subargs, &value);
+            byte_array[arr_index] = value;
+        } else
+            printf("[dbus_extract_byte_array]: invalid subarg type. %c\n", subarg_type);
+
+        dbus_message_iter_next(&args);
+    }
+
+    return arr_index;
+}
+
+int dbus_extract_int(DBusMessage *msg, int * value)
+{
+    DBusMessageIter args;
+    dbus_message_iter_init(msg, &args);
+    int arg_type = dbus_message_iter_get_arg_type(&args);
+
+    if (arg_type != DBUS_TYPE_INT32 || arg_type != DBUS_TYPE_INT16) {
+        printf("[dbus_extract_int]: invalid arg type. %c\n", arg_type);
+        //return -1;
+    }
+
+    dbus_message_iter_get_basic(&args, value);
+    return 0;
+}
 
 /**
  * for debug purpose
@@ -91,6 +139,12 @@ char* _verbose_message(DBusMessage *msg)
                         case DBUS_TYPE_INT32:
                             dbus_message_iter_get_basic(&subargs, &i);
                             bc = sprintf(s_msg, " %d", i);
+                            strncat(debug_msg, s_msg, bc + 1);
+                            break;
+
+                        default:
+                            dbus_message_iter_get_basic(&subargs, &i);
+                            bc = sprintf(s_msg, "type=%c %d ", dbus_message_iter_get_arg_type(&subargs), i);
                             strncat(debug_msg, s_msg, bc + 1);
                             break;
                     }

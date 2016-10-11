@@ -29,6 +29,7 @@ void bilineary_scale(struct video_buffer_t * pInBuffer, struct video_buffer_t * 
             , inBuffer , outBuffer , inWidth , inHeight , outWidth , outHeight, inStep, outStep);
         return;
     }*/
+    (void)outStep;
     uint32_t outWidth = pOutBuffer->m_width;
     uint32_t outHeight = pOutBuffer->m_height;
     uint32_t inWidth = pInBuffer->m_width;

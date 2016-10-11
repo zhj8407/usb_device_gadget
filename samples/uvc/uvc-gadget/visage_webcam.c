@@ -18,40 +18,7 @@
 #include "visage_shared_mem.h"
 #include "plcm_usb_intf.h"
 #include "scale.h"
-
-/*************LOG str helper begin****/
-static const char * V4L2PixFormatStr [] = {
-    "[V4L2_PIX_FMT_YUYV]",
-    "[V4L2_PIX_FMT_MJPEG]",
-    "[V4L2_PIX_FMT_H264]",
-    "[V4L2_PIX_FMT_NV12]",
-    "[V4L2_PIX_FMT_YUV420]",
-    "[Unknown Format]"
-};
-
-inline const char * getV4L2FormatStr(unsigned int fcc)
-{
-    switch (fcc) {
-        case V4L2_PIX_FMT_YUYV:
-            return V4L2PixFormatStr[0];
-
-        case V4L2_PIX_FMT_MJPEG:
-            return V4L2PixFormatStr[1];;
-
-        case V4L2_PIX_FMT_H264:
-            return V4L2PixFormatStr[2];
-
-        case V4L2_PIX_FMT_NV12:
-            return V4L2PixFormatStr[3];
-
-        case V4L2_PIX_FMT_YUV420:
-            return V4L2PixFormatStr[4];
-
-        default:
-            return "[Unknown Format]";
-    }
-};
-/*************LOG str helper end****/
+#include "log_str.h"
 
 #define CAM_DEF_WIDTH 1920
 #define CAM_DEF_HEIGHT 1080
@@ -296,9 +263,9 @@ int main(int argc, char *argv[])
     imagesize = camera_width * camera_height;
     fd_set fds;
     FD_ZERO(&fds);
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 100000; //1ms
+    //struct timeval timeout;
+    //timeout.tv_sec = 0;
+    //timeout.tv_usec = 100000; //1ms
 
     /*****inter process communication begin*****/
 
@@ -317,8 +284,8 @@ int main(int argc, char *argv[])
     printf("=========visage camera-usb sample app init done w=%u h=%u, imagesize=%u======\n",  camera_width, camera_height, imagesize);
 
     while (1) {
-        fd_set efds = fds;
-        fd_set wfds = fds;
+        //fd_set efds = fds;
+        //fd_set wfds = fds;
         fd_set rfds = fds;
         ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
 

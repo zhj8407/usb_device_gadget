@@ -39,7 +39,7 @@
 
 #include <pthread.h>
 
-#include <turbojpeg.h>
+//#include <turbojpeg.h>
 
 #include "uvc.h"
 #include "scale.h"
@@ -556,10 +556,10 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
     int ret;
     unsigned int cam_read_len = 0;
     unsigned int act_len = 0;
-    unsigned char *rgbraw;
-    long unsigned int jpegSize = 0;
-    tjhandle _jpegCompressor;
-    unsigned char *jpegBuffer = NULL;
+//    unsigned char *rgbraw;
+    //long unsigned int jpegSize = 0;
+    //tjhandle _jpegCompressor;
+    //unsigned char *jpegBuffer = NULL;
 
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
@@ -639,6 +639,7 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
             break;
 
         case V4L2_PIX_FMT_MJPEG:
+#if 0
             ret = read_one_camera_frame(vBuf, LEN_720P_I420, &cam_read_len);
 
             if (ret != 0) {
@@ -672,7 +673,8 @@ uvc_video_fill_buffer(struct uvc_device *dev, struct v4l2_buffer *buf)
             buf->bytesused = jpegSize;
 
             tjFree(jpegBuffer);
-
+#endif
+            buf->bytesused = 0;
             break;
     }
 }
@@ -1357,34 +1359,36 @@ uvc_events_init(struct uvc_device *dev)
 /* ---------------------------------------------------------------------------
  * main
  */
+/*
 
 static void image_load(struct uvc_device *dev, const char *img)
 {
-    int fd = -1;
+int fd = -1;
 
-    if (img == NULL)
-        return;
+if (img == NULL)
+    return;
 
-    fd = open(img, O_RDONLY);
+fd = open(img, O_RDONLY);
 
-    if (fd == -1) {
-        printf("Unable to open MJPEG image '%s'\n", img);
-        return;
-    }
-
-    dev->imgsize = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    dev->imgdata = malloc(dev->imgsize);
-
-    if (dev->imgdata == NULL) {
-        printf("Unable to allocate memory for MJPEG image\n");
-        dev->imgsize = 0;
-        return;
-    }
-
-    read(fd, dev->imgdata, dev->imgsize);
-    close(fd);
+if (fd == -1) {
+    printf("Unable to open MJPEG image '%s'\n", img);
+    return;
 }
+
+dev->imgsize = lseek(fd, 0, SEEK_END);
+lseek(fd, 0, SEEK_SET);
+dev->imgdata = malloc(dev->imgsize);
+
+if (dev->imgdata == NULL) {
+    printf("Unable to allocate memory for MJPEG image\n");
+    dev->imgsize = 0;
+    return;
+}
+
+read(fd, dev->imgdata, dev->imgsize);
+close(fd);
+}
+*/
 
 static void usage(const char *argv0)
 {
@@ -1392,7 +1396,6 @@ static void usage(const char *argv0)
     fprintf(stderr, "Available options are\n");
     fprintf(stderr, " -d device	Video device\n");
     fprintf(stderr, " -h		Print this help screen and exit\n");
-    fprintf(stderr, " -i image	MJPEG image\n");
 }
 
 static struct uvc_device *global_uvc = NULL;
@@ -1470,11 +1473,11 @@ int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
     struct uvc_device *dev;
-    char *mjpeg_image = NULL;
+//    char *mjpeg_image = NULL;
     fd_set fds;
     int ret, opt;
 
-    while ((opt = getopt(argc, argv, "d:hi:k:g:")) != -1) {
+    while ((opt = getopt(argc, argv, "d:h:k:g:")) != -1) {
         switch (opt) {
             case 'd':
                 device = optarg;
@@ -1483,10 +1486,6 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 return 0;
-
-            case 'i':
-                mjpeg_image = optarg;
-                break;
 
             case 'k':
                 width = atoi(optarg);
@@ -1545,7 +1544,7 @@ int main(int argc, char *argv[])
 #endif
     global_uvc = dev;
 
-    image_load(dev, mjpeg_image);
+    //image_load(dev, mjpeg_image);
     uvc_events_init(dev);
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
