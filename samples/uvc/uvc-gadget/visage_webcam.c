@@ -179,7 +179,7 @@ void handleStartStream(unsigned int format, unsigned int width, unsigned int hei
         "! shmsink name=/usb_v_in shm-size=3110400 socket-path=/tmp/mjpeg_socket wait-for-connection=false &"
         //camera_width, camera_height,
         );*/
-    sprintf(gst_cmd, "gst-launch-1.0 --gst-debug=3 --verbose%s%s%s%s%s > /dev/null 2>&1 &"
+    sprintf(gst_cmd, "gst-launch-1.0 --gst-debug=3 --verbose%s%s%s%s%s  &"
             , getGstCameraCmd(camera_device, V4L2_PIX_FMT_NV12, camera_width, camera_height, CAM_DEF_FRAMERATE)
             , getGstScalerCmd(V4L2_PIX_FMT_NV12, output_width, output_height, output_framerate)
             , getGstConvertorCmd(output_format, output_width, output_height, output_framerate)

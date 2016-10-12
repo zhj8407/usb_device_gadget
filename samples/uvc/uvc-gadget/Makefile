@@ -62,6 +62,7 @@ $(APP_TARGET): $(APP_OBJ_FILE)
 	@echo compiling $(APP_OBJ_FILE)
 	@$(CC) -o $@ $(APP_SOURCE_FILE) $(CFLAGS)  $(LDFLAGS)
 	@echo $(APP_TARGET) done
+	cp $(APP_TARGET) ca
 
 $(APP_TARGET_2): $(APP_OBJ_FILE_2)
 	@echo compiling $(APP_OBJ_FILE_2)
@@ -73,3 +74,6 @@ clean:
 	rm -f $(APP_TARGET_2)
 	rm -f $(STACK_TARGET)
 	rm -f $(STACK_TARGET_AIO)
+	rm -f tu
+	rm -f tui_aio
+	rm -f ca

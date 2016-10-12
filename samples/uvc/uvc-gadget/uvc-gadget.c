@@ -123,6 +123,13 @@ struct uvc_device {
 };
 
 //==========for GStreamer usage=======//
+enum {
+    COMMAND_NEW_SHM_AREA = 1,
+    COMMAND_CLOSE_SHM_AREA = 2,
+    COMMAND_NEW_BUFFER = 3,
+    COMMAND_ACK_BUFFER = 4
+};
+
 struct CommandBuffer {
     unsigned int type;
     int area_id;
@@ -147,12 +154,14 @@ struct CommandBuffer {
 
 unsigned long jpeg_size = 0;
 unsigned long jpeg_offset = 0;
+unsigned long getFrameTime = 0; //GetTimeInMilliSec();
+unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
 
 
 #define P_COUNT 100
 
 fd_set fds;
-int main_socket = -1;
+int gst_socket = -1;
 int max_fd = -1;
 static int stream_on = 0;
 uint8_t * pSharedMem;
@@ -290,15 +299,16 @@ DBusHandlerResult msg_filter(DBusConnection *conn,
 
 int g_gst_connect_flag = 0;
 
-void close_gst_socket()
+void close_gst_socket(int *fd)
 {
+    //printf("[close_gst_socket] fd=%d, g_gst_connect_flag=%d\n", *fd, g_gst_connect_flag);
     if (g_gst_connect_flag > 0)
-        FD_CLR(main_socket, &fds);
+        FD_CLR(*fd, &fds);
 
-    if (main_socket >= 0) {
+    if (*fd >= 0) {
         //printf("close socket %d\n", main_socket);
-        close(main_socket);
-        main_socket = -1;
+        close(*fd);
+        *fd = -1;
     }
 
     g_gst_connect_flag = 0;
@@ -312,16 +322,16 @@ int connect_socket_block(const char * so_path)
     sock_un.sun_family = AF_UNIX;
     strncpy(sock_un.sun_path, so_path, sizeof(sock_un.sun_path) - 1);
 
-    main_socket = socket(PF_UNIX, SOCK_STREAM, 0);
+    int socket_fd = socket(PF_UNIX, SOCK_STREAM, 0);
 
-    if (main_socket < 0) {
+    if (socket_fd < 0) {
         printf("open socket failed %d %s\n", errno, strerror(errno));
-        close_gst_socket();
+        //close_gst_socket(&socket_fd);
         return -1;
     }
 
     while (connectRetry <= 256 && g_gst_connect_flag == 0) {
-        ret = connect(main_socket, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un));
+        ret = connect(socket_fd, (struct sockaddr *) &sock_un, sizeof(struct sockaddr_un));
 
         if (ret < 0) {
             //printf("[%u]connect socket [%s] failed %d %s\n", connectRetry, sock_un.sun_path, errno, strerror(errno));
@@ -354,9 +364,9 @@ int connect_socket_block(const char * so_path)
             printf("unlink %s gets ret= %d %d %s\n", so_path, ret, errno, strerror(errno));
         }
 
-        return main_socket;
+        return socket_fd;
     } else {
-        close_gst_socket();
+        close_gst_socket(&socket_fd);
         return -1;
     }
 }
@@ -559,8 +569,9 @@ static int uvc_video_process(struct uvc_device *dev)
     buf.memory = V4L2_MEMORY_MMAP;
 
     if ((ret = ioctl(dev->fd, VIDIOC_DQBUF, &buf)) < 0) {
-        if (stream_on)
-            printf("frame[%u]Unable to dequeue buffer: %s (%d).\n", frame_count, strerror(errno), errno);
+        if (stream_on) {
+            //printf("frame[%u]Unable to dequeue buffer: %s (%d).\n", frame_count, strerror(errno), errno);
+        }
 
         return ret;
     } else {
@@ -571,8 +582,9 @@ static int uvc_video_process(struct uvc_device *dev)
     frame_count++;
 
     if ((ret = ioctl(dev->fd, VIDIOC_QBUF, &buf)) < 0) {
-        if (stream_on)
-            printf("frame[%u]Unable to requeue buffer: %s (%d).\n", frame_count, strerror(errno), errno);
+        if (stream_on) {
+            //printf("frame[%u]Unable to requeue buffer: %s (%d).\n", frame_count, strerror(errno), errno);
+        }
 
         return ret;
     } else {
@@ -662,7 +674,7 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
         frame_count = 0;
         stream_on = 0;
 
-        close_gst_socket();
+        close_gst_socket(&gst_socket);
         max_fd = dev->fd > app2stack ? dev->fd : app2stack;
         ret = sendEvent2Fifo(stack2app, e_stop_stream, dev->fcc, camera_width, camera_height);
         notifyApplication(dev->dbus_con, e_stop_stream, dev->fcc, camera_width, camera_height);
@@ -674,11 +686,6 @@ static int uvc_video_stream(struct uvc_device *dev, int enable)
             freeSharedMem(pSharedMemName, pSharedMem, sharedMemSize);
             pSharedMem = NULL;
         }
-
-        //if (shm_lock != NULL) {
-        //    freeSharedMemMutex(shm_lock, USB_SHM_VIDEO_IN_MUTEX);
-        //    shm_lock = NULL;
-        //}
 
         return 0;
     }
@@ -1292,41 +1299,135 @@ uvc_events_init(struct uvc_device *dev)
  * util
  */
 
-static void image_load(struct uvc_device *dev, const char *img)
+void handle_app_event(int app2stack_fd, int stack2app_fd, struct uvc_device * dev)
 {
-    int fd = -1;
+    int ret = 0;
+    char buf[256];
+    memset(buf, 0, sizeof(buf));
+    int len = read(app2stack_fd, buf, sizeof(buf));
 
-    if (img == NULL)
-        return;
+    if (len > 0) {
+        struct plcm_uvc_event_msg_t *event = (struct plcm_uvc_event_msg_t*)(buf);
 
-    fd = open(img, O_RDONLY);
+        if (event != NULL) {
+            //printf("a message from app 2 stack: event=%u[%s], format=[%ux%u] streamon=%d\n"
+            //    , event->m_event, plcm_usb_video_event_str[event->m_event]
+            //    , event->m_format.m_width, event->m_format.m_height
+            //    , stream_on);
+        } else {
+            printf("a message from app 2 stack: wrong format!\n");
+        }
 
-    if (fd == -1) {
-        printf("Unable to open MJPEG image '%s'\n", img);
-        return;
+        if (event->m_event == e_app_ready) {
+            sendEvent2Fifo(stack2app_fd, e_stack_ready, dev->fcc, camera_width, camera_height);
+        }
+
+        if (event->m_event == e_stream_ready) {
+            //printf("Receive event: stream ready\n");
+            gst_socket = connect_socket_block("/tmp/v_in_sock");
+
+            if (gst_socket > 0) {
+                FD_SET(gst_socket, &fds);
+            } else {
+                if (stream_on) {
+                    ret = sendEvent2Fifo(stack2app_fd, e_retry_socket, dev->fcc, camera_width, camera_height);
+
+                    if (ret < 0) {
+                        printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_retry_socket), camera_width, camera_height, errno, strerror(errno));
+                    }
+                }
+            }
+        }
+    } else {
+        printf("failed to read from app socket, %u %s!\n", errno, strerror(errno));
+    }
+}
+
+void handle_gstreamer_event(struct uvc_device * dev)
+{
+    int ret = 0;
+    struct CommandBuffer recvCB;
+    memset(&recvCB, 0, sizeof(struct CommandBuffer));
+
+    //char shmName[64];
+    if (awaiting_shm == 0) {
+        ret = recv(gst_socket, &recvCB, sizeof(recvCB), MSG_DONTWAIT);
+    } else {
+        ret = recv(gst_socket, pSharedMemName, sizeof(pSharedMemName), MSG_DONTWAIT);
     }
 
-    dev->imgsize = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    dev->imgdata = malloc(dev->imgsize);
+    if (ret > 0) {
+        if (recvCB.type == COMMAND_NEW_SHM_AREA) {
+            printf("receive shm cmd: new shm area id=%d\n", recvCB.area_id);
+            awaiting_shm = 1;
+            sharedMemSize = recvCB.payload.new_shm_area.size;
+        } else if (recvCB.type == COMMAND_CLOSE_SHM_AREA) {
+            printf("closing shared memory\n");
+            awaiting_shm = 0;
+        } else if (recvCB.type == COMMAND_NEW_BUFFER) {
+            jpeg_size = recvCB.payload.buffer.size;
+            jpeg_offset = recvCB.payload.buffer.offset;
+            struct CommandBuffer cb;
+            cb.type = 4;
+            cb.area_id = recvCB.area_id;
+            cb.payload.ack_buffer.offset = recvCB.payload.buffer.offset;
+            int print_interval = 100;
 
-    if (dev->imgdata == NULL) {
-        printf("Unable to allocate memory for MJPEG image\n");
-        dev->imgsize = 0;
-        return;
+            if (frame_count % print_interval == 0) {
+                if (getFrameTime == 0) {
+                    getFrameTime = GetTimeInMilliSec();
+                }
+
+                getNextFrameTime = GetTimeInMilliSec();
+                printf("Sending %d frame(total: %u) of [%s] %ux%u delta time=%lu ms\n",
+                       print_interval, frame_count, getV4L2FormatStr(dev->fcc), dev->width, dev->height, getNextFrameTime - getFrameTime);
+                getFrameTime = getNextFrameTime;
+            }
+
+            uvc_video_process(dev);
+            ret = send(gst_socket, &cb, sizeof(struct CommandBuffer), MSG_NOSIGNAL);
+
+            if (ret == -1) {
+                printf("send ACK[size=%u] to socket failed %d %s\n", sizeof(struct CommandBuffer), errno, strerror(errno));
+            }
+
+            if (dev->bulk && stream_on) {
+                // Reset the alarm.
+                //alarm(1);
+            }
+
+            //printf("done with one image\n");
+        } else {
+            if (awaiting_shm > 0) {
+                printf("Receive SHM param path=%s ret=%d\n", pSharedMemName, ret);
+                pSharedMem = allocSharedMem(pSharedMemName, sharedMemSize);
+
+                if (pSharedMem == NULL) {
+                    printf("Cannot alloc shared memory\n");
+                    return;
+                }
+
+                //shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
+
+                //if (shm_lock == NULL) {
+                //    printf("Cannot alloc shared memory mutex\n");
+                //    return -1;
+                //}
+
+                printf("=========share memory init done %p, name=%s======\n", pSharedMem, pSharedMemName);
+                awaiting_shm = 0;
+            } else
+                printf("Receive a cmd from gst ret[%d]: msg.type=%u areaid=%u\n",
+                       ret, recvCB.type, recvCB.area_id);
+        }
     }
-
-    read(fd, dev->imgdata, dev->imgsize);
-    close(fd);
 }
 
 static void usage(const char *argv0)
 {
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
-    fprintf(stderr, " -d device	Video device\n");
     fprintf(stderr, " -h		Print this help screen and exit\n");
-    fprintf(stderr, " -i image	MJPEG image\n");
 }
 
 void sig_handle(int sig)
@@ -1344,7 +1445,7 @@ void sig_handle(int sig)
 
     if (sig == SIGINT) {
         printf("Close GST socket before exit\n");
-        close_gst_socket();
+        close_gst_socket(&gst_socket);
         exit(0);
     }
 }
@@ -1353,8 +1454,6 @@ int main(int argc, char *argv[])
 {
     char *device = "/dev/video0";
     struct uvc_device *dev;
-    char *mjpeg_image = NULL;
-
     int ret, opt;
 
     while ((opt = getopt(argc, argv, "d:hi:k:g:")) != -1) {
@@ -1366,10 +1465,6 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 return 0;
-
-            case 'i':
-                mjpeg_image = optarg;
-                break;
 
             case 'k':
                 camera_width = atoi(optarg);
@@ -1413,15 +1508,13 @@ int main(int argc, char *argv[])
     signal(SIGALRM, sig_handle);
     signal(SIGINT, sig_handle);
 
-    image_load(dev, mjpeg_image);
+    //image_load(dev, mjpeg_image);
     uvc_events_init(dev);
     printf("=========uvc init done======\n");
     /*****uvc device init end*****/
 
     /*****inter process communication init*****/
-    //connect_socket_block("/tmp/mjpeg_socket");
 
-    //pSharedMem = allocSharedMem(USB_SHM_VIDEO_IN_BUFFER, camera_height*camera_width*3/2*USB_SHM_MAX_NUM);
 
     /*************control pipe from/to app*********/
     ret = mkfifo(fifo_in_name, 0666);
@@ -1447,7 +1540,7 @@ int main(int argc, char *argv[])
     }
 
 
-    //printf("=========fifo init done======\n");
+    printf("=========fifo init done======\n");
 
     //setup dbus connection
 
@@ -1480,14 +1573,10 @@ int main(int argc, char *argv[])
     FD_SET(app2stack, &fds);
 
     max_fd = dev->fd > app2stack ? dev->fd : app2stack;
-    max_fd = max_fd > main_socket ? max_fd : main_socket;
-    //int maxfd = dev->fd;
-    //FD_SET(main_socket, &fds);
+    max_fd = max_fd > gst_socket ? max_fd : gst_socket;
 
     printf("=========stack shim init done======\n");
-    unsigned long getFrameTime = 0; //GetTimeInMilliSec();
-    unsigned long getNextFrameTime = 0; //GetTimeInMilliSec();
-    //unsigned int wfd_count = 0;
+
 
     while (1) {
         fd_set efds = fds;
@@ -1495,7 +1584,7 @@ int main(int argc, char *argv[])
         fd_set rfds = fds;
         int dbus_fd = dbus_setup_listen_fds(&rfds, &wfds, &efds);
         max_fd = max_fd > dbus_fd ? max_fd : dbus_fd;
-        max_fd = max_fd > main_socket ? max_fd : main_socket;
+        max_fd = max_fd > gst_socket ? max_fd : gst_socket;
         //ret = select(max_fd + 1, &rfds, &wfds, &efds, NULL);
         ret = select(max_fd + 1, &rfds, NULL, &efds, NULL);
 
@@ -1508,120 +1597,13 @@ int main(int argc, char *argv[])
             if (FD_ISSET(dev->fd, &efds)) {
                 uvc_events_process(dev);
             } else if (FD_ISSET(app2stack, &rfds)) {
-                char buf[256];
-                memset(buf, 0, sizeof(buf));
-                int len = read(app2stack, buf, sizeof(buf));
 
-                if (len > 0) {
-                    struct plcm_uvc_event_msg_t *event = (struct plcm_uvc_event_msg_t*)(buf);
+                handle_app_event(app2stack, stack2app, dev);
 
-                    if (event != NULL) {
-                        /*printf("a message from app 2 stack: event=%u[%s], format=[%ux%u] streamon=%d\n"
-                            , event->m_event, plcm_usb_video_event_str[event->m_event]
-                            , event->m_format.m_width, event->m_format.m_height
-                            , stream_on);*/
-                    } else {
-                        printf("a message from app 2 stack: wrong format!\n");
-                    }
+            } else if (FD_ISSET(gst_socket, &rfds)) {
 
-                    if (event->m_event == e_app_ready) {
-                        sendEvent2Fifo(stack2app, e_stack_ready, dev->fcc, camera_width, camera_height);
+                handle_gstreamer_event(dev);
 
-                    }
-
-                    if (event->m_event == e_stream_ready) {
-                        //printf("Receive event: stream ready\n");
-                        main_socket = connect_socket_block("/tmp/v_in_sock");
-
-                        if (main_socket > 0) {
-                            FD_SET(main_socket, &fds);
-                        } else {
-                            if (stream_on) {
-                                ret = sendEvent2Fifo(stack2app, e_retry_socket, dev->fcc, camera_width, camera_height);
-
-                                if (ret < 0)
-                                    printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_retry_socket), camera_width, camera_height, errno, strerror(errno));
-                            }
-                        }
-                    }
-                }
-            } else if (FD_ISSET(main_socket, &rfds)) {
-
-                struct CommandBuffer recvCB;
-                memset(&recvCB, 0, sizeof(struct CommandBuffer));
-
-                //char shmName[64];
-                if (awaiting_shm == 0) {
-                    ret = recv(main_socket, &recvCB, sizeof(recvCB), MSG_DONTWAIT);
-                } else {
-                    ret = recv(main_socket, pSharedMemName, sizeof(pSharedMemName), MSG_DONTWAIT);
-                }
-
-                if (ret > 0) {
-                    if (recvCB.type == 1) {
-                        printf("receive shm cmd: new shm area id=%d\n", recvCB.area_id);
-                        awaiting_shm = 1;
-                        sharedMemSize = recvCB.payload.new_shm_area.size;
-                    } else if (recvCB.type == 2) {
-                        printf("closing shared memory\n");
-                        awaiting_shm = 0;
-                    } else if (recvCB.type == 3) {
-                        jpeg_size = recvCB.payload.buffer.size;
-                        jpeg_offset = recvCB.payload.buffer.offset;
-                        struct CommandBuffer cb;
-                        cb.type = 4;
-                        cb.area_id = recvCB.area_id;
-                        cb.payload.ack_buffer.offset = recvCB.payload.buffer.offset;
-                        int print_interval = 100;
-
-                        if (frame_count % print_interval == 0) {
-                            if (getFrameTime == 0) {
-                                getFrameTime = GetTimeInMilliSec();
-                            }
-
-                            getNextFrameTime = GetTimeInMilliSec();
-                            printf("Sending %d frame of [%s] %ux%u delta time=%lu ms\n",
-                                   print_interval, getV4L2FormatStr(dev->fcc), dev->width, dev->height, getNextFrameTime - getFrameTime);
-                            getFrameTime = getNextFrameTime;
-                        }
-
-                        uvc_video_process(dev);
-                        ret = send(main_socket, &cb, sizeof(struct CommandBuffer), MSG_NOSIGNAL);
-
-                        if (ret == -1) {
-                            printf("send ACK[size=%u] to socket failed %d %s\n", sizeof(struct CommandBuffer), errno, strerror(errno));
-                        }
-
-                        if (dev->bulk && stream_on) {
-                            // Reset the alarm.
-                            //alarm(1);
-                        }
-
-                        //printf("done with one image\n");
-                    } else {
-                        if (awaiting_shm > 0) {
-                            printf("path=%s ret=%d\n", pSharedMemName, ret);
-                            pSharedMem = allocSharedMem(pSharedMemName, sharedMemSize);
-
-                            if (pSharedMem == NULL) {
-                                printf("Cannot alloc shared memory\n");
-                                return -1;
-                            }
-
-                            //shm_lock = allocSharedMemMutex(USB_SHM_VIDEO_IN_MUTEX);
-
-                            //if (shm_lock == NULL) {
-                            //    printf("Cannot alloc shared memory mutex\n");
-                            //    return -1;
-                            //}
-
-                            printf("=========share memory init done %p, name=%s======\n", pSharedMem, pSharedMemName);
-                            awaiting_shm = 0;
-                        } else
-                            printf("Receive a cmd from gst ret[%d]: msg.type=%u areaid=%u\n",
-                                   ret, recvCB.type, recvCB.area_id);
-                    }
-                }
             } else {
 #ifdef SYNC_CON_APP
                 //printf("Select was woken up by dbus message\n");
