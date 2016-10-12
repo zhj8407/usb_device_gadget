@@ -47,7 +47,7 @@
 #endif
 
 #ifdef PLCM_USB_AUDIO_DUAL
-#include "f_uac_plcm.c"
+#include "f_uac_in_plcm.c"
 #endif
 
 #include "f_hidg.c"
