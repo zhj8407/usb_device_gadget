@@ -110,6 +110,9 @@ struct uvc_device {
 
     //GDBusConnection
     GDBusConnection *conn;
+
+    //DEBUG. Test Video src
+    unsigned char test_video_flag;
 };
 
 static int start_gst_video_stream(struct uvc_device *dev);
@@ -266,27 +269,30 @@ uvc_close(struct uvc_device *dev)
  * video stream
  */
 
-//#define VIDEO_TEST_SRC             1
+// #define VIDEO_TEST_SRC             1
 
-#define CAM_DEF_WIDTH 1920
-#define CAM_DEF_HEIGHT 1080
 #define CAM_MAX_WIDTH 1920
 #define CAM_MAX_HEIGHT 1080
 
-#ifdef VIDEO_TEST_SRC
-#define CAM_DEF_FRAMERATE 30
-#else
-#define CAM_DEF_FRAMERATE 60
-#endif
+#define DUMMY_VIDEO_DEF_WIDTH 1280
+#define DUMMY_VIDEO_DEF_HEIGHT 720
+#define DUMMY_VIDEO_DEF_FRAMERATE 30
 
-#ifdef VIDEO_TEST_SRC
-unsigned int camera_format = V4L2_PIX_FMT_YUYV;
-#else
+#define CAM_DEF_WIDTH 1920
+#define CAM_DEF_HEIGHT 1080
+#define CAM_DEF_FRAMERATE 60
+
+
 unsigned int camera_format = V4L2_PIX_FMT_NV12;
-#endif
+#ifdef VIDEO_TEST_SRC
 unsigned int camera_width = CAM_DEF_WIDTH;
 unsigned int camera_height = CAM_DEF_HEIGHT;
 unsigned int camera_framerate = CAM_DEF_FRAMERATE;
+#else
+unsigned int camera_width = DUMMY_VIDEO_DEF_WIDTH;
+unsigned int camera_height = DUMMY_VIDEO_DEF_HEIGHT;
+unsigned int camera_framerate = DUMMY_VIDEO_DEF_FRAMERATE;
+#endif
 
 unsigned int output_framerate = CAM_DEF_FRAMERATE;
 unsigned int encoder_quality = 85;
@@ -410,7 +416,7 @@ static unsigned int get_gst_running_cmd(char *gst_cmd,
                                         unsigned int v4l2_output_devnum)
 {
     return snprintf(gst_cmd, GST_CMD_TOTAL_LEN, "sleep 2 && gst-launch-1.0 -e -v --gst-debug=3 %s%s%s%s%s",
-                    get_gst_camera_cmd(v4l2_src_dev, camera_format, camera_width, camera_height, CAM_DEF_FRAMERATE),
+                    get_gst_camera_cmd(v4l2_src_dev, camera_format, camera_width, camera_height, camera_framerate),
                     get_gst_scaler_cmd(camera_format, width, height),
                     get_gst_convertor_cmd(format),
                     get_gst_encoder_cmd(format, encoder_quality),
@@ -1102,7 +1108,11 @@ static int start_gst_video_stream(struct uvc_device *dev)
 {
     int retval = 0;
 
-    dev->video_source = gst_element_factory_make("v4l2src", "v4l2 source");
+    if (!dev->test_video_flag)
+        dev->video_source = gst_element_factory_make("v4l2src", "v4l2 source");
+    else
+        dev->video_source = gst_element_factory_make("videotestsrc", "v4l2 source");
+
     dev->video_scaler = gst_element_factory_make("videoscale", "video scaler");
     dev->video_converter = gst_element_factory_make("videoconvert", "video converter");
     dev->video_encoder = gst_element_factory_make("nvjpegenc", "jpeg encoder");
@@ -1114,8 +1124,18 @@ static int start_gst_video_stream(struct uvc_device *dev)
         return -1;
     }
 
-    /* We set the video capture device name to the source element. */
-    g_object_set(G_OBJECT(dev->video_source), "device", dev->v4l2_src_device, NULL);
+    if (!dev->test_video_flag) {
+        /* We set the video capture device name to the source element. */
+        g_object_set(G_OBJECT(dev->video_source), "device", dev->v4l2_src_device, NULL);
+        camera_width = CAM_DEF_WIDTH;
+        camera_height = CAM_DEF_HEIGHT;
+        camera_framerate = CAM_DEF_FRAMERATE;
+    } else {
+        camera_width = DUMMY_VIDEO_DEF_WIDTH;
+        camera_height = DUMMY_VIDEO_DEF_HEIGHT;
+        camera_framerate = DUMMY_VIDEO_DEF_FRAMERATE;
+    }
+
     /* We set the video output device name to the sink element. */
     g_object_set(G_OBJECT(dev->video_sink), "device", dev->v4l2_sink_device, NULL);
 
@@ -1126,14 +1146,14 @@ static int start_gst_video_stream(struct uvc_device *dev)
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
         case V4L2_PIX_FMT_YUV420: {
-            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+            if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
                 link_elements_with_video_formats(dev->video_source, dev->video_scaler,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
                 link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
                                                  dev->width, dev->height, -1, -1);
             } else {
                 link_elements_with_video_formats(dev->video_source, dev->video_converter,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
             }
 
             link_elements_with_video_formats(dev->video_converter, dev->video_sink,
@@ -1142,28 +1162,28 @@ static int start_gst_video_stream(struct uvc_device *dev)
         }
 
         case V4L2_PIX_FMT_NV12: {
-            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+            if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
                 link_elements_with_video_formats(dev->video_source, dev->video_scaler,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
                 link_elements_with_video_formats(dev->video_scaler, dev->video_sink,
                                                  dev->width, dev->height, -1, -1);
             } else {
                 link_elements_with_video_formats(dev->video_source, dev->video_sink,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
             }
 
             break;
         }
 
         case V4L2_PIX_FMT_MJPEG: {
-            if (!(dev->width == CAM_DEF_WIDTH) || !(dev->height == CAM_DEF_HEIGHT)) {
+            if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
                 link_elements_with_video_formats(dev->video_source, dev->video_scaler,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
                 link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
                                                  dev->width, dev->height, -1, -1);
             } else {
                 link_elements_with_video_formats(dev->video_source, dev->video_converter,
-                                                 CAM_DEF_WIDTH, CAM_DEF_HEIGHT, CAM_DEF_FRAMERATE, camera_format);
+                                                 camera_width, camera_height, camera_framerate, camera_format);
             }
 
             link_elements_with_video_formats(dev->video_converter, dev->video_encoder,
@@ -1210,6 +1230,9 @@ static const gchar introspection_xml[] =
     "      <arg type='i' name='length' direction='in'/>"
     "      <arg type='ay' name='data' direction='in'/>"
     "      <arg type='i' name='retval' direction='out'/>"
+    "    </method>"
+    "    <method name='TestVideoSource'>"
+    "      <arg type='b' name='test_video_flag' direction='in'/>"
     "    </method>"
     "    <signal name='GetCameraProperty'>"
     "      <annotation name='org.gtk.GDBus.Annotation' value='Onsignal'/>"
@@ -1362,6 +1385,8 @@ handle_method_call(GDBusConnection       *connection,
     GVariantIter *iter;
     guchar str;
 
+    gboolean dummy_video = FALSE;
+
     (void)connection;
     (void)sender;
     (void)object_path;
@@ -1396,6 +1421,11 @@ handle_method_call(GDBusConnection       *connection,
 
         g_dbus_method_invocation_return_value(invocation,
                                               g_variant_new("(i)", retval));
+    } else if (g_strcmp0(method_name, "TestVideoSource") == 0) {
+        g_print("Got method call\n");
+        g_variant_get(parameters, "(b)", &dummy_video);
+
+        dev->test_video_flag = (dummy_video == TRUE);
     }
 }
 
@@ -1460,14 +1490,16 @@ static void usage(const char *argv0)
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
     fprintf(stderr, " -d device Video device\n");
+    fprintf(stderr, " -t use the dummy video source\n");
     fprintf(stderr, " -h        Print this help screen and exit\n");
 }
 
 int main(int argc, char *argv[])
 {
-    char *device = "/dev/video2";
+    char *device = "/dev/video6";
     struct uvc_device *dev = NULL;
     int opt;
+    unsigned char dummy_video = 0;
     /* Glib relevant. */
     GMainContext *context;
     GMainLoop *loop;
@@ -1478,7 +1510,7 @@ int main(int argc, char *argv[])
 
     guint owner_id;
 
-    while ((opt = getopt(argc, argv, "d:h")) != -1) {
+    while ((opt = getopt(argc, argv, "d:ht")) != -1) {
         switch (opt) {
             case 'd':
                 device = optarg;
@@ -1487,6 +1519,10 @@ int main(int argc, char *argv[])
             case 'h':
                 usage(argv[0]);
                 return 0;
+
+            case 't':
+                dummy_video = 1;
+                break;
 
             default:
                 fprintf(stderr, "Invalid option '-%c'\n", opt);
@@ -1513,6 +1549,8 @@ int main(int argc, char *argv[])
 
     if (dev == NULL)
         return 1;
+
+    dev->test_video_flag = dummy_video;
 
     uvc_events_init(dev);
 
