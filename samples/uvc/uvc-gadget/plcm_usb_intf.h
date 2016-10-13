@@ -82,13 +82,13 @@ static inline int send_get_property_signal(DBusConnection * dbus_con, uint8_t re
 {
     const char *prop_name;
     const char *request_type;
-    
+
     request_type = getUVCReqStr(req);
     if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
         prop_name = getUVCPUCS(cs);
     else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
         prop_name = getUVCCTCS(cs);
-    
+
     return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
                     PLCM_USB_VISAGE_UVC_INTF_NAME,
                     PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,
@@ -102,13 +102,13 @@ static inline int send_set_property_signal(DBusConnection * dbus_con, uint8_t re
 {
     const char *prop_name;
     const char *request_type;
-    
+
     request_type = getUVCReqStr(req);
     if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
         prop_name = getUVCPUCS(cs);
     else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
         prop_name = getUVCCTCS(cs);
-    
+
     return dbus_send_signal_with_params(dbus_con, PLCM_USB_VISAGE_UVC_OBJ_PATH,
                     PLCM_USB_VISAGE_UVC_INTF_NAME,
                     PLCM_USB_VISAGE_UVC_CONTROL_SIGNAL,

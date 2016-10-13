@@ -27,27 +27,24 @@
 #define UVC_EVENT_FRAMEDONE		(V4L2_EVENT_PRIVATE_START + 6)
 #define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 6)
 
-struct uvc_request_data
-{
-	__s32 length;
-	__u8 data[60];
+struct uvc_request_data {
+    __s32 length;
+    __u8 data[60];
 };
 
-struct uvc_frame_done_info
-{
-	__u32 buffer_index;
-	__u32 bytes_transferred;
-	__s32 status;
+struct uvc_frame_done_info {
+    __u32 buffer_index;
+    __u32 bytes_transferred;
+    __s32 status;
 };
 
-struct uvc_event
-{
-	union {
-		enum usb_device_speed speed;
-		struct usb_ctrlrequest req;
-		struct uvc_request_data data;
-		struct uvc_frame_done_info frame_done;
-	};
+struct uvc_event {
+    union {
+        enum usb_device_speed speed;
+        struct usb_ctrlrequest req;
+        struct uvc_request_data data;
+        struct uvc_frame_done_info frame_done;
+    };
 };
 
 #define UVCIOC_SEND_RESPONSE		_IOW('U', 1, struct uvc_request_data)
@@ -90,19 +87,19 @@ struct uvc_event
 extern unsigned int uvc_gadget_trace_param;
 
 #define uvc_trace(flag, msg...) \
-	do { \
-		if (uvc_gadget_trace_param & flag) \
-			printk(KERN_DEBUG "uvcvideo: " msg); \
-	} while (0)
+    do { \
+        if (uvc_gadget_trace_param & flag) \
+            printk(KERN_DEBUG "uvcvideo: " msg); \
+    } while (0)
 
 #define uvc_warn_once(dev, warn, msg...) \
-	do { \
-		if (!test_and_set_bit(warn, &dev->warnings)) \
-			printk(KERN_INFO "uvcvideo: " msg); \
-	} while (0)
+    do { \
+        if (!test_and_set_bit(warn, &dev->warnings)) \
+            printk(KERN_INFO "uvcvideo: " msg); \
+    } while (0)
 
 #define uvc_printk(level, msg...) \
-	printk(level "uvcvideo: " msg)
+    printk(level "uvcvideo: " msg)
 
 /* ------------------------------------------------------------------------
  * Driver specific constants
@@ -119,90 +116,86 @@ extern unsigned int uvc_gadget_trace_param;
  * Structures
  */
 
-struct uvc_video
-{
-	struct usb_ep *ep;
+struct uvc_video {
+    struct usb_ep *ep;
 
-	/* Frame parameters */
-	u8 bpp;
-	u32 fcc;
-	unsigned int width;
-	unsigned int height;
-	unsigned int imagesize;
+    /* Frame parameters */
+    u8 bpp;
+    u32 fcc;
+    unsigned int width;
+    unsigned int height;
+    unsigned int imagesize;
 
-	/* Requests */
-	unsigned int req_size;
-	struct usb_request *req[UVC_MAX_NUM_REQUESTS];
-	__u8 *req_buffer[UVC_MAX_NUM_REQUESTS];
-	struct list_head req_free;
-	spinlock_t req_lock;
+    /* Requests */
+    unsigned int req_size;
+    struct usb_request *req[UVC_MAX_NUM_REQUESTS];
+    __u8 *req_buffer[UVC_MAX_NUM_REQUESTS];
+    struct list_head req_free;
+    spinlock_t req_lock;
 
-	void (*encode) (struct usb_request *req, struct uvc_video *video,
-			struct uvc_buffer *buf);
+    void (*encode)(struct usb_request *req, struct uvc_video *video,
+                   struct uvc_buffer *buf);
 
-	/* Context data used by the completion handler */
-	__u32 payload_size;
-	__u32 max_payload_size;
+    /* Context data used by the completion handler */
+    __u32 payload_size;
+    __u32 max_payload_size;
 
-	struct uvc_video_queue queue;
-	unsigned int fid;
-	unsigned char payload_headsize;
-	unsigned char bulk_mode;
-	unsigned int bulk_req_size;
-	unsigned int usb_req_nums;
+    struct uvc_video_queue queue;
+    unsigned int fid;
+    unsigned char payload_headsize;
+    unsigned char bulk_mode;
+    unsigned int bulk_req_size;
+    unsigned int usb_req_nums;
 };
 
-enum uvc_state
-{
-	UVC_STATE_DISCONNECTED,
-	UVC_STATE_CONNECTED,
-	UVC_STATE_STREAMING,
+enum uvc_state {
+    UVC_STATE_DISCONNECTED,
+    UVC_STATE_CONNECTED,
+    UVC_STATE_STREAMING,
 };
 
-struct uvc_device
-{
-	struct video_device *ctrl_vdev;
-	struct video_device *strm_vdev;
-	enum uvc_state state;
-	struct usb_function func;
-	struct uvc_video video;
+struct uvc_device {
+    struct video_device *ctrl_vdev;
+    struct video_device *strm_vdev;
+    enum uvc_state state;
+    struct usb_function func;
+    struct uvc_video video;
 
-	/* Descriptors */
-	struct {
-		const struct uvc_descriptor_header * const *fs_control;
-		const struct uvc_descriptor_header * const *ss_control;
-		const struct uvc_descriptor_header * const *fs_streaming;
-		const struct uvc_descriptor_header * const *hs_streaming;
-		const struct uvc_descriptor_header * const *ss_streaming;
-	} desc;
+    /* Descriptors */
+    struct {
+        const struct uvc_descriptor_header * const *fs_control;
+        const struct uvc_descriptor_header * const *ss_control;
+        const struct uvc_descriptor_header * const *fs_streaming;
+        const struct uvc_descriptor_header * const *hs_streaming;
+        const struct uvc_descriptor_header * const *ss_streaming;
+    } desc;
 
-	unsigned int control_intf;
-	struct usb_ep *control_ep;
-	struct usb_request *control_req;
-	void *control_buf;
+    unsigned int control_intf;
+    struct usb_ep *control_ep;
+    struct usb_request *control_req;
+    void *control_buf;
 
-	unsigned int streaming_intf;
+    unsigned int streaming_intf;
 
-	/* Events */
-	unsigned int event_length;
-	unsigned int event_setup_out : 1;
+    /* Events */
+    unsigned int event_length;
+    unsigned int event_setup_out : 1;
 
-	unsigned int suspended : 1;
+    unsigned int suspended : 1;
 };
 
 static inline struct uvc_device *to_uvc(struct usb_function *f)
 {
-	return container_of(f, struct uvc_device, func);
+    return container_of(f, struct uvc_device, func);
 }
 
-struct uvc_file_handle
-{
-	struct v4l2_fh vfh;
-	struct uvc_video *device;
+struct uvc_file_handle {
+    struct v4l2_fh vfh;
+    struct uvc_video *device;
 };
 
 #define to_uvc_file_handle(handle) \
-	container_of(handle, struct uvc_file_handle, vfh)
+    container_of(handle, struct uvc_file_handle, vfh)
 
 /* ------------------------------------------------------------------------
  * Functions
