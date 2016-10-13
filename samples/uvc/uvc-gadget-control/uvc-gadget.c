@@ -1234,6 +1234,12 @@ static const gchar introspection_xml[] =
     "    <method name='TestVideoSource'>"
     "      <arg type='b' name='test_video_flag' direction='in'/>"
     "    </method>"
+    "    <method name='GetVideoStatus'>"
+    "      <arg type='s' name='streaming_status' direction='out'/>"
+    "      <arg type='s' name='image_format' direction='out'/>"
+    "      <arg type='u' name='image_width' direction='out'/>"
+    "      <arg type='u' name='image_height' direction='out'/>"
+    "    </method>"
     "    <signal name='GetCameraProperty'>"
     "      <annotation name='org.gtk.GDBus.Annotation' value='Onsignal'/>"
     "      <arg type='s' name='prop_name'/>"
@@ -1298,6 +1304,7 @@ send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
 
     error = NULL;
     request_type = getUVCReqStr(req);
+    prop_name = "";
 
     if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
         prop_name = getUVCPUCS(cs);
@@ -1334,6 +1341,7 @@ send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
 
     error = NULL;
     request_type = getUVCReqStr(req);
+    prop_name = "";
 
     if (unit_id == UVC_PROCESSING_UNIT_CONTROL_UNIT_ID)
         prop_name = getUVCPUCS(cs);
@@ -1422,10 +1430,23 @@ handle_method_call(GDBusConnection       *connection,
         g_dbus_method_invocation_return_value(invocation,
                                               g_variant_new("(i)", retval));
     } else if (g_strcmp0(method_name, "TestVideoSource") == 0) {
-        g_print("Got method call\n");
         g_variant_get(parameters, "(b)", &dummy_video);
+        g_print("Set video test flag: %d\n", dummy_video);
 
         dev->test_video_flag = (dummy_video == TRUE);
+    } else if (g_strcmp0(method_name, "GetVideoStatus") == 0) {
+        const char *streaming_status =
+            dev->stream_on ? "stream on" : "stream off";
+        const char *format_str = getV4L2FormatStr(dev->fcc);
+
+        g_print("Get video status\n");
+
+        g_dbus_method_invocation_return_value(invocation,
+                                              g_variant_new("(ssuu)",
+                                              streaming_status,
+                                              format_str,
+                                              dev->width,
+                                              dev->height));
     }
 }
 
