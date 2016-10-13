@@ -5,7 +5,7 @@
 #include "uvc.h"
 
 #include "dbus_utils.h"
-#include "plcm_usb_intf.h"
+//#include "plcm_usb_intf.h"
 #include "log_str.h"
 #include "uvc-gadget-func.h"
 #include "diag_utils.h"
@@ -236,7 +236,7 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
                              struct uvc_request_data *resp)
 {
     struct uvc_streaming_control *ctrl;
-    int ret = -1;
+    //int ret = -1;
     printf("streaming request (req 0x%02x cs 0x%02x, ) %s\n", req, cs,  getVSIntfControlSelectorStr(cs));
 
     if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
@@ -259,10 +259,11 @@ uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs,
             else
                 memcpy(ctrl, &dev->commit, sizeof * ctrl);
 
-            ret = sendEvent2Fifo(dev->stack2app_fd, e_get_format, dev->fcc, dev->width, dev->height);
+            //ret = sendEvent2Fifo(dev->stack2app_fd, e_get_format, dev->fcc, dev->width, dev->height);
+            dev->callbacks.on_get_video_param();//is it needed?
 
-            if (ret < 0)
-                printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_get_format), dev->width, dev->height, errno, strerror(errno));
+            //if (ret < 0)
+            //    printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_get_format), dev->width, dev->height, errno, strerror(errno));
 
             break;
 
@@ -353,9 +354,9 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
             target = &dev->commit;
             break;
 
-        default:
+        default://ctrl
             //send_set_property_signal(dev->dbus_con, UVC_SET_CUR, dev->control, dev->unit, data->length, data->data);
-            dev->callbacks.on_set_param(UVC_SET_CUR, dev->control, dev->unit, data->length, data->data);
+            dev->callbacks.on_set_cam_param(UVC_SET_CUR, dev->control, dev->unit, data->length, data->data);
             return;
     }
 
@@ -402,7 +403,8 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         dev->height = frame->height;
         uvc_video_set_format(dev);
         printf("[COMMIT]: set format=%u, %ux%u\n", dev->fcc, dev->width, dev->height);
-        sendEvent2Fifo(dev->stack2app_fd, e_set_format, dev->fcc, dev->width, dev->height);
+        //sendEvent2Fifo(dev->stack2app_fd, e_set_format, dev->fcc, dev->width, dev->height);
+        dev->callbacks.on_set_video_param(dev->fcc, dev->width, dev->height, 30);
 
         if (dev->bulk) {
             /* In bulk mode, we can receive the set_alt

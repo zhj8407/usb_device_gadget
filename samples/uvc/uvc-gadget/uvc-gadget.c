@@ -491,7 +491,7 @@ void on_stream_off()
         pSharedMem = NULL;
     }
 }
-void on_get_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length)
+void on_get_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length)
 {
     if (req != UVC_SET_CUR) {
         send_get_property_signal(global_uvc->dbus_con, req, cs, unit_id, length);
@@ -500,7 +500,7 @@ void on_get_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length)
         global_uvc->unit = unit_id;
     }
 }
-void on_set_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data)
+void on_set_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data)
 {
     (void)req;
     (void)cs;
@@ -509,6 +509,16 @@ void on_set_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uin
     struct uvc_request_data * param = (struct uvc_request_data *)data;
     send_set_property_signal(global_uvc->dbus_con, UVC_SET_CUR, global_uvc->control, global_uvc->unit, param->length, param->data);
 }
+
+void on_get_video_param()
+{
+}
+void on_set_video_param(uint32_t format, uint32_t width, uint32_t height, uint32_t framerate)
+{
+    (void)framerate;
+    sendEvent2Fifo(global_uvc->stack2app_fd, e_set_format, format, width, height);
+}
+
 
 int on_req_frame(uint8_t * buffer, uint32_t buffer_max_len, uint32_t *buffer_act_len)
 {
@@ -726,8 +736,10 @@ int main(int argc, char *argv[])
     struct uvc_callback_table cb_table = {
         on_stream_on,
         on_stream_off,
-        on_get_param,
-        on_set_param,
+        on_get_cam_param,
+        on_set_cam_param,
+        on_get_video_param,
+        on_set_video_param,
         on_req_frame
     };
 

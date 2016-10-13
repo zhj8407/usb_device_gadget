@@ -12,8 +12,10 @@
 struct uvc_callback_table {
     void (*on_stream_on)();
     void (*on_stream_off)();
-    void (*on_get_param)(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length);
-    void (*on_set_param)(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data);
+    void (*on_get_cam_param)(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length);
+    void (*on_set_cam_param)(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data);
+    void (*on_get_video_param)();
+    void (*on_set_video_param)(uint32_t format, uint32_t width, uint32_t height, uint32_t framerate);
     int (*on_req_frame)(uint8_t * buffer, uint32_t buffer_max_len, uint32_t *buffer_act_len);
 };
 
