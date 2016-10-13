@@ -160,7 +160,6 @@ int audio_fifo_process(struct linxed_struct *args)
 
     pthread_mutex_init(&args->mutex, NULL);
     args->pid = getpid();
-    args->state = 3;
 
     args->fifofd = fifo_create();
 
@@ -173,7 +172,6 @@ int audio_fifo_process(struct linxed_struct *args)
 
     //audio_snd_event_get(&args);
     rval = pthread_create(&sniffer_thread, NULL,  connection_handler, args);
-    printf("accept, state=0x%x\n", args->state);
 
     if (rval < 0) {
         printf("could not create thread");

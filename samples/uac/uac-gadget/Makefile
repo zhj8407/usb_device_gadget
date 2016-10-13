@@ -19,7 +19,7 @@ LDFLAGS		:= -g -L../../utils/dbus_utils -Wl,-Bstatic -ldbus_utils -Wl,-Bdynamic 
 
 PROGRAM=UsbUac
 OBJDIR = .
-SRCS = main.c audiofifos.c audiosource.c audioutils.c udev_utils.c
+SRCS = main.c audiofifos.c audiosource.c audioutils.c udev_utils.c file_utils.c
 OBJS=$(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 
 all: $(PROGRAM)

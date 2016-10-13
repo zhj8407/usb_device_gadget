@@ -11,9 +11,9 @@
 #include "f_uac_plcm.h"
 #include "audiolinxtypes.h"
 #define DEBUG 1
-#define PLCM_USB_VISAGE_UDM_STATE_SYSFS     "/sys/class/plcm_usb/plcm0/state"
-#define PLCM_USB_VISAGE_UDM_FUNCTIONS_SYSFS "/sys/class/plcm_usb/plcm0/functions"
-#define PLCM_USB_VISAGE_UDM_ENABLE_SYSFS    "/sys/class/plcm_usb/plcm0/enable"
+#define PLCM_USB_VISAGE_UDM_STATE_SYSFS     "/sys/class/plcm_usb/plcm0/f_audio_dual/audio_in_state"
+//#define PLCM_USB_VISAGE_UDM_FUNCTIONS_SYSFS "/sys/class/plcm_usb/plcm0/functions"
+//#define PLCM_USB_VISAGE_UDM_ENABLE_SYSFS    "/sys/class/plcm_usb/plcm0/enable"
 
 #define PLCM_USB_VISAGE_UAC_OBJ_PATH        "/com/polycom/visage/uac"
 #define PLCM_USB_VISAGE_UAC_INTF_NAME       "com.polycom.visage.uac"
@@ -32,6 +32,7 @@
 #define USB_bRequest_Audio_GET_MAX  0x83    /* get maximum */
 #define USB_bRequest_Audio_GET_RES  0x84    /* get resolution */
 
+#define USB_UAC_STATE_STR_LEN       32
 //#define ENABLE_MUTE_VOLUME_DBUS
 typedef struct USBAudioFUControl {
     unsigned short                  bMute;
@@ -55,7 +56,7 @@ struct usb_uac_device {
     struct udev_monitor *mon;
     int uac_ctrl_fd;
 
-    char usb_state[16];
+    char usb_state[USB_UAC_STATE_STR_LEN];
     struct uac_dbus_data_event event;
 };
 int UacDevState;
@@ -323,7 +324,8 @@ int main(void)
 {
     struct usb_uac_device *usb_dev = NULL;
     int ret;
-    UacDevState = 3;
+    UacDevState = UAC_DEVICE_STATE_MAX;
+
     struct linxed_struct args;
     usb_dev = (struct usb_uac_device *)malloc(sizeof(*usb_dev));
 
@@ -335,6 +337,18 @@ int main(void)
     }
 
     memset(usb_dev, 0, sizeof(*usb_dev));
+
+    ret = read_value_from_file(PLCM_USB_VISAGE_UDM_STATE_SYSFS, "%s\n", usb_dev->usb_state);
+
+    if (!strcmp(usb_dev->usb_state, "AUDIO_SOURCE_STATE=ACTIVE")) {
+        UacDevState = UAC_DEVICE_ACTIVE;
+    } else if (!strcmp(usb_dev->usb_state, "AUDIO_SOURCE_STATE=DEACTIVE")) {
+        UacDevState = UAC_DEVICE_DEACTIVE;
+    } else if (!strcmp(usb_dev->usb_state, "AUDIO_SOURCE_STATE=SUSPEND")) {
+        UacDevState = UAC_DEVICE_SUSPEND;
+    }
+
+    printf("Get current usb uac state: %s\n", usb_dev->usb_state);
 
     ret = dbus_setup_connection(&usb_dev->conn, "com.polycom.visage.uac",
                                 "type='signal',interface='test.signal.Type'");
