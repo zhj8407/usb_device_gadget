@@ -1,11 +1,16 @@
 #include <stdint.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "uvc.h"
 
-#include "dbus_utils.h"
+//#include "dbus_utils.h"
 //#include "plcm_usb_intf.h"
+
 #include "log_str.h"
 #include "uvc-gadget-func.h"
 #include "diag_utils.h"
@@ -407,7 +412,7 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
         dev->callbacks.on_set_video_param(dev->fcc, dev->width, dev->height, 30);
 
         if (dev->bulk) {
-            /* In bulk mode, we can receive the set_alt
+            /* In bulk mode, we can't receive the set_alt
              * request from the host. That means no STREAM_ON
              * or STREAM_OFF event from the gadget driver. So
              * we need to start the transfer immediatly after

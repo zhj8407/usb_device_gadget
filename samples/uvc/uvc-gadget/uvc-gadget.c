@@ -81,6 +81,9 @@ char *objectPaths[] = {
 };
 
 
+DBusConnection *dbus_con;
+int stack2app_fd;
+int app2stack_fd;
 
 //==========for GStreamer usage=======//
 enum {
@@ -372,8 +375,7 @@ uvc_video_init(struct uvc_device *dev)
     return 0;
 }
 
-static struct uvc_device *
-uvc_open(const char *devname)
+static struct uvc_device *uvc_open(const char *devname)
 {
     struct uvc_device *dev;
     struct v4l2_capability cap;
@@ -463,8 +465,8 @@ void on_stream_on()
 {
     int ret = 0;
     stream_on = 1;
-    ret = sendEvent2Fifo(global_uvc->stack2app_fd, e_start_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
-    notifyApplication(global_uvc->dbus_con, e_start_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
+    ret = sendEvent2Fifo(stack2app_fd, e_start_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
+    notifyApplication(dbus_con, e_start_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
     videoStartTime = GetTimeInMilliSec();
 
     if (ret < 0)
@@ -479,9 +481,9 @@ void on_stream_off()
     stream_on = 0;
 
     close_gst_socket(&gst_socket);
-    max_fd = global_uvc->fd > global_uvc->app2stack_fd ? global_uvc->fd : global_uvc->app2stack_fd;
-    ret = sendEvent2Fifo(global_uvc->stack2app_fd, e_stop_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
-    notifyApplication(global_uvc->dbus_con, e_stop_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
+    max_fd = global_uvc->fd > app2stack_fd ? global_uvc->fd : app2stack_fd;
+    ret = sendEvent2Fifo(stack2app_fd, e_stop_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
+    notifyApplication(dbus_con, e_stop_stream, global_uvc->fcc, global_uvc->width, global_uvc->height);
 
     if (ret < 0)
         printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_stop_stream), global_uvc->width, global_uvc->height, errno, strerror(errno));
@@ -494,7 +496,7 @@ void on_stream_off()
 void on_get_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length)
 {
     if (req != UVC_SET_CUR) {
-        send_get_property_signal(global_uvc->dbus_con, req, cs, unit_id, length);
+        send_get_property_signal(dbus_con, req, cs, unit_id, length);
     } else {
         global_uvc->control = cs;
         global_uvc->unit = unit_id;
@@ -507,7 +509,7 @@ void on_set_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length,
     (void)unit_id;
     (void)length;
     struct uvc_request_data * param = (struct uvc_request_data *)data;
-    send_set_property_signal(global_uvc->dbus_con, UVC_SET_CUR, global_uvc->control, global_uvc->unit, param->length, param->data);
+    send_set_property_signal(dbus_con, UVC_SET_CUR, global_uvc->control, global_uvc->unit, param->length, param->data);
 }
 
 void on_get_video_param()
@@ -516,7 +518,7 @@ void on_get_video_param()
 void on_set_video_param(uint32_t format, uint32_t width, uint32_t height, uint32_t framerate)
 {
     (void)framerate;
-    sendEvent2Fifo(global_uvc->stack2app_fd, e_set_format, format, width, height);
+    sendEvent2Fifo(stack2app_fd, e_set_format, format, width, height);
 }
 
 
@@ -550,7 +552,7 @@ void handle_app_event(struct uvc_device * dev)
     int ret = 0;
     char buf[256];
     memset(buf, 0, sizeof(buf));
-    int len = read(dev->app2stack_fd, buf, sizeof(buf));
+    int len = read(app2stack_fd, buf, sizeof(buf));
 
     if (len > 0) {
         struct plcm_uvc_event_msg_t *event = (struct plcm_uvc_event_msg_t*)(buf);
@@ -565,7 +567,7 @@ void handle_app_event(struct uvc_device * dev)
         }
 
         if (event->m_event == e_app_ready) {
-            sendEvent2Fifo(dev->stack2app_fd, e_stack_ready, dev->fcc, dev->width, dev->height);
+            sendEvent2Fifo(stack2app_fd, e_stack_ready, dev->fcc, dev->width, dev->height);
         }
 
         if (event->m_event == e_stream_ready) {
@@ -576,7 +578,7 @@ void handle_app_event(struct uvc_device * dev)
                 FD_SET(gst_socket, &fds);
             } else {
                 if (stream_on) {
-                    ret = sendEvent2Fifo(dev->stack2app_fd, e_retry_socket, dev->fcc, dev->width, dev->height);
+                    ret = sendEvent2Fifo(stack2app_fd, e_retry_socket, dev->fcc, dev->width, dev->height);
 
                     if (ret < 0) {
                         printf("send %s %ux%u to app failed %d %s\n", getEventDescStr(e_retry_socket), dev->width, dev->height, errno, strerror(errno));
@@ -765,12 +767,12 @@ int main(int argc, char *argv[])
     }
 
     //printf("=========fifo init 2======\n");
-    dev->app2stack_fd = open(fifo_in_name, O_RDONLY | O_NONBLOCK);
+    app2stack_fd = open(fifo_in_name, O_RDONLY | O_NONBLOCK);
     //printf("=========fifo init 3======\n");
-    dev->stack2app_fd = open(fifo_out_name, O_RDWR | O_NONBLOCK);
+    stack2app_fd = open(fifo_out_name, O_RDWR | O_NONBLOCK);
 
-    if (dev->app2stack_fd == 0 || dev->stack2app_fd == 0) {
-        printf("open fifo file faiedl app2stack[%d], stack2app[%d]\n", dev->app2stack_fd, dev->stack2app_fd);
+    if (app2stack_fd == 0 || stack2app_fd == 0) {
+        printf("open fifo file faiedl app2stack[%d], stack2app[%d]\n", app2stack_fd, stack2app_fd);
     }
 
 
@@ -778,7 +780,7 @@ int main(int argc, char *argv[])
 
     //setup dbus connection
 
-    ret = dbus_setup_connection(&(dev->dbus_con), "com.polycom.visage.uvc",
+    ret = dbus_setup_connection(&(dbus_con), "com.polycom.visage.uvc",
                                 "type='signal',interface='test.signal.Type'");
 
     if (ret) {
@@ -787,9 +789,9 @@ int main(int argc, char *argv[])
     } else printf("dbus connection setup successfully\n");
 
 #ifdef SYNC_CON_APP
-    dbus_register_message_filter(dev->dbus_con, msg_filter);
+    dbus_register_message_filter(dbus_con, msg_filter);
 
-    dbus_register_object_patch(dev->dbus_con,
+    dbus_register_object_patch(dbus_con,
                                objectPaths, objectPathVTable,
                                sizeof(objectPaths) / sizeof(objectPaths[0]));
 
@@ -804,9 +806,9 @@ int main(int argc, char *argv[])
     /*****inter process communication end *****/
     FD_ZERO(&fds);
     FD_SET(dev->fd, &fds);
-    FD_SET(dev->app2stack_fd, &fds);
+    FD_SET(app2stack_fd, &fds);
 
-    max_fd = dev->fd > dev->app2stack_fd ? dev->fd : dev->app2stack_fd;
+    max_fd = dev->fd > app2stack_fd ? dev->fd : app2stack_fd;
     max_fd = max_fd > gst_socket ? max_fd : gst_socket;
 
     printf("=========stack shim init done======\n");
@@ -842,7 +844,7 @@ int main(int argc, char *argv[])
 
                 uvc_events_process(dev);
 
-            } else if (FD_ISSET(dev->app2stack_fd, &rfds)) {
+            } else if (FD_ISSET(app2stack_fd, &rfds)) {
 
                 handle_app_event(dev);
 

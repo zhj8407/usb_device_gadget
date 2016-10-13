@@ -47,13 +47,15 @@ struct uvc_device {
     unsigned int maxpayloadsize;
 
     int stream_on;
-    //communication modules
-    DBusConnection *dbus_con;
-    int stack2app_fd;
-    int app2stack_fd;
 
     //callbacks
     struct uvc_callback_table callbacks;
+
+    //communication modules
+    void * pUserDefine;
+    //DBusConnection *dbus_con;
+    //int stack2app_fd;
+    //int app2stack_fd;
 };
 
 void uvc_fill_streaming_control(struct uvc_device *dev,
