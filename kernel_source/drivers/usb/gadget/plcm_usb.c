@@ -877,6 +877,30 @@ static DEVICE_ATTR(audio_in_stream_string, S_IRUGO | S_IWUSR,
 					audio_dual_as_in_show,
 					audio_dual_as_in_store);
 
+static ssize_t audio_dual_in_state(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->audio_source_state);
+}
+
+static DEVICE_ATTR(audio_in_state, S_IRUGO,
+					audio_dual_in_state,
+					NULL);
+
+static ssize_t audio_dual_out_state(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct plcm_usb_function *f = dev_get_drvdata(dev);
+	struct audio_dual_config *config = f->config;
+	return sprintf(buf, "%s\n", config->audio_sink_state);
+}
+
+static DEVICE_ATTR(audio_out_state, S_IRUGO,
+					audio_dual_out_state,
+					NULL);
+
 static struct device_attribute *audio_dual_function_attributes[] = {
 	&dev_attr_pcm,
 	&dev_attr_iad_string,
@@ -884,6 +908,8 @@ static struct device_attribute *audio_dual_function_attributes[] = {
 	&dev_attr_audio_out_stream_string,
 	&dev_attr_audio_in_stream_string,
 	&dev_attr_audio_tmode,
+	&dev_attr_audio_in_state,
+	&dev_attr_audio_out_state,
 	NULL
 };
 

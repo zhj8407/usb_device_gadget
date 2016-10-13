@@ -58,6 +58,9 @@ struct audio_dual_config {
 	char audio_control_string[MAX_STRING_NAME_LENGTH];
 	char audio_out_stream_string[MAX_STRING_NAME_LENGTH];
 	char audio_in_stream_string[MAX_STRING_NAME_LENGTH];
+
+	char audio_source_state[MAX_STRING_NAME_LENGTH];
+	char audio_sink_state[MAX_STRING_NAME_LENGTH];
 };
 
 struct uac_plcm_req {
@@ -1178,6 +1181,8 @@ static void audio_status_notify(struct work_struct *data)
 
 	if (uevent_envp) {
 		kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, uevent_envp);
+		strncpy(uac_plcm_config->audio_source_state, uevent_envp[0],
+			MAX_STRING_NAME_LENGTH);
 		pr_info("%s: audio sent uevent %s\n", __func__, uevent_envp[0]);
 	} else {
 		pr_info("%s: audio did not send uevent (suspended: %d, source_active: %d\n",
