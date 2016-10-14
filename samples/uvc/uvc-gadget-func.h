@@ -17,6 +17,7 @@ struct uvc_callback_table {
     void (*on_get_video_param)();
     void (*on_set_video_param)(uint32_t format, uint32_t width, uint32_t height, uint32_t framerate);
     int (*on_req_frame)(uint8_t * buffer, uint32_t buffer_max_len, uint32_t *buffer_act_len);
+    void (*on_frame_done)();
 };
 
 struct uvc_device {
@@ -53,9 +54,11 @@ struct uvc_device {
 
     //communication modules
     void * pUserDefine;
-    //DBusConnection *dbus_con;
-    //int stack2app_fd;
-    //int app2stack_fd;
+
+    const char *v4l2_src_device;
+    char v4l2_sink_device[32];
+    int v4l2_ctrl_devnum;
+    int v4l2_strm_devnum;
 };
 
 void uvc_fill_streaming_control(struct uvc_device *dev,
@@ -76,6 +79,7 @@ void uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *da
 
 void handle_frame_done_event(struct uvc_device *dev,
                              struct uvc_frame_done_info *frame_done_info);
+
 void uvc_events_process(struct uvc_device *dev);
 
 void uvc_events_init(struct uvc_device *dev, struct uvc_callback_table * callback_table);

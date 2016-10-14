@@ -472,6 +472,9 @@ void on_stream_on()
     if (ret < 0)
         printf("[on_stream_on]send %s %ux%u to app failed %d %s\n", getEventDescStr(e_start_stream), global_uvc->width, global_uvc->height, errno, strerror(errno));
 
+    uvc_video_reqbufs(global_uvc, 2);
+    uvc_video_stream(global_uvc, 1);
+    alarm(3);
     printf("[on_stream_on]Starting video stream with %s %ux%u\n", getV4L2FormatStr(global_uvc->fcc), global_uvc->width, global_uvc->height);
 }
 void on_stream_off()
@@ -479,6 +482,10 @@ void on_stream_off()
     int ret = 0;
     frame_count = 0;
     stream_on = 0;
+
+    alarm(0);
+    uvc_video_stream(global_uvc, 0);
+    uvc_video_reqbufs(global_uvc, 0);
 
     close_gst_socket(&gst_socket);
     max_fd = global_uvc->fd > app2stack_fd ? global_uvc->fd : app2stack_fd;
@@ -542,7 +549,10 @@ int on_req_frame(uint8_t * buffer, uint32_t buffer_max_len, uint32_t *buffer_act
     return 0;
 }
 
-
+void on_frame_done()
+{
+    alarm(1);
+}
 /* ---------------------------------------------------------------------------
  * util
  */
@@ -742,7 +752,8 @@ int main(int argc, char *argv[])
         on_set_cam_param,
         on_get_video_param,
         on_set_video_param,
-        on_req_frame
+        on_req_frame,
+        on_frame_done
     };
 
     uvc_events_init(dev, &cb_table);

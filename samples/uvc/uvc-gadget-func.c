@@ -8,9 +8,6 @@
 
 #include "uvc.h"
 
-//#include "dbus_utils.h"
-//#include "plcm_usb_intf.h"
-
 #include "log_str.h"
 #include "uvc-gadget-func.h"
 #include "diag_utils.h"
@@ -159,13 +156,15 @@ uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs,
     printf("control request (req %02x cs %02x)\n", req, cs);
     (void)dev;
 
-    /*if (req != UVC_SET_CUR) {
-        send_get_property_signal(dev->dbus_con, req, cs, unit_id, length);
+    if (req != UVC_SET_CUR) {
+        //send_get_property_signal(dev->dbus_con, req, cs, unit_id, length);
+        dev->callbacks.on_get_param(req, cs, unit_id, length);
     } else {
         dev->control = cs;
         dev->unit = unit_id;
-    }*/
-    dev->callbacks.on_get_param(req, cs, unit_id, length);
+    }
+
+    //dev->callbacks.on_get_param(req, cs, unit_id, length);
     // Do not send the reply here.
     // We have posted a singal. The client will do it.
     resp->length = -EL2HLT;
@@ -419,13 +418,15 @@ uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
              * receiving the COMMIT Set_CUR.
              */
             //Cancel the alarm. Stop the stream if possible
-            alarm(0);
-            uvc_video_stream(dev, 0);
-            uvc_video_reqbufs(dev, 0);
+            //alarm(0);
+            //uvc_video_stream(dev, 0);
+            //uvc_video_reqbufs(dev, 0);
+            dev->callbacks.on_stream_off();
 
-            uvc_video_reqbufs(dev, 2);
-            uvc_video_stream(dev, 1);
-            alarm(3);
+            //uvc_video_reqbufs(dev, 2);
+            //uvc_video_stream(dev, 1);
+            //alarm(3);
+            dev->callbacks.on_stream_on();
         }
     }
 }
@@ -443,7 +444,8 @@ void handle_frame_done_event(struct uvc_device *dev,
 
     if (dev->bulk) {
         // Reset the alarm.
-        alarm(3);
+        //alarm(3);
+        dev->callbacks.on_frame_done();
     }
 }
 
@@ -489,15 +491,17 @@ uvc_events_process(struct uvc_device *dev)
             break;
 
         case UVC_EVENT_STREAMON:
-            uvc_video_reqbufs(dev, 2);
-            uvc_video_stream(dev, 1);
+            //uvc_video_reqbufs(dev, 2);
+            //uvc_video_stream(dev, 1);
+            dev->callbacks.on_stream_on();
             break;
 
         case UVC_EVENT_STREAMOFF:
             // Cacel the alarm.
-            alarm(0);
-            uvc_video_stream(dev, 0);
-            uvc_video_reqbufs(dev, 0);
+            //alarm(0);
+            //uvc_video_stream(dev, 0);
+            //uvc_video_reqbufs(dev, 0);
+            dev->callbacks.on_stream_off();
             break;
 
         case UVC_EVENT_FRAMEDONE:
@@ -578,13 +582,14 @@ int uvc_video_stream(struct uvc_device *dev, int enable)
 #endif
         frame_count = 0;
         dev->stream_on = 0;
-        dev->callbacks.on_stream_off();
+        //dev->callbacks.on_stream_off();
 
         return 0;
     }
 
     dev->stream_on = 1;
-    dev->callbacks.on_stream_on();
+    //dev->callbacks.on_stream_on();
+    printf("pre enqueue %d buffers for streams\n", dev->nbufs);
 
     for (i = 0; i < dev->nbufs; ++i) {
         memset(&buf, 0, sizeof buf);
@@ -602,6 +607,7 @@ int uvc_video_stream(struct uvc_device *dev, int enable)
             break;
         }
     }
+
 
     ioctl(dev->fd, VIDIOC_STREAMON, &type);
 #ifdef VISAGE_LED_NOTIFICATION

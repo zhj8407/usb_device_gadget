@@ -11,17 +11,18 @@ DBUS_LIB_PATH ?= ../../utils/dbus_utils/
 DIAG_UTILS_FOLDER	?= ../../utils/diag_utils/
 DIAG_UTILS_INC	?= $(DIAG_UTILS_FOLDER)
 DIAG_UTILS_LIB	?= $(DIAG_UTILS_FOLDER)libdiag_utils.a
+GADGET_INC_PATH ?= $(VISAGE_SOURCE_DIR)/sources/kernel_source/drivers/usb/gadget
 
 CC		:= $(CROSS_COMPILE)gcc
 #KERNEL_INCLUDE	:= -I$(KERNEL_DIR)/include -I$(KERNEL_DIR)/arch/$(ARCH)/include
 KERNEL_INCLUDE	:=
-CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(CROSS_INC_PATH) $(DBUS_INC) -I$(DIAG_UTILS_INC)
+CFLAGS		:= -W -Wall -g $(KERNEL_INCLUDE) -I$(CROSS_INC_PATH) $(DBUS_INC) -I$(DIAG_UTILS_INC) -I$(GADGET_INC_PATH) -I. -I../
 LDFLAGS		:= -g -L$(CROSS_LIB_PATH) -lm -lpthread -lrt -L$(DBUS_LIB_PATH) -ldbus-1 -ldbus_utils $(DIAG_UTILS_LIB)
 SOURCE_FILE	:= uvc-gadget.c \
 		scale.c \
 		visage_shared_mem.c \
 		plcm_usb_impl.c \
-		uvc-gadget-func.c \
+		../uvc-gadget-func.c \
 
 SOURCE_FILE_AIO	:= uvc-gadget-aio.c \
 		scale.c \
@@ -64,6 +65,7 @@ $(APP_TARGET): $(APP_OBJ_FILE) $(DIAG_UTILS_LIB)
 
 clean:
 	rm -f *.o
+	rm -f ../*.o
 	rm -f $(APP_TARGET)
 	rm -f $(STACK_TARGET)
 	rm -f $(STACK_TARGET_AIO)

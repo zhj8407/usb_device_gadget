@@ -46,6 +46,8 @@
 #include "uvc.h"
 
 #include "log_str.h"
+#include "uvc-gadget-func.h"
+
 #define clamp(val, min, max) ({                 \
         typeof(val) __val = (val);              \
         typeof(min) __min = (min);              \
@@ -70,7 +72,7 @@
 
 #define MAX_GST_LINKED_ELEMENTS_COUNT 6
 
-struct uvc_device {
+/*struct uvc_device {
     const char *v4l2_src_device;
     char v4l2_sink_device[32];
     int fd;
@@ -113,7 +115,28 @@ struct uvc_device {
 
     //DEBUG. Test Video src
     unsigned char test_video_flag;
+};*/
+struct gst_device {
+    //Gstreamer related.
+    GstElement *pipeline;
+    GstElement *video_source;
+    GstElement *video_scaler;
+    GstElement *video_converter;
+    GstElement *video_encoder;
+    GstElement *video_sink;
+
+    //GLib timer
+    guint timeout_watch_id;
+
+    //DEBUG. Test Video src
+    unsigned char test_video_flag;
 };
+struct gst_device *gst_dev;
+struct uvc_device *global_uvc;
+//GDBusConnection
+GDBusConnection *dbus_conn;
+
+
 
 static int start_gst_video_stream(struct uvc_device *dev);
 static void stop_gst_video_stream(struct uvc_device *dev);
@@ -464,7 +487,7 @@ void stop_uvc_stream(struct uvc_device *dev)
 /* ---------------------------------------------------------------------------
  * Request processing
  */
-
+/*
 struct uvc_frame_info {
     unsigned int width;
     unsigned int height;
@@ -552,7 +575,7 @@ uvc_fill_streaming_control(struct uvc_device *dev,
     }
 
     if (!dev->bulk)
-        ctrl->dwMaxPayloadTransferSize = dev->maxpacketsize;   /* TODO this should be filled by the driver. */
+        ctrl->dwMaxPayloadTransferSize = dev->maxpacketsize;   // TODO this should be filled by the driver.
     else if (!dev->maxpayloadsize)
         ctrl->dwMaxPayloadTransferSize = ctrl->dwMaxVideoFrameSize + dev->headersize;
 
@@ -914,7 +937,7 @@ uvc_events_init(struct uvc_device *dev)
     uvc_fill_streaming_control(dev, &dev->commit, 0, 0);
 
     if (dev->bulk) {
-        /* FIXME Crude hack, must be negotiated with the driver. */
+        // FIXME Crude hack, must be negotiated with the driver.
         dev->probe.dwMaxPayloadTransferSize = dev->maxpayloadsize;
         dev->commit.dwMaxPayloadTransferSize = dev->maxpayloadsize;
     }
@@ -931,6 +954,7 @@ uvc_events_init(struct uvc_device *dev)
     sub.type = UVC_EVENT_FRAMEDONE;
     ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
 }
+*/
 
 static GMainLoop *_global_loop = NULL;
 
@@ -982,13 +1006,13 @@ tiemout_callback(gpointer arg)
 
 static void uvc_set_timeout(struct uvc_device *dev, guint timeout_in_ms)
 {
-    if (dev->timeout_watch_id) {
-        g_source_remove(dev->timeout_watch_id);
-        dev->timeout_watch_id = 0;
+    if (gst_dev->timeout_watch_id) {
+        g_source_remove(gst_dev->timeout_watch_id);
+        gst_dev->timeout_watch_id = 0;
     }
 
     if (timeout_in_ms) {
-        dev->timeout_watch_id =
+        gst_dev->timeout_watch_id =
             g_timeout_add(timeout_in_ms, tiemout_callback, dev);
     }
 }
@@ -1078,7 +1102,7 @@ link_elements_with_video_formats(
             break;
 
         default:
-            g_warning("Unknown video format!\n");
+            g_warning("[link_elements_with_video_formats]Unknown video format! %d\n", fcc);
             break;
     }
 
@@ -1108,25 +1132,25 @@ static int start_gst_video_stream(struct uvc_device *dev)
 {
     int retval = 0;
 
-    if (!dev->test_video_flag)
-        dev->video_source = gst_element_factory_make("v4l2src", "v4l2 source");
+    if (!gst_dev->test_video_flag)
+        gst_dev->video_source = gst_element_factory_make("v4l2src", "v4l2 source");
     else
-        dev->video_source = gst_element_factory_make("videotestsrc", "v4l2 source");
+        gst_dev->video_source = gst_element_factory_make("videotestsrc", "v4l2 source");
 
-    dev->video_scaler = gst_element_factory_make("videoscale", "video scaler");
-    dev->video_converter = gst_element_factory_make("videoconvert", "video converter");
-    dev->video_encoder = gst_element_factory_make("nvjpegenc", "jpeg encoder");
-    dev->video_sink = gst_element_factory_make("v4l2sink", "v4l2 sink");
+    gst_dev->video_scaler = gst_element_factory_make("videoscale", "video scaler");
+    gst_dev->video_converter = gst_element_factory_make("videoconvert", "video converter");
+    gst_dev->video_encoder = gst_element_factory_make("nvjpegenc", "jpeg encoder");
+    gst_dev->video_sink = gst_element_factory_make("v4l2sink", "v4l2 sink");
 
-    if (!dev->video_source || !dev->video_sink ||
-            !dev->video_scaler || !dev->video_converter || !dev->video_encoder) {
+    if (!gst_dev->video_source || !gst_dev->video_sink ||
+            !gst_dev->video_scaler || !gst_dev->video_converter || !gst_dev->video_encoder) {
         g_printerr("One of the elements could not be created, Exiting. \n");
         return -1;
     }
 
-    if (!dev->test_video_flag) {
+    if (!gst_dev->test_video_flag) {
         /* We set the video capture device name to the source element. */
-        g_object_set(G_OBJECT(dev->video_source), "device", dev->v4l2_src_device, NULL);
+        g_object_set(G_OBJECT(gst_dev->video_source), "device", dev->v4l2_src_device, NULL);
         camera_width = CAM_DEF_WIDTH;
         camera_height = CAM_DEF_HEIGHT;
         camera_framerate = CAM_DEF_FRAMERATE;
@@ -1136,39 +1160,42 @@ static int start_gst_video_stream(struct uvc_device *dev)
         camera_framerate = DUMMY_VIDEO_DEF_FRAMERATE;
     }
 
+    printf("[start_gst_video_stream]: try start gst video [%u][%s] %ux%u %ufps\n"
+           , dev->fcc, getV4L2FormatStr(dev->fcc), dev->width, dev->height, camera_framerate);
+
     /* We set the video output device name to the sink element. */
-    g_object_set(G_OBJECT(dev->video_sink), "device", dev->v4l2_sink_device, NULL);
+    g_object_set(G_OBJECT(gst_dev->video_sink), "device", dev->v4l2_sink_device, NULL);
 
     /* Add the elements. */
-    gst_bin_add_many(GST_BIN(dev->pipeline), dev->video_source, dev->video_scaler,
-                     dev->video_converter, dev->video_encoder, dev->video_sink, NULL);
+    gst_bin_add_many(GST_BIN(gst_dev->pipeline), gst_dev->video_source, gst_dev->video_scaler,
+                     gst_dev->video_converter, gst_dev->video_encoder, gst_dev->video_sink, NULL);
 
     switch (dev->fcc) {
         case V4L2_PIX_FMT_YUYV:
         case V4L2_PIX_FMT_YUV420: {
             if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
-                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_scaler,
                                                  camera_width, camera_height, camera_framerate, camera_format);
-                link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
+                link_elements_with_video_formats(gst_dev->video_scaler, gst_dev->video_converter,
                                                  dev->width, dev->height, -1, -1);
             } else {
-                link_elements_with_video_formats(dev->video_source, dev->video_converter,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_converter,
                                                  camera_width, camera_height, camera_framerate, camera_format);
             }
 
-            link_elements_with_video_formats(dev->video_converter, dev->video_sink,
+            link_elements_with_video_formats(gst_dev->video_converter, gst_dev->video_sink,
                                              -1, -1, -1, dev->fcc);
             break;
         }
 
         case V4L2_PIX_FMT_NV12: {
             if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
-                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_scaler,
                                                  camera_width, camera_height, camera_framerate, camera_format);
-                link_elements_with_video_formats(dev->video_scaler, dev->video_sink,
+                link_elements_with_video_formats(gst_dev->video_scaler, gst_dev->video_sink,
                                                  dev->width, dev->height, -1, -1);
             } else {
-                link_elements_with_video_formats(dev->video_source, dev->video_sink,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_sink,
                                                  camera_width, camera_height, camera_framerate, camera_format);
             }
 
@@ -1177,38 +1204,39 @@ static int start_gst_video_stream(struct uvc_device *dev)
 
         case V4L2_PIX_FMT_MJPEG: {
             if (!(dev->width == camera_width) || !(dev->height == camera_height)) {
-                link_elements_with_video_formats(dev->video_source, dev->video_scaler,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_scaler,
                                                  camera_width, camera_height, camera_framerate, camera_format);
-                link_elements_with_video_formats(dev->video_scaler, dev->video_converter,
+                link_elements_with_video_formats(gst_dev->video_scaler, gst_dev->video_converter,
                                                  dev->width, dev->height, -1, -1);
             } else {
-                link_elements_with_video_formats(dev->video_source, dev->video_converter,
+                link_elements_with_video_formats(gst_dev->video_source, gst_dev->video_converter,
                                                  camera_width, camera_height, camera_framerate, camera_format);
             }
 
-            link_elements_with_video_formats(dev->video_converter, dev->video_encoder,
+            link_elements_with_video_formats(gst_dev->video_converter, gst_dev->video_encoder,
                                              -1, -1, -1, V4L2_PIX_FMT_YUV420);
-            link_elements_with_video_formats(dev->video_encoder, dev->video_sink,
+            link_elements_with_video_formats(gst_dev->video_encoder, gst_dev->video_sink,
                                              -1, -1, -1, dev->fcc);
             break;
         }
 
         default:
-            g_warning("Unknown video format\n");
+            g_warning("Unknown video format: %d\n", dev->fcc);
             return -1;
     }
 
-    gst_element_set_state(dev->pipeline, GST_STATE_PLAYING);
+    gst_element_set_state(gst_dev->pipeline, GST_STATE_PLAYING);
 
     return retval;
 }
 
 static void stop_gst_video_stream(struct uvc_device *dev)
 {
-    gst_element_set_state(dev->pipeline, GST_STATE_NULL);
+    (void)dev;
+    gst_element_set_state(gst_dev->pipeline, GST_STATE_NULL);
 
-    gst_bin_remove_many(GST_BIN(dev->pipeline), dev->video_source, dev->video_scaler,
-                        dev->video_converter, dev->video_encoder, dev->video_sink, NULL);
+    gst_bin_remove_many(GST_BIN(gst_dev->pipeline), gst_dev->video_source, gst_dev->video_scaler,
+                        gst_dev->video_converter, gst_dev->video_encoder, gst_dev->video_sink, NULL);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1275,8 +1303,8 @@ send_uvc_stream_status_signal(struct uvc_device *dev)
 
     error = NULL;
 
-    if (dev->conn) {
-        g_dbus_connection_emit_signal(dev->conn,
+    if (dbus_conn) {
+        g_dbus_connection_emit_signal(dbus_conn,
                                       NULL,
                                       PLCM_USB_VISAGE_UVC_OBJ_PATH,
                                       PLCM_USB_VISAGE_UVC_INTF_NAME,
@@ -1301,7 +1329,7 @@ send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
 {
     GError *error;
     const char *prop_name, *request_type;
-
+    (void)dev;
     error = NULL;
     request_type = getUVCReqStr(req);
     prop_name = "";
@@ -1311,8 +1339,8 @@ send_get_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
     else if (unit_id == UVC_CAMERA_TERMINAL_CONTROL_UNIT_ID)
         prop_name = getUVCCTCS(cs);
 
-    if (dev->conn) {
-        g_dbus_connection_emit_signal(dev->conn,
+    if (dbus_conn) {
+        g_dbus_connection_emit_signal(dbus_conn,
                                       NULL,
                                       PLCM_USB_VISAGE_UVC_OBJ_PATH,
                                       PLCM_USB_VISAGE_UVC_INTF_NAME,
@@ -1338,6 +1366,7 @@ send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
     const char *prop_name, *request_type;
     GVariantBuilder *builder;
     uint16_t i = 0;
+    (void)dev;
 
     error = NULL;
     request_type = getUVCReqStr(req);
@@ -1353,8 +1382,8 @@ send_set_property_signal(struct uvc_device *dev, uint8_t req, uint8_t cs,
     for (i = 0; i < length; i++)
         g_variant_builder_add(builder, "y", data[i]);
 
-    if (dev->conn) {
-        g_dbus_connection_emit_signal(dev->conn,
+    if (dbus_conn) {
+        g_dbus_connection_emit_signal(dbus_conn,
                                       NULL,
                                       PLCM_USB_VISAGE_UVC_OBJ_PATH,
                                       PLCM_USB_VISAGE_UVC_INTF_NAME,
@@ -1433,7 +1462,7 @@ handle_method_call(GDBusConnection       *connection,
         g_variant_get(parameters, "(b)", &dummy_video);
         g_print("Set video test flag: %d\n", dummy_video);
 
-        dev->test_video_flag = (dummy_video == TRUE);
+        gst_dev->test_video_flag = (dummy_video == TRUE);
     } else if (g_strcmp0(method_name, "GetVideoStatus") == 0) {
         const char *streaming_status =
             dev->stream_on ? "stream on" : "stream off";
@@ -1443,10 +1472,10 @@ handle_method_call(GDBusConnection       *connection,
 
         g_dbus_method_invocation_return_value(invocation,
                                               g_variant_new("(ssuu)",
-                                              streaming_status,
-                                              format_str,
-                                              dev->width,
-                                              dev->height));
+                                                      streaming_status,
+                                                      format_str,
+                                                      dev->width,
+                                                      dev->height));
     }
 }
 
@@ -1465,10 +1494,10 @@ on_bus_acquired(GDBusConnection *connection,
 {
     struct uvc_device *dev = (struct uvc_device *)user_data;
     guint registration_id;
-
+    (void)dev;
     (void)name;
 
-    dev->conn = connection;
+    dbus_conn = connection;
 
     registration_id = g_dbus_connection_register_object(connection,
                       "/com/polycom/visage/uvc",
@@ -1501,6 +1530,74 @@ on_name_lost(GDBusConnection *connection,
 
     g_print("bus name lost :%s\n", name);
 }
+
+/*
+* Callbacks for uvc v4l2 device management
+*
+*/
+void on_stream_on()
+{
+    printf("============on_stream_on============\n");
+    // Start uvc video stream
+    start_uvc_stream(global_uvc);
+    //Notify the app with the streaming status
+    send_uvc_stream_status_signal(global_uvc);
+    uvc_set_timeout(global_uvc, 5000);
+    //uvc_video_stream(global_uvc,1, 0);
+    printf("============on_stream_on done============\n");
+}
+void on_stream_off()
+{
+    printf("============on_stream_off============\n");
+    // Stop the uvc video stream
+    stop_uvc_stream(global_uvc);
+    //Notify the app with the streaming status
+    send_uvc_stream_status_signal(global_uvc);
+
+    uvc_set_timeout(global_uvc, 0);
+    //uvc_video_stream(global_uvc,0, 0);
+    printf("============on_stream_off done============\n");
+
+}
+void on_get_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length)
+{
+    printf("============on_get_cam_param req[%u] cs[%u] unit_id[%u] length[%u]============\n", req, cs, unit_id, length);
+    send_get_property_signal(global_uvc, req, cs, unit_id, length);
+}
+void on_set_cam_param(uint8_t req, uint8_t cs, uint8_t unit_id, uint16_t length, uint8_t* data)
+{
+    printf("============on_get_cam_param req[%u] cs[%u] unit_id[%u] length[%u]============\n", req, cs, unit_id, length);
+    struct uvc_request_data * param = (struct uvc_request_data *)data;
+    send_set_property_signal(global_uvc, req, cs, unit_id, param->length, param->data);
+
+}
+
+void on_get_video_param()
+{
+}
+
+void on_set_video_param(uint32_t format, uint32_t width, uint32_t height, uint32_t framerate)
+{
+    (void)framerate;
+    (void)format;
+    (void)width;
+    (void)height;
+}
+
+
+int on_req_frame(uint8_t * buffer, uint32_t buffer_max_len, uint32_t *buffer_act_len)
+{
+    (void)buffer;
+    (void)buffer_max_len;
+    (void)buffer_act_len;
+    return 0;
+}
+
+void on_frame_done()
+{
+    uvc_set_timeout(global_uvc, 1000);
+}
+
 
 /* ---------------------------------------------------------------------------
  * main
@@ -1571,9 +1668,23 @@ int main(int argc, char *argv[])
     if (dev == NULL)
         return 1;
 
-    dev->test_video_flag = dummy_video;
+    global_uvc = dev;
+    gst_dev = malloc(sizeof(struct gst_device));
+    gst_dev->test_video_flag = dummy_video;
 
-    uvc_events_init(dev);
+    struct uvc_callback_table cb_table = {
+        on_stream_on,
+        on_stream_off,
+        on_get_cam_param,
+        on_set_cam_param,
+        on_get_video_param,
+        on_set_video_param,
+        on_req_frame,
+        on_frame_done
+    };
+
+    uvc_events_init(dev, &cb_table);
+
 
     /* Initialize the g_main_loop. */
     loop = g_main_loop_new(NULL, FALSE);
@@ -1594,14 +1705,14 @@ int main(int argc, char *argv[])
     gst_init(&argc, &argv);
 
     /* Create gstreamer elements. */
-    dev->pipeline = gst_pipeline_new("video-looper");
+    gst_dev->pipeline = gst_pipeline_new("video-looper");
 
-    if (!dev->pipeline) {
+    if (!gst_dev->pipeline) {
         g_printerr("Failed to allocate the gstreamer pipeline. Exiting. \n");
         goto exit;
     }
 
-    bus = gst_pipeline_get_bus(GST_PIPELINE(dev->pipeline));
+    bus = gst_pipeline_get_bus(GST_PIPELINE(gst_dev->pipeline));
     bus_watch_id = gst_bus_add_watch(bus, bus_call, dev);
     gst_object_unref(bus);
 
@@ -1633,17 +1744,17 @@ int main(int argc, char *argv[])
 
     /* Clean up the gstreamer. */
     g_print("Stop the video looper pipeline\n");
-    gst_element_set_state(dev->pipeline, GST_STATE_NULL);
+    gst_element_set_state(gst_dev->pipeline, GST_STATE_NULL);
     g_print("Deleting the pipeline\n");
 
-    gst_object_unref(GST_OBJECT(dev->pipeline));
+    gst_object_unref(GST_OBJECT(gst_dev->pipeline));
 
     /* Clean up the gstreamer bus. */
     g_source_remove(bus_watch_id);
 
-    if (dev->timeout_watch_id) {
-        g_source_remove(dev->timeout_watch_id);
-        dev->timeout_watch_id = 0;
+    if (gst_dev->timeout_watch_id) {
+        g_source_remove(gst_dev->timeout_watch_id);
+        gst_dev->timeout_watch_id = 0;
     }
 
 exit:
@@ -1655,6 +1766,11 @@ exit:
     g_main_loop_unref(loop);
 
     uvc_close(dev);
+
+    if (gst_dev != NULL)
+        free(gst_dev);
+
+    gst_dev = NULL;
 
     return 0;
 }
