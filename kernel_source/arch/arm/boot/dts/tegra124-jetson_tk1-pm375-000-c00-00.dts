@@ -19,6 +19,10 @@
 		bootargs = "tegraid=40.0.0.00.00 vmalloc=256M video=tegrafb console=ttyS0,115200n8 earlyprintk";
 	};
 
+	psci {
+		status = "disabled";
+	};
+
 	pinmux {
 		pinctrl-names = "default", "drive", "unused", "suspend";
 		pinctrl-3 = <&pinmux_suspend>;
@@ -67,8 +71,25 @@
 		reg = <0x0 0x80000000 0x0 0x80000000>;
 	};
 
+	camera-pcl {
+		profiles {
+			ov4689@2_0036 {
+				use_of_node = "yes";
+				reset-gpios = <&gpio TEGRA_GPIO(BB, 3) 0>;
+				cam1-gpios = <&gpio TEGRA_GPIO(BB, 5) 0>;
+			};
+			imx185@2_001A {
+				use-of-node = "yes";
+				cam1-gpios = <&gpio TEGRA_GPIO(BB, 5) 0>;
+			};
+		};
+		dpd {
+			default-enable;
+		};
+	};
+
 	spi@7000d400 {
-        status = "okay";
+		status = "okay";
 		spi-max-frequency = <10000000>;
 		spi@0 {
 			compatible = "spidev";
@@ -78,12 +99,12 @@
 	};
 
 	spi@7000da00 {
-		status = "okay";
-		spi@0 {
-		    compatible = "spidev";
-		    reg = <0>;
-		    spi-max-frequency = <25000000>;
-		};
+	 		status = "okay";
+			spi@0 {
+		    	compatible = "spidev";
+		    	reg = <0>;
+		    	spi-max-frequency = <25000000>;
+			};
 	};
 
 	pmc {

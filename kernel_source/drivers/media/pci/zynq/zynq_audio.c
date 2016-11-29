@@ -393,12 +393,13 @@ static void audio_dma_irq_free(struct snd_i2s *chip)
             reg = FPGA_INTERRUPT_REG;
             val = FPGA_AUDIO_INTERRUPT_MASK ;
             fpga_reg_write(base, reg, val);
-
+#if 0
             val = fpga_reg_read(base, reg);
             while(1) {
                 if (val == 0) break;
                 zynq_printk(0,  "[zynq_audio] Interrupt is not cleared!!\n");
             }
+#endif
             reg = FPGA_AUDIO_READY_REG ;
             val = 0;
             fpga_reg_write(base, reg, val);
@@ -700,11 +701,14 @@ static int snd_i2s_open(struct snd_pcm_substream *substream)
     }
 
     chip->s[MOZART_I2S0][stream_id].stream = substream;
-    dev_private = kmalloc(sizeof(*dev_private), GFP_ATOMIC);
+    dev_private = kmalloc(sizeof(snd_i2s_dev_private), GFP_ATOMIC);
+	
+	if (!dev_private) return -1;
+	
     dev_private->dev_num = MOZART_I2S0;
     if (stream_id == SNDRV_PCM_STREAM_PLAYBACK) {
         dev_private->dma_chn = DMA_CHN_0;
-        zynq_printk(1, "[zynq_audio] Opne under playback mode!\n");
+        zynq_printk(1, "[zynq_audio]jeff  Opne under playback mode!\n");
 #ifndef VIRTUAL_AUDIO_DEVICE
         runtime->hw = snd_i2s_playback;
 #else
@@ -713,7 +717,7 @@ static int snd_i2s_open(struct snd_pcm_substream *substream)
 #endif
     } else {
         dev_private->dma_chn = DMA_CHN_1;
-        zynq_printk(1, "[zynq_audio]Opne under capture mode!\n");
+        zynq_printk(1, "[zynq_audio]jeff Opne under capture mode!\n");
 #ifndef VIRTUAL_AUDIO_DEVICE
         runtime->hw = snd_i2s_capture;
 #else
@@ -831,7 +835,7 @@ static int i2c_clients_probe(struct i2c_adapter * adap, unsigned short addr)
     return err >= 0;
 }
 
-
+#if 0
 static int  audio_codec_init(void)
 {
     int err = 0;
@@ -876,6 +880,7 @@ static int audio_codec_release(void)
 
     return err;
 }
+#endif
 /////////////////////////////////////////////////////////////////////////////////////////
 static void snd_i2s_free(struct snd_card *card)
 {
@@ -884,7 +889,7 @@ static void snd_i2s_free(struct snd_card *card)
     audio_dma_irq_free(chip);
 #endif
 }
-static unsigned is_sucess_audio_codec_init = 0;
+//static unsigned is_sucess_audio_codec_init = 0;
 static int snd_i2s_probe(struct pci_dev *pdev)
 {
     int err = 0, i = 0;
@@ -1008,7 +1013,7 @@ static int  snd_i2s_remove(struct pci_dev *pdev)
 
 rls_audio_codec:
 
-    if (is_sucess_audio_codec_init) audio_codec_release();
+    //if (is_sucess_audio_codec_init) audio_codec_release();
 
     if (g_card_info_for_codec.data  != NULL) {
         vfree(g_card_info_for_codec.data );

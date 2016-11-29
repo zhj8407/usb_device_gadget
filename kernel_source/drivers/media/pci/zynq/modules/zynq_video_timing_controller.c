@@ -32,12 +32,12 @@ static vtiming_parametr_t vtiming_parameter_1080p60 = {
     .h_sync_end = 2052,
     .v_active_size = 1080,
     .v_frame_size = 1125,
-    .v_sync_start = 1084,
+    .v_sync_start = 1083, //1084,
     .v_sync_end = 1088,
     .v_blanking_cycle_index_start = 1920,
     .v_blanking_cycle_index_end = 1920,
-    .v_sync_cycle_index_start = 1920,
-    .v_sync_cycle_index_end = 1920
+    .v_sync_cycle_index_start =2008, //1920,
+    .v_sync_cycle_index_end = 2008//1920
 };
 
 static vtiming_parametr_t vtiming_parameter_720p60 = {
@@ -47,12 +47,12 @@ static vtiming_parametr_t vtiming_parameter_720p60 = {
     .h_sync_end = 1430,
     .v_active_size = 720,
     .v_frame_size = 750,
-    .v_sync_start = 725,
-    .v_sync_end = 730,
+    .v_sync_start = 724, //725,
+    .v_sync_end = 729, //730,
     .v_blanking_cycle_index_start = 1280,
     .v_blanking_cycle_index_end = 1280,
-    .v_sync_cycle_index_start = 1280,
-    .v_sync_cycle_index_end = 1280
+    .v_sync_cycle_index_start = 1390, //1280,
+    .v_sync_cycle_index_end = 1390 //1280
 };
 
 
@@ -63,12 +63,12 @@ static vtiming_parametr_t vtiming_parameter_1080p50= {
     .h_sync_end = 2492,
     .v_active_size = 1080,
     .v_frame_size = 1125,
-    .v_sync_start = 1084,
-    .v_sync_end = 1089,
+    .v_sync_start = 1083, //1084,
+    .v_sync_end = 1088, //1089,
     .v_blanking_cycle_index_start = 1920,
     .v_blanking_cycle_index_end = 1920,
-    .v_sync_cycle_index_start = 1920,
-    .v_sync_cycle_index_end = 1920
+    .v_sync_cycle_index_start =2448,  //1920,
+    .v_sync_cycle_index_end = 2448 //1920
 };
 
 static vtiming_parametr_t vtiming_parameter_720p50 = {
@@ -78,12 +78,12 @@ static vtiming_parametr_t vtiming_parameter_720p50 = {
     .h_sync_end = 1760,
     .v_active_size = 720,
     .v_frame_size = 750,
-    .v_sync_start = 725,
-    .v_sync_end = 730,
+    .v_sync_start = 724, //725,
+    .v_sync_end = 729, //730,
     .v_blanking_cycle_index_start = 1280,
     .v_blanking_cycle_index_end = 1280,
-    .v_sync_cycle_index_start = 1280,
-    .v_sync_cycle_index_end = 1280
+    .v_sync_cycle_index_start = 1720, //1280,
+    .v_sync_cycle_index_end = 1720 //1280
 };
 
 #define VTIMING_REG_NUM  (10)

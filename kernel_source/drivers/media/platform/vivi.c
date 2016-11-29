@@ -26,6 +26,7 @@
 #include <linux/videodev2.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <media/videobuf2-vmalloc.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-ctrls.h>
@@ -35,12 +36,6 @@
 
 #define VIVI_MODULE_NAME "vivi"
 
-//#define USE_DMA_CONTING 1
-#if defined(USE_DMA_CONTING)
-#include <media/videobuf2-dma-contig.h>
-#else
-#include <media/videobuf2-vmalloc.h>
-#endif
 /* Maximum allowed frame rate
  *
  * Vivi will allow setting timeperframe in [1/FPS_MAX - FPS_MAX/1] range.
@@ -266,7 +261,6 @@ struct vivi_dev {
 	unsigned int		   pixelsize;
 	u8			   alpha_component;
 	u32			   textfg, textbg;
-	void *alloc_ctx;
 };
 
 /* ------------------------------------------------------------------
@@ -846,9 +840,6 @@ static int queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 	 * alloc_ctxs array.
 	 */
 
-	if (dev->alloc_ctx != NULL)
-		alloc_ctxs[0] = dev->alloc_ctx;
-	
 	dprintk(dev, 1, "%s, count=%d, size=%ld\n", __func__,
 		*nbuffers, size);
 
@@ -1054,7 +1045,7 @@ static int vidioc_enum_framesizes(struct file *file, void *fh,
 					 struct v4l2_frmsizeenum *fsize)
 {
 	static const struct v4l2_frmsize_stepwise sizes = {
-		48, MAX_WIDTH, /*4*/1,
+		48, MAX_WIDTH, 4,
 		32, MAX_HEIGHT, 1
 	};
 	int i;
@@ -1066,7 +1057,7 @@ static int vidioc_enum_framesizes(struct file *file, void *fh,
 			break;
 	if (i == ARRAY_SIZE(formats))
 		return -EINVAL;
-	fsize->type = V4L2_FRMSIZE_TYPE_CONTINUOUS; //V4L2_FRMSIZE_TYPE_STEPWISE;
+	fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
 	fsize->stepwise = sizes;
 	return 0;
 }
@@ -1371,13 +1362,6 @@ static int vivi_release(void)
 
 		v4l2_info(&dev->v4l2_dev, "unregistering %s\n",
 			video_device_node_name(&dev->vdev));
-		
-		if (dev->alloc_ctx != NULL) {
-#if defined (USE_DMA_CONTING)
-			 vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
-#endif
-		}
-		
 		video_unregister_device(&dev->vdev);
 		v4l2_device_unregister(&dev->v4l2_dev);
 		v4l2_ctrl_handler_free(&dev->ctrl_handler);
@@ -1453,31 +1437,12 @@ static int __init vivi_create_instance(int inst)
 	q->drv_priv = dev;
 	q->buf_struct_size = sizeof(struct vivi_buffer);
 	q->ops = &vivi_video_qops;
-	
-#if defined (USE_DMA_CONTING)
-	dev->alloc_ctx = vb2_dma_contig_init_ctx(dev->v4l2_dev.dev);
-	if (IS_ERR(dev->alloc_ctx)) {
-        printk(KERN_ERR "[vivi]Call vb2_dma_contig_init_ctx() failed!!\n");
-        return PTR_ERR(dev->alloc_ctx);
-    }
-    q->mem_ops = &vb2_dma_contig_memops;
-	printk(KERN_INFO"[vivi]Use vb2_dma_contig_memops!!\n");
-#else
-	dev->alloc_ctx = NULL;
 	q->mem_ops = &vb2_vmalloc_memops;
-	printk(KERN_INFO"[vivi]Use vb2_vmalloc_memops!!\n");
-#endif
 	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 
 	ret = vb2_queue_init(q);
-	if (ret) {
-		if (dev->alloc_ctx != NULL) {
-#if defined (USE_DMA_CONTING)
-			 vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
-#endif
-		}
+	if (ret)
 		goto unreg_dev;
-	}
 
 	mutex_init(&dev->mutex);
 

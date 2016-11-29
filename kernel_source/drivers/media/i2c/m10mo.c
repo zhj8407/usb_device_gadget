@@ -578,7 +578,7 @@ static ssize_t m10mo_get_register(struct device *dev,
     struct i2c_client *client = data->client;
     printk(KERN_ALERT"Get register - buff %s \n", buf);
     
-    ret = sscanf(buf, "%hhd %x %x", &cnt, &cat_addr, &byte_N);
+    ret = sscanf(buf, "%hhu %x %x", &cnt, &cat_addr, &byte_N);
     if (3 != ret) {
         printk("%s: Invalid value. Format cnt %x cat_addr %x  byte_N %x ret:%d\n", __func__, cnt, cat_addr, byte_N,ret);
         goto exit;
@@ -621,9 +621,11 @@ static ssize_t m10mo_set_register(struct device *dev,
         struct device_attribute *attr,
         const char *buf, size_t count)
 {
-    int ret;
-    int cnt, data_write,cat_addr;
-    int byte_N;
+    int ret = 0;
+	int cnt = 0;
+    unsigned int data_write = 0;
+	unsigned int cat_addr = 0;
+    unsigned int byte_N  = 0;
     struct m10mo_data *data = (struct m10mo_data *)dev_get_drvdata(dev);
     struct i2c_client *client = data->client;
 

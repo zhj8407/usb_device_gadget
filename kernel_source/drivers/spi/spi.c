@@ -1332,8 +1332,8 @@ int spi_setup(struct spi_device *spi)
 	if (spi->master->setup)
 		status = spi->master->setup(spi);
 
-	printk(KERN_ALERT"spi %s: setup mode %d, %s%s%s%s"
-				"%u bits/w, %u Hz max --> %d\n", __func__,
+	dev_dbg(&spi->dev, "setup mode %d, %s%s%s%s"
+				"%u bits/w, %u Hz max --> %d\n",
 			(int) (spi->mode & (SPI_CPOL | SPI_CPHA)),
 			(spi->mode & SPI_CS_HIGH) ? "cs_high, " : "",
 			(spi->mode & SPI_LSB_FIRST) ? "lsb, " : "",

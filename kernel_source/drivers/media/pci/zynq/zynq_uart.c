@@ -472,9 +472,9 @@ static const struct uart_ops zynq_uart_ops = {
 struct zynq_card_t;
 
 typedef enum baud_rate_mode {
-	BAUD_RATE_9600 = 0,
-	BAUD_RATE_115200 = 1,
-	BAUD_RATE_UNKOWN = 2
+    BAUD_RATE_9600 = 0,
+    BAUD_RATE_115200 = 1,
+    BAUD_RATE_UNKOWN = 2
 } EBAUDRATEMODE;
 
 struct zynq_uart_t {
@@ -487,11 +487,11 @@ struct zynq_uart_t {
     unsigned int enable;
     atomic_t refcount;
     unsigned int irq;
-	int baud_rate_9600_reg_idx;
-	int baud_rate_115200_reg_idx;
-	int baud_rate_mode_bit;
-	EBAUDRATEMODE baud_rate_mode;
-	spinlock_t		lock;
+    int baud_rate_9600_reg_idx;
+    int baud_rate_115200_reg_idx;
+    int baud_rate_mode_bit;
+    EBAUDRATEMODE baud_rate_mode;
+    spinlock_t		lock;
 };
 
 struct zynq_card_t {
@@ -522,10 +522,10 @@ struct zynq_uart_t 	zynq_uarts[] = {
             .regshift = 2,
             .iobase = 1
         },
-		.baud_rate_9600_reg_idx = 0,
-		.baud_rate_115200_reg_idx = 4,
-		.baud_rate_mode_bit = 0,
-		.baud_rate_mode = BAUD_RATE_9600
+        .baud_rate_9600_reg_idx = 0,
+        .baud_rate_115200_reg_idx = 4,
+        .baud_rate_mode_bit = 0,
+        .baud_rate_mode = BAUD_RATE_9600
     },
     [1] = {
         .enable = 1,
@@ -540,10 +540,10 @@ struct zynq_uart_t 	zynq_uarts[] = {
             .regshift = 2,
             .iobase = 1
         },
-		.baud_rate_9600_reg_idx = 1,
-		.baud_rate_115200_reg_idx = 5,
-		.baud_rate_mode_bit = 1,
-		.baud_rate_mode = BAUD_RATE_9600
+        .baud_rate_9600_reg_idx = 1,
+        .baud_rate_115200_reg_idx = 5,
+        .baud_rate_mode_bit = 1,
+        .baud_rate_mode = BAUD_RATE_9600
     },
     [2] = {
         .enable = 1,
@@ -558,10 +558,10 @@ struct zynq_uart_t 	zynq_uarts[] = {
             .regshift = 2,
             .iobase = 1
         },
-		.baud_rate_9600_reg_idx = -1,
-		.baud_rate_115200_reg_idx = -1,
-		.baud_rate_mode_bit = 2,
-		.baud_rate_mode = BAUD_RATE_9600
+        .baud_rate_9600_reg_idx = -1,
+        .baud_rate_115200_reg_idx = -1,
+        .baud_rate_mode_bit = 2,
+        .baud_rate_mode = BAUD_RATE_9600
     },
     [3] = {
         .enable = 1,
@@ -576,39 +576,40 @@ struct zynq_uart_t 	zynq_uarts[] = {
             .regshift = 2,
             .iobase = 1
         },
-		.baud_rate_9600_reg_idx = 3,
-		.baud_rate_115200_reg_idx = 6,
-		.baud_rate_mode_bit = 3,
-		.baud_rate_mode = BAUD_RATE_9600
+        .baud_rate_9600_reg_idx = 3,
+        .baud_rate_115200_reg_idx = 6,
+        .baud_rate_mode_bit = 3,
+        .baud_rate_mode = BAUD_RATE_9600
     }
 };
 
 
-static int config_uart_mode(struct zynq_uart_t *up, unsigned int baud) {
-	 u32 val = 0 ;
-	 u16 reg =  FPGA_UART_BAUD_RATE_MODE_REG;
-	 u32 set_val = 0;
-	 unsigned idx = 0;
-	 if (!zynq_reg_base || !up) return -1;
+static int config_uart_mode(struct zynq_uart_t *up, unsigned int baud)
+{
+    u32 val = 0 ;
+    u16 reg =  FPGA_UART_BAUD_RATE_MODE_REG;
+    u32 set_val = 0;
+    unsigned idx = 0;
+    if (!zynq_reg_base || !up) return -1;
 
     if (fpga_release_date >=  FW_UPGRADE_SUPPORT_DATE) {
-		 if (baud == 115200) {
-	 		up->baud_rate_mode = BAUD_RATE_115200;
-			idx = up->baud_rate_115200_reg_idx;
-	 	} else if (baud == 9600) {
-			 up->baud_rate_mode = BAUD_RATE_9600;
-			 idx = up->baud_rate_9600_reg_idx;
-	 	}
+        if (baud == 115200) {
+            up->baud_rate_mode = BAUD_RATE_115200;
+            idx = up->baud_rate_115200_reg_idx;
+        } else if (baud == 9600) {
+            up->baud_rate_mode = BAUD_RATE_9600;
+            idx = up->baud_rate_9600_reg_idx;
+        }
         val = fpga_reg_read(zynq_reg_base, reg);
-		set_val = (val&~(1 << up->baud_rate_mode_bit)) |  (up->baud_rate_mode << up->baud_rate_mode_bit);
-		fpga_reg_write(zynq_reg_base, reg,   set_val);   
-		if (idx != -1) {
-			up->base  = (void __iomem	*)zynq_mmap[idx];
-     		up->port.membase= (void __iomem *)zynq_mmap[idx];
-     		up->port.mapbase = zynq_mmap[idx];
-		}		
+        set_val = (val&~(1 << up->baud_rate_mode_bit)) |  (up->baud_rate_mode << up->baud_rate_mode_bit);
+        fpga_reg_write(zynq_reg_base, reg,   set_val);
+        if (idx != -1) {
+            up->base  = (void __iomem	*)zynq_mmap[idx];
+            up->port.membase= (void __iomem *)zynq_mmap[idx];
+            up->port.mapbase = zynq_mmap[idx];
+        }
     }
-	 return 0;
+    return 0;
 }
 #if 0
 /*
@@ -617,20 +618,21 @@ static int config_uart_mode(struct zynq_uart_t *up, unsigned int baud) {
  1: EE0 under bypass mode, EE1 under normal mode
  2: EE0 under normal mode, EE1 under bypass mode
  */
-static  int upgrade_mode(void) {
-	 u32 val = 0 ;
-	 u16 reg =  FPGA_UART_WORKING_MODE_REG;
-	 int is = 0;
-	
-	if ( fpga_release_date >= FW_UPGRADE_SUPPORT_DATE) {
-		  if (zynq_reg_base) {
-	 		val = fpga_reg_read(zynq_reg_base, reg);
-			is = val;// & ~(0xfffffffc);
-		}
-	}
-	//zynq_printk(0, "[zynq_uart] fpga_release_date = 0x%08x, val = 0x%08x,  is = %d\n",  fpga_release_date,  val, is);
-	 return is;
-} 
+static  int upgrade_mode(void)
+{
+    u32 val = 0 ;
+    u16 reg =  FPGA_UART_WORKING_MODE_REG;
+    int is = 0;
+
+    if ( fpga_release_date >= FW_UPGRADE_SUPPORT_DATE) {
+        if (zynq_reg_base) {
+            val = fpga_reg_read(zynq_reg_base, reg);
+            is = val;// & ~(0xfffffffc);
+        }
+    }
+    //zynq_printk(0, "[zynq_uart] fpga_release_date = 0x%08x, val = 0x%08x,  is = %d\n",  fpga_release_date,  val, is);
+    return is;
+}
 #endif
 
 static inline struct zynq_uart_t  *port_to_zynq_uart(struct uart_port *port)
@@ -709,9 +711,9 @@ static int init_uart_ports( struct pci_dev *pdev)
 
     if (!zynq_card) return -ENOMEM;
 
-	 if (zynq_reg_base) 
-		fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG) ;
-	
+    if (zynq_reg_base)
+        fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG) ;
+
     spin_lock_init(&zynq_card->card_lock);
     zynq_card->uarts = &zynq_uarts[0];
     zynq_card->n_uarts = 0;
@@ -721,16 +723,16 @@ static int init_uart_ports( struct pci_dev *pdev)
 
     for (i = 0; i < ZYNQ_UART_NR_PORTS;  i++) {
         if (zynq_uarts[i].enable == 1) zynq_card->n_uarts++;
-    }  
-  
+    }
+
     zynq_mmap[0] = ZYNQ_UART0_PORT_START;
-  	zynq_mmap[1] = ZYNQ_UART1_PORT_START;
-  	zynq_mmap[2] = ZYNQ_UART2_PORT_START;
-	zynq_mmap[3] = ZYNQ_UART3_PORT_START;
-  	zynq_mmap[4] = ZYNQ_UART4_PORT_START;
-	zynq_mmap[5] = ZYNQ_UART5_PORT_START;
-	zynq_mmap[6] = ZYNQ_UART6_PORT_START;
-	
+    zynq_mmap[1] = ZYNQ_UART1_PORT_START;
+    zynq_mmap[2] = ZYNQ_UART2_PORT_START;
+    zynq_mmap[3] = ZYNQ_UART3_PORT_START;
+    zynq_mmap[4] = ZYNQ_UART4_PORT_START;
+    zynq_mmap[5] = ZYNQ_UART5_PORT_START;
+    zynq_mmap[6] = ZYNQ_UART6_PORT_START;
+
     zynq_uarts[0].card = zynq_card;
     zynq_uarts[0].base = (void __iomem *)ZYNQ_UART0_PORT_START;
     zynq_uarts[0].port.membase = 	(void __iomem *)ZYNQ_UART0_PORT_START;
@@ -739,7 +741,7 @@ static int init_uart_ports( struct pci_dev *pdev)
     zynq_uarts[0].port.ops = &zynq_uart_ops;
     atomic_set(&zynq_uarts[0].refcount, -1);
     check_endianess(&zynq_uarts[0].port);
-	spin_lock_init(&zynq_uarts[0].lock);
+    spin_lock_init(&zynq_uarts[0].lock);
     zynq_uarts[0].irq =  gpio_to_irq(ZYNQ_UART0_IRQ_PIN);
 
     zynq_uarts[1].card = zynq_card;
@@ -750,11 +752,11 @@ static int init_uart_ports( struct pci_dev *pdev)
     zynq_uarts[1].port.ops = &zynq_uart_ops;
     atomic_set(&zynq_uarts[1].refcount, -1);
     check_endianess(&zynq_uarts[1].port);
-	spin_lock_init(&zynq_uarts[1].lock);
+    spin_lock_init(&zynq_uarts[1].lock);
     zynq_uarts[1].irq =  gpio_to_irq(ZYNQ_UART1_IRQ_PIN);
 
-	//NOTE:For the ER board, the U67 has been removed. So the UART2 should  be disabled.
-	if (en_er_board) zynq_uarts[2].enable = 0;
+    //NOTE:For the ER board, the U67 has been removed. So the UART2 should  be disabled.
+    if (en_er_board) zynq_uarts[2].enable = 0;
     zynq_uarts[2].card = zynq_card;
     zynq_uarts[2].base = (void __iomem *)ZYNQ_UART2_PORT_START;
     zynq_uarts[2].port.membase = 	(void __iomem *)ZYNQ_UART2_PORT_START;
@@ -763,9 +765,9 @@ static int init_uart_ports( struct pci_dev *pdev)
     zynq_uarts[2].port.ops = &zynq_uart_ops;
     atomic_set(&zynq_uarts[2].refcount, -1);
     check_endianess(&zynq_uarts[2].port);
-	spin_lock_init(&zynq_uarts[2].lock);
+    spin_lock_init(&zynq_uarts[2].lock);
     zynq_uarts[2].irq =  gpio_to_irq(ZYNQ_UART2_IRQ_PIN);
-	
+
     zynq_uarts[3].card = zynq_card;
     zynq_uarts[3].base = (void __iomem *)ZYNQ_UART3_PORT_START;
     zynq_uarts[3].port.membase = 	(void __iomem *)ZYNQ_UART3_PORT_START;
@@ -774,9 +776,9 @@ static int init_uart_ports( struct pci_dev *pdev)
     zynq_uarts[3].port.ops = &zynq_uart_ops;
     atomic_set(&zynq_uarts[3].refcount, -1);
     check_endianess(&zynq_uarts[3].port);
-	spin_lock_init(&zynq_uarts[3].lock);
+    spin_lock_init(&zynq_uarts[3].lock);
     zynq_uarts[3].irq =  gpio_to_irq(ZYNQ_UART3_IRQ_PIN);
-	
+
     for (i = 0; i < zynq_card->n_uarts; i++) {
         struct uart_port *p = &zynq_uarts[i].port;
         ret = uart_add_one_port(&zynq_uart_driver, p);
@@ -809,7 +811,7 @@ static int init_uart_ports( struct pci_dev *pdev)
     }
 
 
-	return 0;
+    return 0;
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -863,7 +865,7 @@ static irqreturn_t  zynq_uart_isr(int irq, void *dev_id)
     int handled = 0;
     unsigned int i = 0;
 //	int idx = 0;
-	
+
     if (!card) return IRQ_NONE;
 
     uarts = card->uarts;
@@ -871,7 +873,7 @@ static irqreturn_t  zynq_uart_isr(int irq, void *dev_id)
     if (!uarts) return IRQ_NONE;
 
     for (i  = 0 ; i < ZYNQ_UART_NR_PORTS; i++) {
-		if (uarts[i].enable) {
+        if (uarts[i].enable) {
             if (atomic_inc_and_test(&uarts[i].refcount)) {
                 if (ulite_isr(&(uarts[i].port))) handled |= (1 << i);
             } else {
@@ -971,8 +973,8 @@ static void zynq_uart_set_termios(struct uart_port *port, struct ktermios *termi
 #else
     unsigned long flags;
     unsigned int baud;
-	struct zynq_uart_t  *up = port_to_zynq_uart(port);
-	  
+    struct zynq_uart_t  *up = port_to_zynq_uart(port);
+
     spin_lock_irqsave(&port->lock, flags);
 
     port->read_status_mask = ULITE_STATUS_RXVALID | ULITE_STATUS_OVERRUN
@@ -996,17 +998,17 @@ static void zynq_uart_set_termios(struct uart_port *port, struct ktermios *termi
     /* update timeout */
     baud = uart_get_baud_rate(port, termios, old, 0, 460800);
     uart_update_timeout(port, termios->c_cflag, baud);
-	
+
     spin_unlock_irqrestore(&port->lock, flags);
-	
-	 if (fpga_release_date >=  FW_UPGRADE_SUPPORT_DATE) {
-	 	spin_lock_irqsave(&up->lock, flags);
-	 	zynq_uart_shutdown(port);
-	 	config_uart_mode(up, baud) ;
-	 	zynq_uart_startup(port);
-	 	spin_unlock_irqrestore(&up ->lock, flags);
-	 }
-	//zynq_printk(0,"[zynq_uart]Got the baud rate: %u\n", baud);
+
+    if (fpga_release_date >=  FW_UPGRADE_SUPPORT_DATE) {
+        spin_lock_irqsave(&up->lock, flags);
+        zynq_uart_shutdown(port);
+        config_uart_mode(up, baud) ;
+        zynq_uart_startup(port);
+        spin_unlock_irqrestore(&up ->lock, flags);
+    }
+    //zynq_printk(0,"[zynq_uart]Got the baud rate: %u\n", baud);
 #endif
 }
 
@@ -1151,7 +1153,7 @@ int zynq_uart_init(void)
         zynq_printk(0,"[zynq_uart]Failed to call  uart_register_driver() !!\n");
         goto exit;
     }
-    is_success_register_uart = 1;	
+    is_success_register_uart = 1;
     return 0;
 
 exit:

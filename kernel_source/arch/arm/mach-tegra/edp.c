@@ -483,7 +483,7 @@ static int init_cpu_edp_limits_calculated(void)
 					else if (tegra_cpu_speedo_id() == -1)
 						limit = 1887000;
 			} else
-			limit = cpu_edp_calculate_maxf(params,
+				limit = cpu_edp_calculate_maxf(params,
 						   temperatures[temp_idx],
 						   -1,
 						   0,
@@ -882,8 +882,8 @@ static int init_gpu_edp_limits_calculated(void)
 			gpu_temperatures[i];
 		if (gpu_temperatures[i] == 0 && tegra_gpu_speedo_id() == 5)
 			limit = 708000;
-		else if (gpu_temperatures[i] == 0 && tegra_gpu_speedo_id() == 6)
-			limit = 852000;
+		else if (gpu_temperatures[i] >= 70 && tegra_gpu_speedo_id() == 6)
+			limit = 804000;
 		else
 			limit = gpu_edp_calculate_maxf(params,
 					       gpu_temperatures[i],

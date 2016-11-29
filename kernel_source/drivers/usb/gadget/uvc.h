@@ -24,12 +24,21 @@
 #define UVC_EVENT_STREAMOFF		(V4L2_EVENT_PRIVATE_START + 3)
 #define UVC_EVENT_SETUP			(V4L2_EVENT_PRIVATE_START + 4)
 #define UVC_EVENT_DATA			(V4L2_EVENT_PRIVATE_START + 5)
-#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 5)
+#define UVC_EVENT_FRAMEDONE		(V4L2_EVENT_PRIVATE_START + 6)
+#define UVC_EVENT_PLUGOUT		(V4L2_EVENT_PRIVATE_START + 7)
+#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 7)
 
 struct uvc_request_data
 {
 	__s32 length;
 	__u8 data[60];
+};
+
+struct uvc_frame_done_info
+{
+	__u32 buffer_index;
+	__u32 bytes_transferred;
+	__s32 status;
 };
 
 struct uvc_event
@@ -38,10 +47,12 @@ struct uvc_event
 		enum usb_device_speed speed;
 		struct usb_ctrlrequest req;
 		struct uvc_request_data data;
+		struct uvc_frame_done_info frame_done;
 	};
 };
 
 #define UVCIOC_SEND_RESPONSE		_IOW('U', 1, struct uvc_request_data)
+#define UVCIOC_PLUGOUT_CLEANUP		_IOW('U', 2, int)
 
 #define UVC_INTF_CONTROL		0
 #define UVC_INTF_STREAMING		1
@@ -74,6 +85,10 @@ struct uvc_event
 #define UVC_WARN_MINMAX				0
 #define UVC_WARN_PROBE_DEF			1
 
+#define UVC_DEFAULT_MAX_PAYLOAD_SIZE		16 * 1024
+#define UVC_DEFAULT_PAYLOAD_HEADER_SIZE		2
+#define UVC_DEFAULT_BULK_REQ_BUFFER_SIZE	512
+
 extern unsigned int uvc_gadget_trace_param;
 
 #define uvc_trace(flag, msg...) \
@@ -98,7 +113,7 @@ extern unsigned int uvc_gadget_trace_param;
 #define DRIVER_VERSION				"0.1.0"
 #define DRIVER_VERSION_NUMBER			KERNEL_VERSION(0, 1, 0)
 
-#define UVC_NUM_REQUESTS			4
+#define UVC_MAX_NUM_REQUESTS			4
 #define UVC_MAX_REQUEST_SIZE			64
 #define UVC_MAX_EVENTS				4
 
@@ -119,8 +134,8 @@ struct uvc_video
 
 	/* Requests */
 	unsigned int req_size;
-	struct usb_request *req[UVC_NUM_REQUESTS];
-	__u8 *req_buffer[UVC_NUM_REQUESTS];
+	struct usb_request *req[UVC_MAX_NUM_REQUESTS];
+	__u8 *req_buffer[UVC_MAX_NUM_REQUESTS];
 	struct list_head req_free;
 	spinlock_t req_lock;
 
@@ -133,6 +148,10 @@ struct uvc_video
 
 	struct uvc_video_queue queue;
 	unsigned int fid;
+	unsigned char payload_headsize;
+	unsigned char bulk_mode;
+	unsigned int bulk_req_size;
+	unsigned int usb_req_nums;
 };
 
 enum uvc_state
@@ -168,6 +187,8 @@ struct uvc_device
 	/* Events */
 	unsigned int event_length;
 	unsigned int event_setup_out : 1;
+
+	unsigned int suspended : 1;
 };
 
 static inline struct uvc_device *to_uvc(struct usb_function *f)
