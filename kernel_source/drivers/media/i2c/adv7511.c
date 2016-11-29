@@ -138,6 +138,7 @@ struct adv7511_state {
 	int irq;
 };
 
+static void adv7511_core_init(struct v4l2_subdev *sd,  unsigned int i2c_dev_addr );
 static void adv7511_check_monitor_present_status(struct v4l2_subdev *sd);
 static bool adv7511_check_edid_status(struct v4l2_subdev *sd);
 static void adv7511_setup(struct v4l2_subdev *sd);
@@ -608,14 +609,34 @@ static int adv7511_log_status(struct v4l2_subdev *sd)
 /* Power up/down adv7511 */
 static int adv7511_s_power(struct v4l2_subdev *sd, int on)
 {
-	struct adv7511_state *state = get_adv7511_state(sd);
+	struct adv7511_state *state = NULL;
 	const int retries = 20;
 	int i;
-
+	static unsigned int bFirstRun = 1;
+	
+	struct i2c_client *client = NULL;
+	
 	v4l2_dbg(1, debug, sd, "%s: power %s\n", __func__, on ? "on" : "off");
 
+	if (!sd) return  0; 
+	
+	state = get_adv7511_state(sd);
+	
+	if(!state) return 0;
+	
 	state->power_on = on;
-
+	
+	if (bFirstRun) {
+		client = v4l2_get_subdevdata(sd);
+		printk(KERN_INFO"[adv7511](%d)\n", __LINE__);
+		if (client) {
+			printk(KERN_INFO"[adv7511](%d)\n", __LINE__);
+			adv7511_core_init(sd, client->addr);
+		}
+		printk(KERN_INFO"[adv7511](%d)\n", __LINE__);
+		bFirstRun = 0;
+	}
+	
 	if (!on) {
 		/* Power down */
 		adv7511_wr_and_or(sd, 0x41, 0xbf, 0x40);
@@ -654,10 +675,39 @@ static int adv7511_s_power(struct v4l2_subdev *sd, int on)
 
 	adv7511_set_proper_operation_regs(state);
 
-	adv7511_wr(sd, 0x43, state->i2c_edid_addr);
+		
+	adv7511_wr(sd, 0xfa,  0x00);// Set to default 0x00
+	adv7511_wr(sd, 0xe4,  0x60); // Set to default 0x60
+	
+	adv7511_wr(sd, 0xde,  0x10);//TMDS Clk Inversion
+
+	adv7511_wr(sd, 0xd1,  0xff);// Set to default 0xff
+
+	adv7511_wr(sd, 0xba, 0x60);//No clk delay
+
+	adv7511_wr(sd, 0x56, 0x28); //16:9 Aspect ratio to out put
+	
+	adv7511_wr(sd, 0x48, 0x10); // Left Justified
+	
+	adv7511_wr(sd, 0x15,  0x01); //Input ID = 1( Formatt 4:2:2 Seperate synchs)
+
+	//adv7511_wr(sd, 0x16, 0x34); //Ouput format:4:4:4,  Depth = 8 bit, Input Style=style 2
+	adv7511_wr(sd, 0x16, 0xb4); //Output Format: 4:2:2, Color Depth = 8 bit, Input Style=style 2
+	adv7511_wr(sd, 0x17,  0x02);//I/P Aspect ratio 16:9
+
+	adv7511_wr(sd,  0x56, 0x28); //16:9 Aspect ratio to out put
+	adv7511_wr(sd,  0xaf, 0x06); //HDMI Mode
+	adv7511_wr(sd,  0x40, 0x80); // Packet Enabled
+	//NOTE:0x4c is RO. It should not be written!!
+	//adv7511_wr(sd,  0x4c, 0x04); //Color depth  24.
+	//adv7511_wr(sd,  0x55, 0x00); //Format RGB formatt, Scan Information:no data
+	adv7511_wr(sd,  0x55, 0x20); //Format YUV422, Scan Information:no data
+	
+	
+	//adv7511_wr(sd, 0x43, state->i2c_edid_addr);
 
 	/* Set number of attempts to read the EDID */
-	adv7511_wr(sd, 0xc9, 0xf);
+	//adv7511_wr(sd, 0xc9, 0xf);
 	return true;
 }
 
@@ -773,7 +823,8 @@ static int adv7511_s_dv_timings(struct v4l2_subdev *sd,
 	state->dv_timings = *timings;
 
 	/* update quantization range based on new dv_timings */
-	adv7511_set_rgb_quantization_mode(sd, state->rgb_quantization_range_ctrl);
+	if(state->rgb_quantization_range_ctrl)	
+		adv7511_set_rgb_quantization_mode(sd, state->rgb_quantization_range_ctrl);
 
 	/* update AVI infoframe */
 	adv7511_set_IT_content_AVI_InfoFrame(sd);
@@ -1351,7 +1402,7 @@ static bool adv7511_check_edid_status(struct v4l2_subdev *sd)
 		int segment = adv7511_rd(sd, 0xc4);
 		struct adv7511_edid_detect ed;
 
-		if (segment >= EDID_MAX_SEGM) {
+		if ((segment >= EDID_MAX_SEGM) || (segment < 0)) {
 			v4l2_err(sd, "edid segment number too big\n");
 			return false;
 		}
@@ -1636,11 +1687,11 @@ static int adv7511_probe(struct i2c_client *client, const struct i2c_device_id *
 		err = hdl->error;
 		goto err_hdl;
 	}
-	state->hdmi_mode_ctrl->is_private = true;
-	state->hotplug_ctrl->is_private = true;
-	state->rx_sense_ctrl->is_private = true;
-	state->have_edid0_ctrl->is_private = true;
-	state->rgb_quantization_range_ctrl->is_private = true;
+	if(state->hdmi_mode_ctrl) state->hdmi_mode_ctrl->is_private = true;
+	if (state->hotplug_ctrl) state->hotplug_ctrl->is_private = true;
+	if (state->rx_sense_ctrl) state->rx_sense_ctrl->is_private = true;
+	if (state->have_edid0_ctrl) state->have_edid0_ctrl->is_private = true;
+	if (state->rgb_quantization_range_ctrl) state->rgb_quantization_range_ctrl->is_private = true;
 
 	state->pad.flags = MEDIA_PAD_FL_SINK;
 	err = media_entity_init(&sd->entity, 1, &state->pad, 0);
@@ -1721,7 +1772,7 @@ static int adv7511_probe(struct i2c_client *client, const struct i2c_device_id *
 #endif
 
 #else
-	adv7511_core_init(sd, client->addr);
+	//adv7511_core_init(sd, client->addr);
 #endif
 
 //	v4l2_ctrl_handler_setup(&state->hdl);

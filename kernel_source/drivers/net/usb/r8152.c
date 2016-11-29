@@ -5094,6 +5094,28 @@ static void rtl8152_down(struct r8152 *tp)
 		rtl8152_set_speed(tp, AUTONEG_ENABLE, SPEED_10, DUPLEX_FULL);
 }
 
+static void rtl8153_led_up(struct r8152 *tp)
+{
+    /* Visage LED SEPC
+     *
+     * SPEED LED(LED1)  Link/Act LED(LED0)  Indication
+     * ========================================================
+     * Off              Off                 No Link
+     * Off              Yellow              Link 10/100
+     * Green            Yellow              Link 1000
+     * Off              Blinking Yellow     Active 10/100 Link
+     * Green            Blinking Yellow     Active 1000 Link
+     *
+     * LED1 is 0100b(0x4), LED0 is 1111b(0xf)
+     */
+    ocp_write_word(tp, MCU_TYPE_PLA, PLA_LEDSEL, 0x4f);
+}
+
+static void rtl8153_led_down(struct r8152 *tp)
+{
+    ocp_write_word(tp, MCU_TYPE_PLA, PLA_LEDSEL, 0x00);
+}
+
 static void rtl8153_up(struct r8152 *tp)
 {
 	if (test_bit(RTL8152_UNPLUG, &tp->flags))
@@ -5106,6 +5128,8 @@ static void rtl8153_up(struct r8152 *tp)
 	r8153_u2p3en(tp, true);
 	tp->rtl_ops.u1u2_enable(tp, true);
 	usb_enable_lpm(tp->udev);
+
+	rtl8153_led_up(tp);
 }
 
 static void rtl8153_down(struct r8152 *tp)
@@ -5121,6 +5145,8 @@ static void rtl8153_down(struct r8152 *tp)
 	tp->rtl_ops.aldps_enable(tp, false);
 	r8153_enter_oob(tp);
 	tp->rtl_ops.aldps_enable(tp, true);
+
+	rtl8153_led_down(tp);
 }
 
 static bool rtl8152_in_nway(struct r8152 *tp)
@@ -5675,9 +5701,6 @@ static void r8153_init(struct r8152 *tp)
 	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_LED_FEATURE);
 	ocp_data &= ~LED_MODE_MASK;
 	ocp_write_word(tp, MCU_TYPE_PLA, PLA_LED_FEATURE, ocp_data);
-
-	//LED0: LINK ACTIVE, LED1: LINK 1000
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_LEDSEL, 0x4f);
 
 	ocp_data = FIFO_EMPTY_1FB | ROK_EXIT_LPM;
 	if (tp->version == RTL_VER_04 && tp->udev->speed != USB_SPEED_SUPER)

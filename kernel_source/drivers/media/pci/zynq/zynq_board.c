@@ -132,59 +132,59 @@ static struct resource zynq_interrupt_resources[] = {
 
 void zynq_setup_interrupt(void)
 {
-	//for VIN0
+    //for VIN0
     zynq_interrupt_resources[0].start =  gpio_to_irq(GPIO_PU0);
     zynq_interrupt_resources[0].end =  gpio_to_irq(GPIO_PU0);
 
-	//for VIN1
+    //for VIN1
     zynq_interrupt_resources[1].start =  gpio_to_irq(GPIO_PU1);
     zynq_interrupt_resources[1].end =  gpio_to_irq(GPIO_PU1);
-    
-	//For VIN2 (web cam)
+
+    //For VIN2 (web cam)
     zynq_interrupt_resources[2].start =  gpio_to_irq(GPIO_PU2);
     zynq_interrupt_resources[2].end =  gpio_to_irq(GPIO_PU2);
 
     //For Color bar on the ER board,  For FPGA DMA read or 4th video capture on the SR board.
     zynq_interrupt_resources[3].start =  gpio_to_irq(GPIO_PU3);
     zynq_interrupt_resources[3].end =  gpio_to_irq(GPIO_PU3);
-	
-	
-	//For 4th video capture on the ER board.
+
+
+    //For 4th video capture on the ER board.
     zynq_interrupt_resources[4].start =  gpio_to_irq(GPIO_PBB5);
     zynq_interrupt_resources[4].end =  gpio_to_irq(GPIO_PBB5);
 
-/*	
-	//For 4th video capture on the ER board.
-    zynq_interrupt_resources[4].start =  gpio_to_irq(GPIO_PBB0);
-    zynq_interrupt_resources[4].end =  gpio_to_irq(GPIO_PBB0);
-	*/
-	
-	//For USB video capture on the ER board.
+    /*
+    	//For 4th video capture on the ER board.
+        zynq_interrupt_resources[4].start =  gpio_to_irq(GPIO_PBB0);
+        zynq_interrupt_resources[4].end =  gpio_to_irq(GPIO_PBB0);
+    	*/
+
+    //For USB video capture on the ER board.
     zynq_interrupt_resources[5].start =  gpio_to_irq(GPIO_PBB6);
     zynq_interrupt_resources[5].end =  gpio_to_irq(GPIO_PBB6);
-	
-	/*
-	//For USB video capture on the ER board.
+
+    /*
+    //For USB video capture on the ER board.
     zynq_interrupt_resources[5].start =  gpio_to_irq(GPIO_PBB3);
     zynq_interrupt_resources[5].end =  gpio_to_irq(GPIO_PBB3);
     */
-	return;
+    return;
 }
 
 unsigned  zynq_get_irq(int channel_id)
 {
     if (channel_id >= VPIF_CAPTURE_NUM_CHANNELS) return (unsigned) -1;
-	
-	if (en_er_board == 0) {
-		if (en_video_display == 0) goto exit;
-		if ((zynq_fpga_dma_interrupt_gpio_pin0 != -1)&&(en_video_input_window == 0)&&(en_polling_dma_mode == 0)) {
-			if (gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0) == zynq_interrupt_resources[channel_id].start) {
-				zynq_printk(0, "[zynq_board] The interrupt irq %u is equal to irq %u for FPGA DMA. So do not assign the irq to capure channel %u!!\n", zynq_interrupt_resources[channel_id].start, gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0), channel_id);
-				return  -1;
-			}
-		}
-	}
-exit:	
+
+    if (en_er_board == 0) {
+        if (en_video_display == 0) goto exit;
+        if ((zynq_fpga_dma_interrupt_gpio_pin0 != -1)&&(en_video_input_window == 0)&&(en_polling_dma_mode == 0)) {
+            if (gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0) == zynq_interrupt_resources[channel_id].start) {
+                zynq_printk(0, "[zynq_board] The interrupt irq %u is equal to irq %u for FPGA DMA. So do not assign the irq to capure channel %u!!\n", zynq_interrupt_resources[channel_id].start, gpio_to_irq(zynq_fpga_dma_interrupt_gpio_pin0), channel_id);
+                return  -1;
+            }
+        }
+    }
+exit:
     return (unsigned) zynq_interrupt_resources[channel_id].start;
 }
 
@@ -205,7 +205,7 @@ static struct adv761x_platform_data adv7611_pdata_0 = {
 static struct adv761x_platform_data adv7611_pdata_1 = {
 
     .i2c_cec = (0x80 >> 1),
-    .i2c_inf = (0x7c >> 1),
+    .i2c_inf = (0x84 >> 1),
     .i2c_dpll = (0x4c >> 1),
     .i2c_rep = (0x64 >> 1),
     .i2c_edid = (0x6c >> 1),
@@ -222,7 +222,7 @@ static struct adv7511_platform_data adv7511_pdata_0 = {
     .i2c_cec = (0x78 << 1),
     .cec_clk = 750000,
     //.gpio = GPIO_PK3
-	.gpio = -1
+    .gpio = -1
 };
 
 static struct adv7511_platform_data adv7511_pdata_1 = {
@@ -230,7 +230,7 @@ static struct adv7511_platform_data adv7511_pdata_1 = {
     .i2c_cec = (0x78 << 1) >> 1,
     .cec_clk = 750000,
     //.gpio = GPIO_PK4
-	.gpio = -1
+    .gpio = -1
 };
 
 
@@ -330,10 +330,10 @@ static void rls_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci_
             is_scaler = 1;
             index =3;
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
-            break;	
+            break;
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -405,8 +405,8 @@ static void rls_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci_
         scaler_status_t st;
         scaler_get_status(&st, index);
         if (st.is_initialized) {
-			scaler_release_by_index(pci_base_addr, index);
-		}
+            scaler_release_by_index(pci_base_addr, index);
+        }
     }  else if (is_osd && (index != (unsigned int)-1)) {
         osd_status_t st;
         osd_get_status(&st, index);
@@ -458,8 +458,8 @@ static void init_imp(struct vpif_vidoe_pipelie_entity* handle, void __iomem *pci
             is_scaler = 1;
             index =3;
             break;
-		case SCALER4: 
-			is_scaler = 1;
+        case SCALER4:
+            is_scaler = 1;
             index =4;
             break;
         case VSELECTOR:
@@ -603,11 +603,11 @@ static void dump_regs_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             dump_scaler_regs(index);
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             dump_scaler_regs(index);
-            break;	
+            break;
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -756,11 +756,11 @@ static void stop_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             stop_scaler(index);
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             stop_scaler(index);
-            break;	
+            break;
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -910,11 +910,11 @@ static void start_imp(struct vpif_vidoe_pipelie_entity* handle)
             index =3;
             start_scaler(index);
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             start_scaler(index);
-            break;	
+            break;
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -1080,11 +1080,11 @@ static void config_imp(struct vpif_vidoe_pipelie_entity* handle,  vpif_vidoe_pip
             index =3;
             config_scaler(index,   config);
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             config_scaler(index,   config);
-            break;	
+            break;
         case VSELECTOR:
             is_vselector = 1;
             break;
@@ -1258,11 +1258,11 @@ static void config_input_size_imp(struct vpif_vidoe_pipelie_entity* handle, unsi
             index =3;
             config_scaler_input_size(index,   in_width,  in_height);
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             config_scaler_input_size(index,   in_width,  in_height);
-            break;	
+            break;
         case VDMA0:
             is_vdma = 1;
             index = 0;
@@ -1390,11 +1390,11 @@ static void config_crop_imp(struct vpif_vidoe_pipelie_entity* handle, unsigned i
             index =3;
             config_scaler_crop(index,  crop_start_x, crop_start_y, crop_width, crop_height) ;
             break;
-		case SCALER4:
+        case SCALER4:
             is_scaler = 1;
             index =4;
             config_scaler_crop(index,  crop_start_x, crop_start_y, crop_width, crop_height) ;
-            break;	
+            break;
         case VSELECTOR:
         case VDMA0:
         case VDMA1:
@@ -1428,7 +1428,7 @@ vpif_vidoe_pipelie_entity_t  board_video_pipeline_entities[] = {
     {.type= SCALER_TYPE, .id = SCALER2, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= SCALER_TYPE, .id = SCALER3, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     //{.type= SCALER_TYPE, .id = SCALER4, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
-	{.type= OSD_TYPE, .id = OSD0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
+    {.type= OSD_TYPE, .id = OSD0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= OSD_TYPE, .id = OSD1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= CRESAMPLER_TYPE, .id = CRESAMPLER0, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
     {.type= CRESAMPLER_TYPE, .id = CRESAMPLER1, .config = config_imp, .start = start_imp, .stop = stop_imp, .init = init_imp, .rls = rls_imp, .dump_regs = dump_regs_imp, .config_input_size = config_input_size_imp, .config_crop = config_crop_imp},
@@ -1473,8 +1473,8 @@ const char *to_video_pipelin_entity_name(vpif_vidoe_pipelie_entity_id_t  id)
             return  "SCALER2";
         case SCALER3:
             return  "SCALER3";
-		case SCALER4:
-            return  "SCALER4";	
+        case SCALER4:
+            return  "SCALER4";
         case CRESAMPLER0:
             return  "CRESAMPLER0";
         case CRESAMPLER1:
@@ -1566,12 +1566,12 @@ const char *to_video_data_pin_name(vpif_video_data_pin_t pin)
             return "SCALER2_OUT";
         case SCALER3_IN:
             return "SCALER3_IN";
-		case SCALER4_IN:
-            return "SCALER4_IN";	
+        case SCALER4_IN:
+            return "SCALER4_IN";
         case SCALER3_OUT:
             return "SCALER3_OUT";
-		case SCALER4_OUT:
-            return "SCALER4_OUT";	
+        case SCALER4_OUT:
+            return "SCALER4_OUT";
         case VSELECTOR_IN:
             return "VSELECTOR_IN";
         case VSELECTOR_OUT:
