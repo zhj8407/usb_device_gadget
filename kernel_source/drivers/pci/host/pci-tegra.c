@@ -867,10 +867,9 @@ static irqreturn_t tegra_pcie_isr(int irq, void *arg)
 	 * happen a lot during enumeration
 	 */
 	if (code == AFI_INTR_MASTER_ABORT)
-		pr_debug("PCIE: %s, signature: %08x\n",
-				err_msg[code], signature);
+		pr_err("PCIE jeff1 (%d): %s, signature: %08x\n", __LINE__, err_msg[code], signature);
 	else if ((code != AFI_INTR_LEGACY) && (code != AFI_INTR_PRSNT_SENSE))
-		pr_err("PCIE: %s, signature: %08x\n", err_msg[code], signature);
+		pr_err("PCIE jeff2 (%d): %s, signature: %08x\n", __LINE__ ,err_msg[code], signature);
 
 	return IRQ_HANDLED;
 }
@@ -1010,11 +1009,14 @@ static int tegra_pcie_enable_controller(void)
 		}
 	}
 	afi_writel(val, AFI_PCIE_CONFIG);
-
+	
+	pr_err("[%s] Enable Gen2\n", __func__);
+#if 1
 	/* Enable Gen 2 capability of PCIE */
 	val = afi_readl(AFI_FUSE) & ~AFI_FUSE_PCIE_T0_GEN2_DIS;
 	afi_writel(val, AFI_FUSE);
-
+#endif
+	
 	/* Finally enable PCIe */
 	val = afi_readl(AFI_CONFIGURATION);
 	val |=  AFI_CONFIGURATION_EN_FPCI;
@@ -1399,6 +1401,7 @@ static int tegra_pcie_get_resources(void)
 		pr_err("PCIE: Failed to register IRQ: %d\n", err);
 		goto err_pwr_on;
 	}
+	pr_err("[pci-tegra](%d)INT_PCIE_INTR = %d \n", __LINE__, INT_PCIE_INTR);
 	set_irq_flags(INT_PCIE_INTR, IRQF_VALID);
 	return 0;
 

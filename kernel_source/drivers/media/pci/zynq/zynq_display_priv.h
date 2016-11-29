@@ -86,20 +86,20 @@ struct common_obj {
     u32 cbtm_off;				/* offset of C bottom from the
 						 * starting of the buffer */
 
-    /* Function pointer to set the addresses */
+	/* Function pointer to set the addresses */
     void (*set_addr) (unsigned long);
     void (*set_res) (unsigned long, unsigned long);
     void (*enable_read) (unsigned int);
-    void (*enable_channel_intr)(int);
-
+	void (*enable_channel_intr)(int);
+	
     u32 height;
     u32 width;
-
-    u32 dummy_buffer_handle;
+	
+	u32 dummy_buffer_handle;
     char *dummy_buffer;
     unsigned int dummy_buffer_size;
-
-    atomic_t refcount;
+	
+	 atomic_t refcount;
 
 };
 
@@ -122,10 +122,9 @@ struct channel_obj {
     struct vpif_params vpifparams;
     struct common_obj common[VPIF_NUMOBJECTS];
     struct video_obj video;
-
-    unsigned int interrupt_count;
-    unsigned int interrupt_dummy_buffer_count;
-    unsigned int is_initial_subdev;
+	
+	unsigned int interrupt_count;
+	unsigned int interrupt_dummy_buffer_count;
 };
 
 /* File handle structure */

@@ -10,7 +10,7 @@ if MEDIA_PCI_SUPPORT
 
 comment "Zynq audio/video support"
 source "drivers/media/pci/zynq/Kconfig"
-	
+
 if MEDIA_CAMERA_SUPPORT
 	comment "Media capture support"
 source "drivers/media/pci/meye/Kconfig"

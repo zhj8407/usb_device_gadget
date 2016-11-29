@@ -15,7 +15,7 @@
 	(((V4L2_FIELD_INTERLACED == field) || \
 	(V4L2_FIELD_SEQ_TB == field)) || \
 	(V4L2_FIELD_SEQ_BT == field)))
-
+	
 #define VPIF_VIDEO_INDEX		0
 #define VPIF_NUMBER_OF_OBJECTS		1
 /* Enumerated data type to give id to each device per channel */
@@ -24,8 +24,8 @@ enum vpif_channel_id {
     VPIF_CHANNEL1_VIDEO = 1,
     VPIF_CHANNEL2_VIDEO = 2,
     VPIF_CHANNEL3_VIDEO = 3,
-    VPIF_CHANNEL4_VIDEO = 4,
-    VPIF_CHANNEL5_VIDEO = 5,
+	VPIF_CHANNEL4_VIDEO = 4,
+	VPIF_CHANNEL5_VIDEO = 5,
 };
 
 struct video_obj {
@@ -90,8 +90,8 @@ struct common_obj {
     u8 is_stop_streaming;
 
     atomic_t refcount;
-
-    unsigned int reqbuf_count;
+	
+	unsigned int reqbuf_count; 
 };
 
 struct channel_obj {
@@ -127,11 +127,11 @@ struct channel_obj {
     struct workqueue_struct			*work_queue;
     struct work_struct			interrupt_service;
     char  work_queue_name[128];
-
-    u32 interrupt_count;
-    u32 interrupt_dummy_buffer_count;
-
-    unsigned int en_non_cache_map;
+	
+	u32 interrupt_count;
+	u32 interrupt_dummy_buffer_count;
+	
+	unsigned int en_non_cache_map;
 };
 
 /* File handle structure */
@@ -329,7 +329,7 @@ struct vpif_capture_config  vpif_capture_cfg = {
             .fid_pol = 0,
         },
     },
-    .chan_config[4] = {
+	.chan_config[4] = {
         .inputs = dm6467_ch4_inputs,
         .input_count = ARRAY_SIZE(dm6467_ch4_inputs),
         .vpif_if = {
@@ -339,7 +339,7 @@ struct vpif_capture_config  vpif_capture_cfg = {
             .fid_pol = 0,
         },
     },
-    .chan_config[5] = {
+	.chan_config[5] = {
         .inputs = dm6467_ch5_inputs,
         .input_count = ARRAY_SIZE(dm6467_ch5_inputs),
         .vpif_if = {

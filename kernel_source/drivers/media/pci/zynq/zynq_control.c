@@ -58,8 +58,8 @@ static int stop_all_video_pipeline_entities(void __iomem *pci_reg_base);
 static int start_all_video_pipeline_entities(void __iomem *pci_reg_base);
 static int release_all_video_pipeline_entities(void __iomem *pci_reg_base);
 static int init_all_video_pipeline_entities(void __iomem *pci_reg_base);
-//static int create_register_dump_sysfs(struct kobject *kobj);
-//static int destroy_register_dump_sysfs(struct kobject *kobj);
+static int create_register_dump_sysfs(struct kobject *kobj);
+static int destroy_register_dump_sysfs(struct kobject *kobj);
 
 static void config_scaler(vpif_vidoe_pipelie_entity_t *entity);
 static void config_vselector(vpif_vidoe_pipelie_entity_t *entity) ;
@@ -98,44 +98,40 @@ static struct i2c_adapter *g_tc358746_i2c_adap = NULL;
 static struct i2c_client *g_tc358746_i2c_client = NULL;
 
 static struct  i2c_board_info g_tc358746_i2c_info = {
-    I2C_BOARD_INFO( TC358746_I2C_ID_NAME, TC358746_I2C_ADDRESS),
-    .platform_data = NULL
+	I2C_BOARD_INFO( TC358746_I2C_ID_NAME, TC358746_I2C_ADDRESS),
+	.platform_data = NULL
 };
 
 //Refence from : http://lxr.free-electrons.com/source/drivers/i2c/i2c-core.c#L2195
-static int i2c_client_probe(struct i2c_adapter * adap, unsigned short addr)
-{
+static int i2c_client_probe(struct i2c_adapter * adap, unsigned short addr) {
     int err;
     union i2c_smbus_data dummy;
     err = i2c_smbus_xfer(adap, addr, 0, I2C_SMBUS_READ, 0, I2C_SMBUS_BYTE, &dummy);
     return err >= 0;
 }
 
-static int tc358746_init(void)
-{
-    g_tc358746_i2c_adap =  i2c_get_adapter(g_tc358746_i2c_bus );
-    if (g_tc358746_i2c_adap != NULL)
-        g_tc358746_i2c_client  = 	i2c_new_probed_device(g_tc358746_i2c_adap, &g_tc358746_i2c_info, &g_tc358746_i2c_address,  i2c_client_probe);
-    return 0;
+static int tc358746_init(void) {
+	g_tc358746_i2c_adap =  i2c_get_adapter(g_tc358746_i2c_bus );	
+	if (g_tc358746_i2c_adap != NULL)  
+		g_tc358746_i2c_client  = 	i2c_new_probed_device(g_tc358746_i2c_adap, &g_tc358746_i2c_info, &g_tc358746_i2c_address,  i2c_client_probe);
+	return 0;
 }
 
-static int tc358746_is_yuv(void)
-{
-    if ((g_tc358746_i2c_adap != NULL) && (g_tc358746_i2c_client != NULL) ) {
-        u32 value = 0;
-        i2c_smbus_write_byte_data(g_tc358746_i2c_client, 0x0, 0x6a);
-        value = i2c_smbus_read_word_data(g_tc358746_i2c_client, 0x0);
-        zynq_printk(1, "[zynq_control]tc358746 >>>> 0x%08x\n", value);
-        if (value == 0x1e00) return 1;
-    }
-    return 0;
+static int tc358746_is_yuv(void) {
+	if ((g_tc358746_i2c_adap != NULL) && (g_tc358746_i2c_client != NULL) ) {
+		u32 value = 0;
+		i2c_smbus_write_byte_data(g_tc358746_i2c_client, 0x0, 0x6a);
+		value = i2c_smbus_read_word_data(g_tc358746_i2c_client, 0x0);
+		zynq_printk(1, "[zynq_control]tc358746 >>>> 0x%08x\n", value);
+		if (value == 0x1e00) return 1;
+	}
+	return 0;
 }
 
-static int tc358746_rls(void)
-{
-    if(g_tc358746_i2c_client != NULL)	i2c_unregister_device(g_tc358746_i2c_client);
-    if (g_tc358746_i2c_adap != NULL)  i2c_put_adapter(g_tc358746_i2c_adap);
-    return  0;
+static int tc358746_rls(void) {
+	if(g_tc358746_i2c_client != NULL)	i2c_unregister_device(g_tc358746_i2c_client);
+	if (g_tc358746_i2c_adap != NULL)  i2c_put_adapter(g_tc358746_i2c_adap);
+	return  0;
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -149,8 +145,8 @@ static const struct v4l2_ioctl_ops vpif_ioctl_ops = {
     .vidioc_g_ctrl                      = vpif_g_ctrl,
     .vidioc_vout_pipeline = vpif_vout_pipline,
     .vidioc_scaler_crop = vpif_scaler_crop,
-    .vidioc_vout_osd = vpif_vout_osd,
-    .vidioc_uart_mode = vpif_uart_mode
+	.vidioc_vout_osd = vpif_vout_osd,
+	.vidioc_uart_mode = vpif_uart_mode
 };
 
 static const struct v4l2_file_operations vpif_fops = {
@@ -200,7 +196,7 @@ static int vpif_control_enable_video_stream_by_id(ePIPEPORTID id, unsigned int e
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
-        val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+		val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
         switch (id) {
             case EVIN0:
                 if (enable)
@@ -232,7 +228,7 @@ static int vpif_control_enable_video_stream_by_id(ePIPEPORTID id, unsigned int e
 static int vpif_control_enable_video_streams(unsigned int enable)
 {
     u32 val = 0;
-
+	
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
@@ -250,71 +246,69 @@ static int vpif_control_enable_video_streams(unsigned int enable)
     return  0;
 }
 
-int vpif_control_config_webcam_enable(unsigned int enable)
-{
+int vpif_control_config_webcam_enable(unsigned int enable) {
 
-    u32 val = 0;
+  u32 val = 0;
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
-        val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-        if (enable)
-            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
-        else
-            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
-        val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-        zynq_printk(0, "[zynq_control] (%d) enable web cam video stream reg: 0x%08x\n", __LINE__, val);
-    }
+		val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+		if (enable)
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
+		else
+			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
+		val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+       	zynq_printk(0, "[zynq_control] (%d) enable web cam video stream reg: 0x%08x\n", __LINE__, val);
+	}
     return 0;
 
-
+	
 }
 
-int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_height )
-{
-
-    vpif_vidoe_pipelie_entity_config_t config;
+int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_height ) {
+	
+	vpif_vidoe_pipelie_entity_config_t config;
     scaler_size_t size;
     scaler_crop_area_t crop;
     scaler_num_phases_t phases;
     scaler_coef_data_t  coef_data;
     scaler_shrink_factor_t shrink_factor;
-    unsigned int crop_start_x = 0;
+	unsigned int crop_start_x = 0;
     unsigned int crop_start_y = 0;
     unsigned int crop_width = (unsigned int)-1;
     unsigned int crop_height = (unsigned int)-1;
-    unsigned int in_width =(unsigned int)-1;
+	unsigned int in_width =(unsigned int)-1;
     unsigned int in_height =(unsigned int)-1;
-
+	
     vpif_vidoe_pipelie_entity_t *entity = &webcam_pipeline_entity;
 
-    m10mo_get_resolution(&in_width, &in_height);
-
-    if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) return -1;
-
-    if ((out_width * out_height) > (in_width * in_height)) {
-        zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because out:(%u, %u) > in:(%u, %u)\n", out_width, out_height, in_width, in_height);
-        return -1;
-    }
-
-    crop_width = in_width;
-    crop_height = in_height;
-
-    if (!entity) {
-        zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because the entity is NULL!!\n");
-        return  -1;
-    } else {
-        zynq_printk(0, "[zynq_control] Set the resolution of web cam from (%u, %u) to (%u, %u)\n", in_width, in_height, out_width, out_height);
-    }
-
-    vpif_control_config_webcam_enable(0);
-    fpga_reg_write(zynq_reg_base,  FPGA_WEBCAM_VIDEO_RES_REG, ((out_width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | out_height));
+	m10mo_get_resolution(&in_width, &in_height);
+	
+	if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) return -1;
+	
+	if ((out_width * out_height) > (in_width * in_height)) {
+		zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because out:(%u, %u) > in:(%u, %u)\n", out_width, out_height, in_width, in_height);
+		return -1;
+	}
+	
+	crop_width = in_width;
+	crop_height = in_height;
+	
+	if (!entity) {
+		zynq_printk(0, "[zynq_control] Could not set the resolution of web cam !! Because the entity is NULL!!\n");
+		return  -1;
+	} else {
+		zynq_printk(0, "[zynq_control] Set the resolution of web cam from (%u, %u) to (%u, %u)\n", in_width, in_height, out_width, out_height);
+	}
+	
+	vpif_control_config_webcam_enable(0);
+	fpga_reg_write(zynq_reg_base,  FPGA_WEBCAM_VIDEO_RES_REG, ((out_width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | out_height));
 #if 1
-    entity->stop(entity);
-    entity->rls(entity, zynq_reg_base);
+	entity->stop(entity);
+	entity->rls(entity, zynq_reg_base);
     entity->init(entity, zynq_reg_base);
-
-    config.flag =  SCALER_OPTION_SET_IN_SIZE;
+	
+	config.flag =  SCALER_OPTION_SET_IN_SIZE;
     size.width = in_width;
     size.height = in_height;
     config.data = &size;
@@ -353,10 +347,10 @@ int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_heig
     config.data=&coef_data;
     entity->config(entity,  &config);
 
-    entity->start(entity);
+	entity->start(entity);
 #endif
-    vpif_control_config_webcam_enable(1);
-    return 0;
+	vpif_control_config_webcam_enable(1);
+	return 0;
 }
 
 int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable)
@@ -397,27 +391,24 @@ int vpif_control_config_vin(ePIPEPORTID id, unsigned int enable)
     return 0;
 }
 
-int vpif_control_config_reset(unsigned int enable)
-{
-    if (enable) {
-        atomic_set(&g_is_should_reset, 0);
-    } else {
-        atomic_set(&g_is_should_reset, -1);
-    }
-    return 0;
+int vpif_control_config_reset(unsigned int enable) {
+	if (enable) {
+		atomic_set(&g_is_should_reset, 0);
+	} else {
+		atomic_set(&g_is_should_reset, -1);
+	}
+	return 0;
 }
 
-static unsigned int vpif_control_is_should_reset(void)
-{
-    if (atomic_read(&g_is_should_reset) == -1) {
-        return 0;
-    } else {
-        return 1;
-    }
+static unsigned int vpif_control_is_should_reset(void) {
+	if (atomic_read(&g_is_should_reset) == -1){
+         return 0;
+	} else {
+		return 1;
+	}
 }
 
-static unsigned int vpif_control_is_valid(ePIPEPORTID id)
-{
+static unsigned int vpif_control_is_valid(ePIPEPORTID id) {
     switch (id) {
         case EVIN0:
             if (atomic_read(&g_is_vin0_valid) == -1)
@@ -432,51 +423,50 @@ static unsigned int vpif_control_is_valid(ePIPEPORTID id)
         case EVIN2:
             //TODO: The webcam always valid. Because the driver counld not detect the status of attching for webcam.
             if (atomic_read(&g_is_vin2_valid) == -1)
-                return 0;
+            		return 0;
             else
-                return 1;
+            		return 1;
         case ECPU:
             //TODO: The cpu input  always valid. Because the FPGA function is  implemented now.
             if (atomic_read(&g_is_cpuin_valid) == -1)
-                return 0;
+            		return 0;
             else
-                return 1;
-            //   return 1;
+            		return 1;
+         //   return 1;
         default:
             return 0;
     }
 }
 
-int vpif_control_init_pipeline(struct pci_dev *pdev)
-{
+int vpif_control_init_pipeline(struct pci_dev *pdev) {
     if (!pdev) return -1;
-
-
-    g_pci_dev = pdev;
-
+	
+	
+	g_pci_dev = pdev;
+	
 /////////////////////////////////////////////////////////////////////
     /*FPGA  initialize function*/
     fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG) ;
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
         zynq_printk(1, "[zynq_control] Enable FPGA modules.\n");
-        if (fpga_release_date >= 0x20160801)
-            default_divisor = 3;
-        else
-            default_divisor = 4;
-        zynq_printk(1, "[zynq_control](%d) default_divisor = %u\n", __LINE__, default_divisor);
+		if (fpga_release_date >= 0x20160801) 
+				default_divisor = 3;
+		else 
+				default_divisor = 4;
+		zynq_printk(1, "[zynq_control](%d) default_divisor = %u\n", __LINE__, default_divisor);
         g_is_pipeline_initialized = 1;
         mutex_init(&g_config_lock);
-        atomic_set(&g_is_cpuin_valid, -1);
+		atomic_set(&g_is_cpuin_valid, -1);
         atomic_set(&g_is_vin0_valid, -1);
         atomic_set(&g_is_vin1_valid, -1);
         atomic_set(&g_is_vin2_valid, -1);
-        atomic_set(&g_is_should_reset, -1);
-        tc358746_init();
+		atomic_set(&g_is_should_reset, -1);
+		tc358746_init();
         init_all_video_pipeline_entities(zynq_reg_base);
         config_all_video_pipeline_entities(zynq_reg_base);
         start_all_video_pipeline_entities(zynq_reg_base) ;
         //dump_all_video_pipeline_entities(zynq_reg_base);
-       // create_register_dump_sysfs(&pdev->dev.kobj);
+        create_register_dump_sysfs(&pdev->dev.kobj);
         // vpif_control_enable_video_streams(1);
     } else {
         zynq_printk(1, "[zynq_control] Disable FPGA modules. Because 0x%x > 0x%x\n", FPGA_MODULE_SUPPORT_DATE, fpga_release_date);
@@ -484,8 +474,7 @@ int vpif_control_init_pipeline(struct pci_dev *pdev)
 ////////////////////////////////////////////////////////////////////
     return 0;
 }
-int vpif_control_release_pipeline(struct pci_dev *pdev)
-{
+int vpif_control_release_pipeline(struct pci_dev *pdev) {
 
     if (!pdev) return -1;
 ////////////////////////////////////////////////////////////////////
@@ -497,7 +486,7 @@ int vpif_control_release_pipeline(struct pci_dev *pdev)
                 vpif_control_enable_video_streams(0);
                 stop_all_video_pipeline_entities(zynq_reg_base);
                 release_all_video_pipeline_entities(zynq_reg_base);
-                //destroy_register_dump_sysfs(&pdev->dev.kobj);
+                destroy_register_dump_sysfs(&pdev->dev.kobj);
                 mutex_destroy(&g_config_lock);
             }
             tc358746_rls();
@@ -507,9 +496,8 @@ int vpif_control_release_pipeline(struct pci_dev *pdev)
     return 0;
 }
 
-int vpif_control_init(struct pci_dev *pdev)
-{
-
+int vpif_control_init(struct pci_dev *pdev) {
+	
     struct video_device *vfd = NULL;
     int register_err = -1;
     int register_device_err = -1;
@@ -548,8 +536,7 @@ exit:
     return -1;
 }
 
-int vpif_control_release(struct pci_dev *pdev)
-{
+int vpif_control_release(struct pci_dev *pdev) {
     if (is_initial_vpif_obj) {
         if (vpif_video_dev) video_unregister_device(vpif_video_dev);
         v4l2_device_unregister(&vpif_obj.v4l2_dev);
@@ -558,8 +545,7 @@ int vpif_control_release(struct pci_dev *pdev)
     return 0;
 }
 
-struct vpif_control_device * vpif_control_get_instnace(void)
-{
+struct vpif_control_device * vpif_control_get_instnace(void) {
     if ( is_initial_vpif_obj)
         return  &vpif_obj;
     else
@@ -567,37 +553,31 @@ struct vpif_control_device * vpif_control_get_instnace(void)
 
 }
 
-static int vpif_open(struct file *filep)
-{
+static int vpif_open(struct file *filep) {
     return 0;
 }
 
 
-static int vpif_release(struct file *filep)
-{
+static int vpif_release(struct file *filep) {
     return 0;
 }
 
-static int vpif_mmap(struct file *filep, struct vm_area_struct *vma)
-{
+static int vpif_mmap(struct file *filep, struct vm_area_struct *vma) {
     return 0;
 }
 
-static unsigned int vpif_poll(struct file *filep, poll_table * wait)
-{
+static unsigned int vpif_poll(struct file *filep, poll_table * wait) {
     return 0;
 }
 
 static int vpif_querycap(struct file *file, void  *priv,
-                         struct v4l2_capability *cap)
-{
+                         struct v4l2_capability *cap) {
     return 0;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 /*IOCTL functions*/
 
-static int vpif_g_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl)
-{
+static int vpif_g_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl) {
     int ret = 0;
 #if 0
     struct vpif_fh *fh = priv;
@@ -618,8 +598,7 @@ static int vpif_g_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl)
 
 
 
-static int vpif_s_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl)
-{
+static int vpif_s_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl) {
     int ret = 0;
 
 #if 0
@@ -651,66 +630,60 @@ struct v4l2_uart_mode {
 	eUARTMODE mode_ee0;
 	eUARTMODE mode_ee1;
 } ;
-
+ 
  */
 
-static int  vpif_uart_mode(struct file *file, void *fh, struct v4l2_uart_mode *a)
-{
+static int  vpif_uart_mode(struct file *file, void *fh, struct v4l2_uart_mode *a) {
+	
+	u32 set_value_ee0 = (u32)-1;
+	u32 set_value_ee1 = (u32)-1;
+	u32 set_value = 0;
+	
+	u32 value = 0;
+	
+	u32 mode_ee0_bit_field = 0x0;
+	u32 mode_ee1_bit_field = 0x1;
 
-    u32 set_value_ee0 = (u32)-1;
-    u32 set_value_ee1 = (u32)-1;
-    u32 set_value = 0;
-
-    u32 value = 0;
-
-    u32 mode_ee0_bit_field = 0x0;
-    u32 mode_ee1_bit_field = 0x1;
-
-    if (!a || !zynq_reg_base) goto exit;
-
-    //(val&~(1 << up->baud_rate_mode_bit)) |  (up->baud_rate_mode << up->baud_rate_mode_bit);
-    switch (a->mode_ee0) {
-        case EUARTNORMALMODE:
-            set_value_ee0 = 0x0;
-            break;
-        case EUARTBYPASSMODE:
-            set_value_ee0 = 0x1;
-            break;
-        default:
-            break;
-    }
-
-    if (set_value_ee0 != (u32)-1) {
-        value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
-        set_value = (value &~(1 << mode_ee0_bit_field)) |  (set_value_ee0 << mode_ee0_bit_field);
-        fpga_reg_write(zynq_reg_base,  FPGA_UART_WORKING_MODE_REG, set_value);
-    }
-
-    switch (a->mode_ee1) {
-        case EUARTNORMALMODE:
-            set_value_ee1 = 0x0;
-            break;
-        case EUARTBYPASSMODE:
-            set_value_ee1 = 0x1;
-            break;
-        default:
-            break;
-    }
-
-    if (set_value_ee1 != (u32)-1) {
-        value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
-        set_value = (value &~(1 << mode_ee1_bit_field)) |  (set_value_ee1 << mode_ee1_bit_field);
-        fpga_reg_write(zynq_reg_base,  FPGA_UART_WORKING_MODE_REG, set_value);
-    }
-
-    value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
-    //zynq_printk(0, "[zynq_control] uart working mode: 0x%08x\n", value);
-exit:
-    return 0;
+	if (!a || !zynq_reg_base) goto exit;
+	
+	//(val&~(1 << up->baud_rate_mode_bit)) |  (up->baud_rate_mode << up->baud_rate_mode_bit);
+	switch (a->mode_ee0) {
+		case EUARTNORMALMODE:
+			set_value_ee0 = 0x0; break;
+		case EUARTBYPASSMODE:
+			set_value_ee0 = 0x1; break;
+		default:
+			break;
+	}
+	
+	if (set_value_ee0 != (u32)-1) {
+		value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
+		set_value = (value &~(1 << mode_ee0_bit_field)) |  (set_value_ee0 << mode_ee0_bit_field);
+		fpga_reg_write(zynq_reg_base,  FPGA_UART_WORKING_MODE_REG, set_value);
+	}
+	
+	switch (a->mode_ee1) {
+		case EUARTNORMALMODE:
+			set_value_ee1 = 0x0; break;
+		case EUARTBYPASSMODE:
+			set_value_ee1 = 0x1; break;
+		default:
+			break;
+	}
+	
+	if (set_value_ee1 != (u32)-1) {
+		value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
+		set_value = (value &~(1 << mode_ee1_bit_field)) |  (set_value_ee1 << mode_ee1_bit_field);
+		fpga_reg_write(zynq_reg_base,  FPGA_UART_WORKING_MODE_REG, set_value);
+	}
+	
+	value = fpga_reg_read(zynq_reg_base,FPGA_UART_WORKING_MODE_REG);
+	//zynq_printk(0, "[zynq_control] uart working mode: 0x%08x\n", value);
+exit:	
+	return 0;
 }
 
-static char  *videofmt_to_string(eVideoFormat fmt)
-{
+static char  *videofmt_to_string(eVideoFormat fmt) {
     switch (fmt) {
         case E1080P60FMT:
             return "1080p60";
@@ -725,8 +698,7 @@ static char  *videofmt_to_string(eVideoFormat fmt)
     }
 }
 
-static char  *osdscale_to_string(eOSDScale scale)
-{
+static char  *osdscale_to_string(eOSDScale scale) {
     switch (scale) {
         case E1TO16SCALE:
             return "1/16";
@@ -746,36 +718,33 @@ struct v4l2_vout_osd {
 	__u32 layer1_enable; //0 : disable layer1 (osd view), 1: enable layer1 (osd view)
 };
  */
-static int vpif_vout_osd(struct file *file, void *fh, struct v4l2_vout_osd *a)
-{
-    osd_enable_t full_enable;
-    osd_enable_t osd_enable;
-
-    if (!a) goto exit;
-
-    if (a->is_config_layer0) {
-        full_enable.value = a->layer0_enable;
-        osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )a->osd_id);
-    }
-
-    if (a->is_config_layer1) {
-        osd_enable.value = a->layer1_enable;
-        osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )a->osd_id);
-    }
-
-exit:
-    return 0;
+static int vpif_vout_osd(struct file *file, void *fh, struct v4l2_vout_osd *a) {
+	osd_enable_t full_enable;
+	osd_enable_t osd_enable;
+	
+	if (!a) goto exit;
+	
+	if (a->is_config_layer0) {
+		full_enable.value = a->layer0_enable;
+		osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )a->osd_id);	
+	}
+	
+	if (a->is_config_layer1) {
+		osd_enable.value = a->layer1_enable;
+		osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )a->osd_id);	
+	}
+	
+exit:	
+	return 0;
 }
 
-static void vpif_print_vout_pipeline(struct v4l2_vout_pipeline *a)
-{
-    zynq_printk(1, "[zynq_control] configure format: %s \n", videofmt_to_string(a->format));
-    zynq_printk(1, "[zynq_control] configure vout_0:  (full, osd) -> (%u,%u) \n", a->pipes[0].full, a->pipes[0].osd);
-    zynq_printk(1, "[zynq_control] configure vout_1:  (full, osd) -> (%u,%u) \n", a->pipes[1].full, a->pipes[1].osd);
+static void vpif_print_vout_pipeline(struct v4l2_vout_pipeline *a) {
+	zynq_printk(1, "[zynq_control] configure format: %s \n", videofmt_to_string(a->format));
+	zynq_printk(1, "[zynq_control] configure vout_0:  (full, osd) -> (%u,%u) \n", a->pipes[0].full, a->pipes[0].osd);
+	zynq_printk(1, "[zynq_control] configure vout_1:  (full, osd) -> (%u,%u) \n", a->pipes[1].full, a->pipes[1].osd);
 }
 
-static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipeline *a)
-{
+static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipeline *a) {
     unsigned int i = 0;
     unsigned int vout_num = 2;
     unsigned int is_config = 0;
@@ -784,140 +753,140 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     vpif_vidoe_pipelie_entity_config_t config;
     vselector_source_t  src;
     vselector_vout_frame_size_t size;
-    vselector_vout_scaled_frame_size_t scaled_size;
+	vselector_vout_scaled_frame_size_t scaled_size;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
     unsigned int is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
     unsigned int is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
     unsigned int is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
     unsigned int is_valid_cpu = vpif_control_is_valid(ECPU) ;
-
+	
     entity = board_find_video_pipeline_entity(VSELECTOR);
 
     if ((fpga_release_date < FPGA_MODULE_SUPPORT_DATE) || (en_modules == 0)) return -1;
 
     if (entity == NULL) return  -1;
-
-    if (tc358746_is_yuv()) {
-        vpif_control_config_vin(EVIN2, 1);
-        is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
-    }
-
-    if ( fpga_release_date >= 0x20160422 ) {
-        unsigned int  frame_rate_vin0 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN0) ;
-        unsigned int  frame_rate_vin1 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN1);
-        unsigned int  frame_rate_vin2 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN2);
-        unsigned int  frame_rate_cpu = (unsigned int)vselector_get_frame_rate (VSELECTOR_CPU);
-        if (frame_rate_vin0 == 0x3c) {
-            vpif_control_config_vin(EVIN0, 1);
-            is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
-        }
-        if (frame_rate_vin1 == 0x3c) {
-            vpif_control_config_vin(EVIN1, 1);
-            is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
-        }
-        if (frame_rate_vin2 != 0) {
-            vpif_control_config_vin(EVIN2, 1);
-            is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
-        }
-        if (frame_rate_cpu != 0) {
-            vpif_control_config_vin(ECPU, 1);
-            is_valid_cpu = vpif_control_is_valid(ECPU) ;
-        }
-        zynq_printk(1, "[zynq_control]  frame_rate : (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", frame_rate_vin0, frame_rate_vin1,frame_rate_vin2,frame_rate_cpu);
-    }
-
-    vpif_print_vout_pipeline(a) ;
-    zynq_printk(1, "[zynq_control] configure: %s -> %s \n", videofmt_to_string(g_vout_pipeline_config.format), videofmt_to_string(a->format));
+	
+	if (tc358746_is_yuv()) {
+		 vpif_control_config_vin(EVIN2, 1);
+		 is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
+	} 
+	
+	if ( fpga_release_date >= 0x20160422 ) {
+		unsigned int  frame_rate_vin0 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN0) ;
+		unsigned int  frame_rate_vin1 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN1); 
+		unsigned int  frame_rate_vin2 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN2); 
+		unsigned int  frame_rate_cpu = (unsigned int)vselector_get_frame_rate (VSELECTOR_CPU);
+		if (frame_rate_vin0 == 0x3c) {
+			vpif_control_config_vin(EVIN0, 1);
+		 	is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
+		}
+		if (frame_rate_vin1 == 0x3c) {
+			vpif_control_config_vin(EVIN1, 1);
+		 	is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
+		}
+		if (frame_rate_vin2 != 0) {
+			vpif_control_config_vin(EVIN2, 1);
+		 	is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
+		}
+		if (frame_rate_cpu != 0) {
+			vpif_control_config_vin(ECPU, 1);
+		 	is_valid_cpu = vpif_control_is_valid(ECPU) ;
+		}
+		zynq_printk(1, "[zynq_control]  frame_rate : (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", frame_rate_vin0, frame_rate_vin1,frame_rate_vin2,frame_rate_cpu);
+	}
+	
+	vpif_print_vout_pipeline(a) ;
+	zynq_printk(1, "[zynq_control] configure: %s -> %s \n", videofmt_to_string(g_vout_pipeline_config.format), videofmt_to_string(a->format));
     zynq_printk(1, "[zynq_control]  valid status: (vin0, vin1, vin2, cpu) ->(%u, %u, %u, %u)\n", is_valid_vin0, is_valid_vin1, is_valid_vin2, is_valid_cpu);
 #if 0
-    if ((is_valid_vin0  == 0) && (is_valid_vin1 == 0)) {
-        zynq_printk(0, "[zynq_control] Because (vin0, vin1)==(%u, %u),  could not configure the VOUT !! \n", is_valid_vin0, is_valid_vin1);
-        return 0;
-    }
+   if ((is_valid_vin0  == 0) && (is_valid_vin1 == 0)){
+	   zynq_printk(0, "[zynq_control] Because (vin0, vin1)==(%u, %u),  could not configure the VOUT !! \n", is_valid_vin0, is_valid_vin1);
+	   return 0;
+   }
 #endif
-
-    if ((en_er_board == 0) && (fpga_release_date == 0x20160322)) {
-        if ((a->reset == 1) || vpif_control_is_should_reset() ) {
-            if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)) {
-                zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
-                vselector_sw_reset();
-                if (vpif_control_is_should_reset()) vpif_control_config_reset(0);
-            }
-        }
-    }
-
-    if ((g_vout_pipeline_config.format != a->format) ||  (g_vout_pipeline_config.osd_scale != a->osd_scale)) {
-
-        if (g_vout_pipeline_config.format != a->format) {
-            zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
-            mutex_lock(&g_config_lock);
-            g_vout_pipeline_config.format = a->format;
-            mutex_unlock(&g_config_lock);
-            if (a->format == E1080P60FMT || a->format == E1080P50FMT) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
-                size.width = 1920;
-                size.height =1080;
-                config.data = &size;
-                entity->config(entity,  &config);
-                default_in_width = 1920;
-                default_in_height = 1080;
-                if (a->format == E1080P60FMT)
-                    default_frame_rate = 60;
-                else
-                    default_frame_rate = 50;
-            } else if (a->format == E720P60FMT || a->format == E720P50FMT) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
-                size.width = 1280;
-                size.height =720;
-                config.data = &size;
-                entity->config(entity,  &config);
-                default_in_width = 1280;
-                default_in_height = 720;
-                if (a->format == E720P60FMT)
-                    default_frame_rate = 60;
-                else
-                    default_frame_rate = 50;
-            }
-        }
+	
+	if ((en_er_board == 0) && (fpga_release_date == 0x20160322)) {
+		if ((a->reset == 1) || vpif_control_is_should_reset() ) {
+			if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)){
+				zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+	   			vselector_sw_reset();
+				if (vpif_control_is_should_reset()) vpif_control_config_reset(0);
+			}
+		}
+	}
+	
+   if ((g_vout_pipeline_config.format != a->format) ||  (g_vout_pipeline_config.osd_scale != a->osd_scale)) {
+        
+		if (g_vout_pipeline_config.format != a->format) {
+			zynq_printk(0, "[zynq_control]Change video format from %s to %s.\n", videofmt_to_string(g_vout_pipeline_config.format) ,videofmt_to_string(a->format));
+        	mutex_lock(&g_config_lock);
+        	g_vout_pipeline_config.format = a->format;
+       		 mutex_unlock(&g_config_lock);
+			 if (a->format == E1080P60FMT || a->format == E1080P50FMT) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
+            	size.width = 1920;
+            	size.height =1080;
+            	config.data = &size;
+            	entity->config(entity,  &config);
+            	default_in_width = 1920;
+            	default_in_height = 1080;
+            	if (a->format == E1080P60FMT)
+                	default_frame_rate = 60;
+            	else
+                	default_frame_rate = 50;
+			} else if (a->format == E720P60FMT || a->format == E720P50FMT) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT_FRAME_SIZE ;
+            	size.width = 1280;
+            	size.height =720;
+            	config.data = &size;
+            	entity->config(entity,  &config);
+            	default_in_width = 1280;
+            	default_in_height = 720;
+            	if (a->format == E720P60FMT)
+                	default_frame_rate = 60;
+            	else
+                	default_frame_rate = 50;
+        	}
+		}
         if ((g_vout_pipeline_config.osd_scale != a->osd_scale) &&   (fpga_release_date >= 0x20160801)) {
+			
+			zynq_printk(0, "[zynq_control]Change the osd scale from %s  to %s.\n",osdscale_to_string(g_vout_pipeline_config.osd_scale),  osdscale_to_string(a->osd_scale));
+			mutex_lock(&g_config_lock);
+        	g_vout_pipeline_config.osd_scale = a->osd_scale;
+       	 	mutex_unlock(&g_config_lock);
+			
+			config.flag = VSELECTOR_OPTION_SET_SCALED_FRAME_SIZE ;
+           
+			memset(&scaled_size, 0x0, sizeof(vselector_vout_scaled_frame_size_t));
+			if (a->osd_scale == E1TO16SCALE) {
+				default_divisor = 4;
 
-            zynq_printk(0, "[zynq_control]Change the osd scale from %s  to %s.\n",osdscale_to_string(g_vout_pipeline_config.osd_scale),  osdscale_to_string(a->osd_scale));
-            mutex_lock(&g_config_lock);
-            g_vout_pipeline_config.osd_scale = a->osd_scale;
-            mutex_unlock(&g_config_lock);
-
-            config.flag = VSELECTOR_OPTION_SET_SCALED_FRAME_SIZE ;
-
-            memset(&scaled_size, 0x0, sizeof(vselector_vout_scaled_frame_size_t));
-            if (a->osd_scale == E1TO16SCALE) {
-                default_divisor = 4;
-
-            } else if (a->osd_scale == E1TO9SCALE) {
-                default_divisor = 3;
-            }
-            if (default_divisor != 0) {
-                scaled_size.width = default_in_width/default_divisor;
-                scaled_size.height =default_in_height/default_divisor;
-                config.data = &scaled_size;
-                if ((scaled_size.width != 0) && (scaled_size.height != 0))entity->config(entity,  &config);
-            }
-        }
-
+			} else if (a->osd_scale == E1TO9SCALE){
+				default_divisor = 3;
+			}
+			if (default_divisor != 0) {
+				scaled_size.width = default_in_width/default_divisor;
+            	scaled_size.height =default_in_height/default_divisor;
+				config.data = &scaled_size;
+            	if ((scaled_size.width != 0) && (scaled_size.height != 0))entity->config(entity,  &config);
+			}
+		}
+		
         vpif_control_enable_video_streams(0);
         stop_all_video_pipeline_entities(zynq_reg_base);
         release_all_video_pipeline_entities(zynq_reg_base);
         init_all_video_pipeline_entities(zynq_reg_base);
         config_all_video_pipeline_entities(zynq_reg_base);
         start_all_video_pipeline_entities(zynq_reg_base) ;
-        vpif_control_enable_video_streams(1);
+		vpif_control_enable_video_streams(1);
     }
-
+    
     for (i = 0; i < vout_num; i++) {
-
-        osd_enable_t full_enable;
-        osd_enable_t osd_enable;
-
-        p = &(a->pipes[i]);
+		
+		osd_enable_t full_enable;
+		osd_enable_t osd_enable;   
+		
+		p = &(a->pipes[i]);
 
         if (p->is_config == 0) continue;
 
@@ -928,92 +897,92 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
             continue;
 
         is_config = 1;
-
-        if (a->pipes[i].full == ENONE) {
-            full_enable.value = 0;
-        } else {
-            full_enable.value = 1;
-        }
-        osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )i);
-
-        if (a->pipes[i].osd == ENONE) {
-            osd_enable.value = 0;
-        } else {
-            osd_enable.value = 1;
-        }
-        osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )i);
-
-        //zynq_printk(0, "[zynq_control][%d] (full, osd, config)---->(%s, %s, %d) \n",i,  pipeid_to_string(p->full), pipeid_to_string(p->osd), p->is_config);
+		
+		if (a->pipes[i].full == ENONE) {
+			full_enable.value = 0;
+		} else {
+			full_enable.value = 1;
+		}
+		osd_setoption(OSD_OPTION_ENABLE_LAYER0, &full_enable,(unsigned )i);	
+		
+		if (a->pipes[i].osd == ENONE) {
+			osd_enable.value = 0;
+		} else {
+			osd_enable.value = 1;
+		}
+		osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )i);
+		
+		//zynq_printk(0, "[zynq_control][%d] (full, osd, config)---->(%s, %s, %d) \n",i,  pipeid_to_string(p->full), pipeid_to_string(p->osd), p->is_config);
         if (i == 0) {
-
-            if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT0_FULL_SRC;
-                src.vin0	= (p->full == EVIN0 &&  is_valid_vin0)?1:0;
-                src.vin1	=	(p->full == EVIN1 &&  is_valid_vin1)?1:0;
-                src.vin2	=	(p->full == EVIN2 &&  is_valid_vin2)?1:0;
-                src.cpu	=	(p->full == ECPU &&  is_valid_cpu)?1:0;
-                config.data = &src;
-                entity->config(entity,  &config);
-            }
-
-            if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT0_1_16_SRC;
-                src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
-                src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
-                src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
-                src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
-                config.data = &src;
-                entity->config(entity,  &config);
-            }
+			
+			if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
+            	config.flag = VSELECTOR_OPTION_SET_VOUT0_FULL_SRC;
+            	src.vin0	= (p->full == EVIN0 &&  is_valid_vin0)?1:0;
+            	src.vin1	=	(p->full == EVIN1 &&  is_valid_vin1)?1:0;
+            	src.vin2	=	(p->full == EVIN2 &&  is_valid_vin2)?1:0;
+            	src.cpu	=	(p->full == ECPU &&  is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			 }
+		
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT0_1_16_SRC;
+            	src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
+            	src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
 
         } else if (i ==1) {
-
-            if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT1_FULL_SRC;
-                src.vin0	= (p->full == EVIN0 && is_valid_vin0)?1:0;
-                src.vin1	=	(p->full == EVIN1&& is_valid_vin1)?1:0;
-                src.vin2	=	(p->full == EVIN2 && is_valid_vin2)?1:0;
-                src.cpu	=	(p->full == ECPU && is_valid_cpu)?1:0;
-                config.data = &src;
-                entity->config(entity,  &config);
-            }
-
-            if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
-                config.flag = VSELECTOR_OPTION_SET_VOUT1_1_16_SRC;
-                src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
-                src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
-                src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
-                src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
-                config.data = &src;
-                entity->config(entity,  &config);
-            }
+			
+			if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT1_FULL_SRC;
+            	src.vin0	= (p->full == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->full == EVIN1&& is_valid_vin1)?1:0;
+            	src.vin2	=	(p->full == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->full == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
+			
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
+				config.flag = VSELECTOR_OPTION_SET_VOUT1_1_16_SRC;
+            	src.vin0	= (p->osd == EVIN0 && is_valid_vin0)?1:0;
+            	src.vin1	=	(p->osd == EVIN1 && is_valid_vin1)?1:0;
+            	src.vin2	=	(p->osd == EVIN2 && is_valid_vin2)?1:0;
+            	src.cpu	=	(p->osd == ECPU && is_valid_cpu)?1:0;
+            	config.data = &src;
+            	entity->config(entity,  &config);
+			}
         }
 
 
-        if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322))) {
-            if ((a->reset == 1) || vpif_control_is_should_reset() ) {
-                if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)) {
-                    zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
-                    vselector_sw_reset();
-                    if (vpif_control_is_should_reset()) vpif_control_config_reset(0);
-                }
-            }
-        }
-
-        if (is_config) {
+	if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322))){
+		if ((a->reset == 1) || vpif_control_is_should_reset() ) {
+			if ((fpga_release_date > FPGA_MODULE_SUPPORT_DATE_1) && (en_modules == 1)){
+				zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+	   			vselector_sw_reset();
+				if (vpif_control_is_should_reset()) vpif_control_config_reset(0);	
+			}
+		}
+	}
+   
+   if (is_config) {
             mutex_lock(&g_config_lock);
-            if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)) {
-                g_vout_pipeline_config.pipes[i].full = a->pipes[i].full;
-            } else {
-                g_vout_pipeline_config.pipes[i].full = ENONE;
-            }
-
-            if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
+          	 if ((a->pipes[i].full ==EVIN0 && is_valid_vin0) || (a->pipes[i].full ==EVIN1 && is_valid_vin1) || (a->pipes[i].full ==EVIN2 && is_valid_vin2) || (a->pipes[i].full ==ECPU && is_valid_cpu)){
+				 g_vout_pipeline_config.pipes[i].full = a->pipes[i].full;
+			 } else {
+               g_vout_pipeline_config.pipes[i].full = ENONE;
+			 }
+            
+			if ((a->pipes[i].osd ==EVIN0 && is_valid_vin0) || (a->pipes[i].osd ==EVIN1 && is_valid_vin1) || (a->pipes[i].osd ==EVIN2 && is_valid_vin2) || (a->pipes[i].osd ==ECPU && is_valid_cpu)) {
                 g_vout_pipeline_config.pipes[i].osd = a->pipes[i].osd;
-            } else {
-                g_vout_pipeline_config.pipes[i].osd = ENONE;
-            }
-            mutex_unlock(&g_config_lock);
+			 } else {
+				g_vout_pipeline_config.pipes[i].osd = ENONE;
+			}
+			mutex_unlock(&g_config_lock);
         }
     }
 
@@ -1043,8 +1012,7 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
     return 0;
 }
 
-static int vpif_scaler_crop(struct file *file, void *fh, struct v4l2_scaler_crop *a)
-{
+static int vpif_scaler_crop(struct file *file, void *fh, struct v4l2_scaler_crop *a) {
     vpif_vidoe_pipelie_entity_id_t id = VUNKOWNPIPELINEID;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
 
@@ -1082,9 +1050,9 @@ static int vpif_scaler_crop(struct file *file, void *fh, struct v4l2_scaler_crop
         case 3:
             id = SCALER3;
             break;
-        case 4:
+		case 4:
             id = SCALER4;
-            break;
+            break;	
         default:
             goto exit;
     }
@@ -1098,8 +1066,7 @@ exit:
 }
 ////////////////////////////////////////////////////////////////////////////////////////
 
-static int init_all_video_pipeline_entities(void __iomem *pci_reg_base)
-{
+static int init_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
 
@@ -1114,8 +1081,7 @@ static int init_all_video_pipeline_entities(void __iomem *pci_reg_base)
     return 0;
 }
 
-static int release_all_video_pipeline_entities(void __iomem *pci_reg_base)
-{
+static int release_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
 
@@ -1127,8 +1093,7 @@ static int release_all_video_pipeline_entities(void __iomem *pci_reg_base)
     return 0;
 }
 
-static int start_all_video_pipeline_entities(void __iomem *pci_reg_base)
-{
+static int start_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
 
@@ -1144,8 +1109,7 @@ static int start_all_video_pipeline_entities(void __iomem *pci_reg_base)
 }
 
 
-static int stop_all_video_pipeline_entities(void __iomem *pci_reg_base)
-{
+static int stop_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
 
@@ -1177,8 +1141,7 @@ static int dump_all_video_pipeline_entities(void __iomem *pci_reg_base)
 #endif
 
 
-static int config_all_video_pipeline_entities(void __iomem *pci_reg_base)
-{
+static int config_all_video_pipeline_entities(void __iomem *pci_reg_base) {
     unsigned int  i = 0;
     vpif_vidoe_pipelie_entity_t *entity = NULL;
     for (i = 0; i < board_video_pipeline_entity_num; i++) {
@@ -1218,14 +1181,13 @@ static int config_all_video_pipeline_entities(void __iomem *pci_reg_base)
 }
 
 
-static void config_vdma(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_vdma(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     vdma_size_t size;
-
-    if (default_divisor == 0) return;
-
-    //zynq_printk(0, "[zynq_core][vdma_config](%d)id = %d\n", __LINE__,entity->id);
+	
+	if (default_divisor == 0) return;
+    
+	//zynq_printk(0, "[zynq_core][vdma_config](%d)id = %d\n", __LINE__,entity->id);
     config.flag = VDMA_OPTION_SET_IN_SIZE;
     if (entity->id == VDMA0 || entity->id == VDMA2) {
         size.width = default_in_width;
@@ -1239,8 +1201,7 @@ static void config_vdma(vpif_vidoe_pipelie_entity_t *entity)
     //zynq_printk(0, "[zynq_core][vdma_config](%d)id = %d\n", __LINE__,entity->id);
     return ;
 }
-static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     vtiming_size_t size;
     vtiming_fromat_t format;
@@ -1250,8 +1211,6 @@ static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity)
     config.data = &format;
     entity->config(entity,  &config);
 
-	memset(&size, 0x0, sizeof(vtiming_size_t));
-	
     config.flag = VTIMING_OPTION_SET_SIZE;
     if ((default_in_width == 1920) && (default_in_height == 1080)&&(default_frame_rate == 60))
         size.value = VTIMING_SIZE_1080P60;
@@ -1278,8 +1237,7 @@ static void config_vtiming(vpif_vidoe_pipelie_entity_t *entity)
     return;
 }
 
-static void config_resampler(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_resampler(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     resampler_size_t size;
 
@@ -1292,16 +1250,15 @@ static void config_resampler(vpif_vidoe_pipelie_entity_t *entity)
     return ;
 }
 
-static void config_osd(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_osd(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
 
     osd_enable_t enable;
     osd_size_t active_output_size;
     osd_layer_paramter_t param;
 
-    if (default_divisor == 0) return;
-
+	if (default_divisor == 0) return;
+	
     //zynq_printk(0, "[zynq_core][osd_config](%d)id = %d\n", __LINE__,entity->id);
     config.flag = OSD_OPTION_SET_OUTPUT_ACTIVE_SIZE;
     active_output_size.width = default_in_width;
@@ -1328,18 +1285,18 @@ static void config_osd(vpif_vidoe_pipelie_entity_t *entity)
     param.global_alpha_enable = 1;
     param.priority = 1;
     param.alpha_value = 0x100;
-
-    param.position_x =  default_in_width - (default_in_width / default_divisor);
-    param.position_y = default_in_height - (default_in_height / default_divisor);
+	
+	param.position_x =  default_in_width - (default_in_width / default_divisor);
+	param.position_y = default_in_height - (default_in_height / default_divisor);
 #if 0
     if ((default_in_width == 1920) && (default_in_height == 1080)) {
-        param.position_x =  1440;
-        param.position_y = 810;
+			param.position_x =  1440;
+        	param.position_y = 810;
 
     } else {
-        param.position_x =  960;
-        param.position_y = 540;
-
+			param.position_x =  960;
+        	param.position_y = 540;
+	
     }
 #endif
 
@@ -1359,32 +1316,31 @@ static void config_osd(vpif_vidoe_pipelie_entity_t *entity)
     return;
 }
 
-static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_vselector(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     int  i = 0;
     vselector_source_t  src;
     vselector_vout_frame_size_t size;
-
-    if (b_firstconfig_vout_pipeline == 1) {
-        if ((en_er_board == 0) &&  (fpga_release_date == 0x20160322)) {
-            b_firstconfig_vout_pipeline = 0;
-            vselector_sw_reset();
-        }
+	
+	if (b_firstconfig_vout_pipeline == 1) {
+		if ((en_er_board == 0) &&  (fpga_release_date == 0x20160322)){
+				b_firstconfig_vout_pipeline = 0;
+				vselector_sw_reset();
+		}
         mutex_lock(&g_config_lock);
-        g_vout_pipeline_config.pipes[0].full = ENONE;
+		g_vout_pipeline_config.pipes[0].full = ENONE;
         g_vout_pipeline_config.pipes[0].osd = ENONE;
         g_vout_pipeline_config.pipes[1].full = EVIN2;
         g_vout_pipeline_config.pipes[1].osd = EVIN2;
-        if (default_divisor == 3)
-            g_vout_pipeline_config.osd_scale = E1TO9SCALE;
-        else
-            g_vout_pipeline_config.osd_scale = E1TO16SCALE;
-        mutex_unlock(&g_config_lock);
-        if (tc358746_is_yuv() == 0) {
-            zynq_printk(0, "[zynq_control] Because could not capture the video from webcam, should do the reset of vselector at the next configuration!!\n ");
-            vpif_control_config_reset(1);
-        }
+		if (default_divisor == 3)
+			g_vout_pipeline_config.osd_scale = E1TO9SCALE;
+		else
+			g_vout_pipeline_config.osd_scale = E1TO16SCALE;
+		mutex_unlock(&g_config_lock);
+		if (tc358746_is_yuv() == 0) {
+			zynq_printk(0, "[zynq_control] Because could not capture the video from webcam, should do the reset of vselector at the next configuration!!\n ");
+			vpif_control_config_reset(1);
+		}
     }
 
     if ((default_in_width == 1920) && (default_in_height == 1080)) {
@@ -1401,7 +1357,7 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
         config.data = &size;
         entity->config(entity,  &config);
     }
-
+    
     config.flag = VSELECTOR_OPTION_SET_VOUT0_FULL_SRC;
     src.vin0	=  (g_vout_pipeline_config.pipes[0].full == EVIN0)?1:0 ;
     src.vin1	=	 (g_vout_pipeline_config.pipes[0].full == EVIN1)?1:0 ;
@@ -1434,16 +1390,16 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     src.cpu	=	 (g_vout_pipeline_config.pipes[1].osd == ECPU)?1:0 ;
     config.data = &src;
     entity->config(entity,  &config);
-
+	
     //vpif_control_enable_video_streams(0);
 
-    if (b_firstconfig_vout_pipeline == 1) {
-        b_firstconfig_vout_pipeline = 0;
-        zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
-        if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322)))
-            vselector_sw_reset();
-    }
-
+	  if (b_firstconfig_vout_pipeline == 1) { 
+		   b_firstconfig_vout_pipeline = 0;
+		   zynq_printk(0, "[zynq_control](%d)Call the sw reset of VSELECTOR for reseting to default layout.\n", __LINE__);
+			if (en_er_board || ((en_er_board == 0) && (fpga_release_date > 0x20160322)))
+				vselector_sw_reset();	
+	  }
+	
     for (i = 0; i < 2; i++) {
         if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {
             vpif_control_enable_video_stream_by_id(EVIN0, 1);
@@ -1468,8 +1424,7 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     return;
 }
 
-static void config_scaler(vpif_vidoe_pipelie_entity_t *entity)
-{
+static void config_scaler(vpif_vidoe_pipelie_entity_t *entity) {
     vpif_vidoe_pipelie_entity_config_t config;
     scaler_size_t size;
     scaler_crop_area_t crop;
@@ -1485,7 +1440,7 @@ static void config_scaler(vpif_vidoe_pipelie_entity_t *entity)
     unsigned int out_width = default_in_width / default_divisor;
     unsigned int out_height = default_in_height / default_divisor;
 
-//   zynq_printk(0, "[zynq_control][scaler_config](%d)id = %s\n", __LINE__,to_video_pipelin_entity_name(entity->id));
+ //   zynq_printk(0, "[zynq_control][scaler_config](%d)id = %s\n", __LINE__,to_video_pipelin_entity_name(entity->id));
 
     config.flag =  SCALER_OPTION_SET_IN_SIZE;
     size.width = in_width;
@@ -1527,9 +1482,6 @@ static void config_scaler(vpif_vidoe_pipelie_entity_t *entity)
     entity->config(entity,  &config);
     //zynq_printk(0, "[zynq_core][scaler_config](%d)id = %d\n", __LINE__,entity->id);
 }
-
-
-#if 0
 ////////////////////////////////////////////////////////////////////////////////////////
 #define MAX_MODULE_NUM 5
 static char g_scaler_regs_dump_str[MAX_MODULE_NUM][PAGE_SIZE] = {{0}};
@@ -1539,8 +1491,7 @@ static char g_resampler_regs_dump_str[MAX_MODULE_NUM][PAGE_SIZE]= {{0}};
 static char g_vtiming_regs_dump_str[MAX_MODULE_NUM][PAGE_SIZE]= {{0}};
 static char g_vdma_regs_dump_str[MAX_MODULE_NUM][PAGE_SIZE]= {{0}};
 
-static int set_register(vpif_vidoe_pipelie_entity_id_t  id, u16 offset, u32 value)
-{
+static int set_register(vpif_vidoe_pipelie_entity_id_t  id, u16 offset, u32 value) {
     switch (id) {
         case SCALER0:
             scaler_set_reg(0, offset, value);
@@ -1554,9 +1505,9 @@ static int set_register(vpif_vidoe_pipelie_entity_id_t  id, u16 offset, u32 valu
         case SCALER3:
             scaler_set_reg(3, offset, value);
             break;
-        case SCALER4:
+		case SCALER4:
             scaler_set_reg(4, offset, value);
-            break;
+            break;	
         case VSELECTOR:
             vselector_set_reg(offset, value);
             break;
@@ -1606,8 +1557,7 @@ static int set_register(vpif_vidoe_pipelie_entity_id_t  id, u16 offset, u32 valu
     return 0;
 }
 
-static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_str, int len)
-{
+static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_str, int len) {
     unsigned int i = 0;
     unsigned int size = 0;
     vpif_video_cfg_regs_t  cfg_regs;
@@ -1618,8 +1568,6 @@ static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_s
 
     if ( str == NULL ) return -1;
 
-	memset(&cfg_regs, 0x0, sizeof(vpif_video_cfg_regs_t));
-	
     switch (id) {
         case SCALER0:
             scaler_get_regs(0, &cfg_regs);
@@ -1633,9 +1581,9 @@ static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_s
         case SCALER3:
             scaler_get_regs(3, &cfg_regs);
             break;
-        case SCALER4:
+		case SCALER4:
             scaler_get_regs(4, &cfg_regs);
-            break;
+            break;	
         case VSELECTOR:
             vselector_get_regs(&cfg_regs);
             break;
@@ -1694,8 +1642,7 @@ static int dump_registers(vpif_vidoe_pipelie_entity_id_t  id , char *regs_dump_s
     return 0;
 }
 
-static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
+static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
     char *str = NULL;
     vpif_vidoe_pipelie_entity_id_t  id = VUNKOWNPIPELINEID;
 
@@ -1770,8 +1717,7 @@ static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *b
  * For example, if wanting to set  the regisetr '0x0000'  of 'CRESAMPLER0' as '0x00000008':
  * echo "0x0000:0x00000008" > CRESAMPLER0
 */
-static int parser_str(const char *buf, u16 *offset,  u32 *value)
-{
+static int parser_str(const char *buf, u16 *offset,  u32 *value) {
     int len = 0, nel = 0;
     const char *query = buf;
     char *q = NULL;
@@ -1815,8 +1761,7 @@ static int parser_str(const char *buf, u16 *offset,  u32 *value)
     }
     return 0;
 }
-static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
-{
+static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
     u16 offset = 0;
     u32 value = 0;
     vpif_vidoe_pipelie_entity_id_t  id = VUNKOWNPIPELINEID;
@@ -1941,8 +1886,7 @@ static struct attribute_group attr_group = {
 };
 
 
-static int create_register_dump_sysfs(struct kobject *kobj)
-{
+static int create_register_dump_sysfs(struct kobject *kobj) {
     int retval  = -1;
     unsigned int scaler_num  = 4 ;
     unsigned int vselector_num =1;
@@ -1971,12 +1915,10 @@ static int create_register_dump_sysfs(struct kobject *kobj)
     return retval;
 }
 
-static int destroy_register_dump_sysfs(struct kobject *kobj)
-{
+static int destroy_register_dump_sysfs(struct kobject *kobj) {
     if (!kobj) return -1;
 
     sysfs_remove_group(kobj, &attr_group);
 
     return 0;
 }
-#endif

@@ -21,34 +21,8 @@
 #include <linux/wait.h>
 
 #include <media/videobuf2-vmalloc.h>
-#include <media/v4l2-dev.h>
-#include <media/v4l2-event.h>
 
 #include "uvc.h"
-
-/*
- * Send video frame transfer done event through v4l2
- */
-static void uvc_buffer_done_notify(struct uvc_video_queue *queue,
-						struct uvc_buffer *buf,
-						int buffer_status)
-{
-	struct uvc_video *video = container_of(queue, struct uvc_video, queue);
-	struct uvc_device *uvc = container_of(video, struct uvc_device, video);
-	struct v4l2_event v4l2_event;
-	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
-
-	memset(&v4l2_event, 0, sizeof(v4l2_event));
-	v4l2_event.type = UVC_EVENT_FRAMEDONE;
-
-	uvc_event->frame_done.buffer_index =
-		buf->buf.v4l2_buf.index;
-	uvc_event->frame_done.bytes_transferred =
-		buf->bytesused;
-	uvc_event->frame_done.status = buffer_status;
-
-	v4l2_event_queue(uvc->vdev, &v4l2_event);
-}
 
 /* ------------------------------------------------------------------------
  * Video buffers queue management.
@@ -113,7 +87,6 @@ static void uvc_buffer_queue(struct vb2_buffer *vb)
 	struct uvc_video_queue *queue = vb2_get_drv_priv(vb->vb2_queue);
 	struct uvc_buffer *buf = container_of(vb, struct uvc_buffer, buf);
 	unsigned long flags;
-	int notify = 0;
 
 	spin_lock_irqsave(&queue->irqlock, flags);
 
@@ -125,13 +98,9 @@ static void uvc_buffer_queue(struct vb2_buffer *vb)
 		 */
 		buf->state = UVC_BUF_STATE_ERROR;
 		vb2_buffer_done(&buf->buf, VB2_BUF_STATE_ERROR);
-		notify = 1;
 	}
 
 	spin_unlock_irqrestore(&queue->irqlock, flags);
-
-	if (notify)
-		uvc_buffer_done_notify(queue, buf, buf->state);
 }
 
 static struct vb2_ops uvc_queue_qops = {
@@ -151,7 +120,6 @@ static int uvc_queue_init(struct uvc_video_queue *queue,
 	queue->queue.buf_struct_size = sizeof(struct uvc_buffer);
 	queue->queue.ops = &uvc_queue_qops;
 	queue->queue.mem_ops = &vb2_vmalloc_memops;
-	queue->queue.timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	ret = vb2_queue_init(&queue->queue);
 	if (ret)
 		return ret;
@@ -302,7 +270,6 @@ static void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect)
 {
 	struct uvc_buffer *buf;
 	unsigned long flags;
-	int notify = 0;
 
 	spin_lock_irqsave(&queue->irqlock, flags);
 	while (!list_empty(&queue->irqqueue)) {
@@ -311,7 +278,6 @@ static void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect)
 		list_del(&buf->queue);
 		buf->state = UVC_BUF_STATE_ERROR;
 		vb2_buffer_done(&buf->buf, VB2_BUF_STATE_ERROR);
-		notify = 1;
 	}
 	/* This must be protected by the irqlock spinlock to avoid race
 	 * conditions between uvc_queue_buffer and the disconnection event that
@@ -322,9 +288,6 @@ static void uvc_queue_cancel(struct uvc_video_queue *queue, int disconnect)
 	if (disconnect)
 		queue->flags |= UVC_QUEUE_DISCONNECTED;
 	spin_unlock_irqrestore(&queue->irqlock, flags);
-
-	if (notify)
-		uvc_buffer_done_notify(queue, buf, buf->state);
 }
 
 /*
@@ -407,25 +370,10 @@ static struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 	 * this aspect.
 	 */
 	buf->buf.v4l2_buf.sequence = queue->sequence++;
-	/* comment out this line if need to do stats*/
 	do_gettimeofday(&buf->buf.v4l2_buf.timestamp);
-	/*{
-		struct timespec ts;
-
-		ktime_get_ts(&ts);
-
-		printk(KERN_INFO "[uvc_queue]: stats: cur=%lu.%lu, timestamp=%lu.%lu, delta=%lu.%lu\n",
-			ts.tv_sec, ts.tv_nsec/1000, buf->buf.v4l2_buf.timestamp.tv_sec, buf->buf.v4l2_buf.timestamp.tv_usec,
-			ts.tv_sec - buf->buf.v4l2_buf.timestamp.tv_sec, ts.tv_nsec/1000-buf->buf.v4l2_buf.timestamp.tv_usec);
-	}*/
 
 	vb2_set_plane_payload(&buf->buf, 0, buf->bytesused);
 	vb2_buffer_done(&buf->buf, VB2_BUF_STATE_DONE);
-
-	/* FIXME??? About the irqlock. */
-	spin_unlock_irq(&queue->irqlock);
-	uvc_buffer_done_notify(queue, buf, VB2_BUF_STATE_DONE);
-	spin_lock_irq(&queue->irqlock);
 
 	return nextbuf;
 }

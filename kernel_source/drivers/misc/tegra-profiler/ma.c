@@ -85,7 +85,7 @@ static void timer_interrupt(unsigned long data)
 	struct quadd_hrt_ctx *hrt_ctx = (struct quadd_hrt_ctx *)data;
 	struct timer_list *timer = &hrt_ctx->ma_timer;
 
-	if (!atomic_read(&hrt_ctx->active))
+	if (hrt_ctx->active == 0)
 		return;
 
 	check_ma(hrt_ctx);

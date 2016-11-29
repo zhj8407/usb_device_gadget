@@ -239,9 +239,7 @@ static void done(struct tegra_ep *ep, struct tegra_req *req, int status)
 
 	ep->stopped = 1;
 #ifdef CONFIG_TEGRA_GADGET_BOOST_CPU_FREQ
-	if (req->req.complete &&
-			(req->req.length >= BOOST_TRIGGER_SIZE ||
-			ep->ep.mult > 0))
+	if (req->req.complete && req->req.length >= BOOST_TRIGGER_SIZE)
 		ep_queue_request_count--;
 #endif
 
@@ -659,8 +657,6 @@ static int tegra_ep_enable(struct usb_ep *_ep,
 
 	spin_lock_irqsave(&udc->lock, flags);
 	ep->ep.maxpacket = max;
-	if (mult > 0)
-		ep->ep.mult = mult - 1;
 	ep->desc = desc;
 	ep->stopped = 0;
 	ep->last_td = 0;
@@ -687,10 +683,10 @@ static int tegra_ep_enable(struct usb_ep *_ep,
 	spin_unlock_irqrestore(&udc->lock, flags);
 	retval = 0;
 
-	VDBG("enabled %s (ep%d%s) maxpacket %d, mult %d\n", ep->ep.name,
+	VDBG("enabled %s (ep%d%s) maxpacket %d", ep->ep.name,
 			ep->desc->bEndpointAddress & 0x0f,
 			(desc->bEndpointAddress & USB_DIR_IN)
-				? "in" : "out", max, mult);
+				? "in" : "out", max);
 en_done:
 	return retval;
 }
@@ -915,22 +911,6 @@ static struct ep_td_struct *tegra_build_dtd(struct tegra_req *req,
 
 	dtd->size_ioc_sts = cpu_to_le32(swap_temp);
 
-	/* The short packet happened with ISO multi-transaction */
-	if (req->ep->ep.mult &&
-			((req->ep->desc->bmAttributes & 0x3)==USB_ENDPOINT_XFER_ISOC)) {
-		if (*length <= req->ep->ep.maxpacket) {
-			/* DBG("build dtd: Mult0 1 \n"); */
-			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
-			swap_temp |= 0x00000400;
-			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
-		} else if (*length <= req->ep->ep.maxpacket * req->ep->ep.mult) {
-			/* DBG("build dtd: Mult0 2 \n"); */
-			swap_temp = cpu_to_le32(dtd->size_ioc_sts);
-			swap_temp |= 0x00000800;
-			dtd->size_ioc_sts = cpu_to_le32(swap_temp);
-		}
-	}
-
 	mb();
 
 	VDBG("length = %d address= 0x%x", *length, (int)*dma);
@@ -1007,8 +987,7 @@ tegra_ep_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 	}
 
 #ifdef CONFIG_TEGRA_GADGET_BOOST_CPU_FREQ
-	if (req->req.length >= BOOST_TRIGGER_SIZE ||
-			ep->ep.mult > 0) {
+	if (req->req.length >= BOOST_TRIGGER_SIZE) {
 		ep_queue_request_count++;
 		schedule_work(&udc->boost_cpufreq_work);
 	}
@@ -2347,10 +2326,8 @@ static void suspend_irq(struct tegra_udc *udc)
 	udc->usb_state = USB_STATE_SUSPENDED;
 
 	/* report suspend to the driver, serial.c does not support this */
-	spin_unlock(&udc->lock);
 	if (udc->driver && udc->driver->suspend)
 		udc->driver->suspend(&udc->gadget);
-	spin_lock(&udc->lock);
 }
 
 static void bus_resume(struct tegra_udc *udc)
@@ -2359,10 +2336,8 @@ static void bus_resume(struct tegra_udc *udc)
 	udc->resume_state = 0;
 
 	/* report resume to the driver, serial.c does not support this */
-	spin_unlock(&udc->lock);
 	if (udc->driver && udc->driver->resume)
 		udc->driver->resume(&udc->gadget);
-	spin_lock(&udc->lock);
 }
 
 /* Clear up all ep queues */

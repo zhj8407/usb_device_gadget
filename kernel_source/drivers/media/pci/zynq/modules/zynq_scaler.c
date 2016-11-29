@@ -49,7 +49,7 @@ typedef struct {
     u16 coef_mem_output;
     u32 width;
     u32 height;
-    u32 is_scalered_to_1_16;
+	u32 is_scalered_to_1_16;
 } scaler_handle_t;
 
 #define SCALER_REG_NUM  (22)
@@ -73,7 +73,7 @@ static u8 is_initialized[SCALER_MAX_NUM] = {0};
 static u8 is_started[SCALER_MAX_NUM] = {0};
 
 #define SCALER4_SUPPORT_DATE (0x20160608)
-static  unsigned int fpga_release_date = 0;
+static  unsigned int fpga_release_date = 0; 
 
 static u32 get_cached_registers(unsigned int index, u16 reg)
 {
@@ -110,37 +110,37 @@ int scaler_initial_by_index(void __iomem *pci_base_addr, unsigned index)
 
     unsigned i = index;
 
-    unsigned int scaler_num  = SCALER_MAX_NUM;
-
-    fpga_release_date = fpga_reg_read(pci_base_addr, FPGA_COMPILE_TIME_REG) ;
-
-    if (fpga_release_date >= SCALER4_SUPPORT_DATE)
-        scaler_num  = SCALER_MAX_NUM;
-    else
-        scaler_num  = SCALER_MAX_NUM -1;
-
+	unsigned int scaler_num  = SCALER_MAX_NUM;
+	
+	fpga_release_date = fpga_reg_read(pci_base_addr, FPGA_COMPILE_TIME_REG) ;
+	
+	if (fpga_release_date >= SCALER4_SUPPORT_DATE)
+		scaler_num  = SCALER_MAX_NUM;
+	else
+		scaler_num  = SCALER_MAX_NUM -1;
+	
     if (i >= scaler_num) return 0;
 
     if(is_initialized[i] == 1) return  0;
 
-    // if ( i ==3) return 0;
+   // if ( i ==3) return 0;
 
     if (i == 0) {
         handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER0_REG);
-        handles[i]. is_scalered_to_1_16 = 1;
-    } else if (i == 1) {
+		handles[i]. is_scalered_to_1_16 = 1;
+	} else if (i == 1) {
         handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER1_REG);
-        handles[i]. is_scalered_to_1_16 = 1;
-    } else if (i == 2) {
+		handles[i]. is_scalered_to_1_16 = 1;
+	} else if (i == 2) {
         handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER2_REG);
-        handles[i]. is_scalered_to_1_16 = 1;
-    } else if (i == 3) {
+		handles[i]. is_scalered_to_1_16 = 1;
+	}else if (i == 3) {
         handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER3_REG);
-        handles[i]. is_scalered_to_1_16 = 1;
-    } else if (i == 4) {
-        handles[i].base = (void __iomem *)((u32)pci_base_addr + FPGA_SCALER4_REG);
-        handles[i]. is_scalered_to_1_16 = 0;
-    }
+		handles[i]. is_scalered_to_1_16 = 1;
+	}else if (i == 4) {
+		handles[i].base = (void __iomem *)((u32)pci_base_addr + FPGA_SCALER4_REG);
+		handles[i]. is_scalered_to_1_16 = 0;
+	}
     handles[i].ctrl = 0x0000;
     handles[i].status =  0x0004;
     handles[i].error = 0x0008;
@@ -172,10 +172,10 @@ int scaler_initial_by_index(void __iomem *pci_base_addr, unsigned index)
         cached_registers[i] = &scaler_cached_registers_2[0];
     else if (i == 3)
         cached_registers[i] = &scaler_cached_registers_3[0];
-    else if (i == 4)
+	else if (i == 4)
         cached_registers[i] = &scaler_cached_registers_4[0];
-
-    sw_reset(i);
+    
+	sw_reset(i);
 
     set_cached_registers(i, handles[i].ctrl , fpga_reg_read(handles[i].base , handles[i].ctrl ));
     set_cached_registers(i, handles[i].status , fpga_reg_read(handles[i].base , handles[i].status));
@@ -208,42 +208,41 @@ int scaler_initial_by_index(void __iomem *pci_base_addr, unsigned index)
     return 0;
 }
 
-int scaler_initial(void __iomem *pci_base_addr)
-{
+int scaler_initial(void __iomem *pci_base_addr) {
     int i = 0;
-
-    unsigned int scaler_num  = SCALER_MAX_NUM;
-
-    fpga_release_date = fpga_reg_read(pci_base_addr, FPGA_COMPILE_TIME_REG) ;
-
-    if (fpga_release_date >= SCALER4_SUPPORT_DATE)
-        scaler_num  = SCALER_MAX_NUM;
-    else
-        scaler_num  = SCALER_MAX_NUM -1;
-
+	
+	unsigned int scaler_num  = SCALER_MAX_NUM;
+	
+	fpga_release_date = fpga_reg_read(pci_base_addr, FPGA_COMPILE_TIME_REG) ;
+	
+	if (fpga_release_date >= SCALER4_SUPPORT_DATE)
+		scaler_num  = SCALER_MAX_NUM;
+	else
+		scaler_num  = SCALER_MAX_NUM -1;
+	
     for (i = 0; i < scaler_num; i++) {
 
         if(is_initialized[i] == 1) continue;
-        //  zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
+      //  zynq_printk(1, "[zynq_scaler](%d)%d \n", __LINE__,i);
         //NOTE:The scaler 2 and scaler 3 is not workable for 1029 FPGA image.
         //if (i== 2 || i ==3) continue;
 
         if (i == 0) {
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER0_REG);
-            handles[i]. is_scalered_to_1_16 = 1;
-        } else if (i == 1) {
+			handles[i]. is_scalered_to_1_16 = 1;
+		} else if (i == 1) {
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER1_REG);
-            handles[i]. is_scalered_to_1_16 = 1;
-        } else if (i == 2) {
+			handles[i]. is_scalered_to_1_16 = 1;
+		} else if (i == 2) {
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER2_REG);
-            handles[i]. is_scalered_to_1_16 = 1;
-        } else if (i == 3) {
+			handles[i]. is_scalered_to_1_16 = 1;
+		} else if (i == 3) {
             handles[i].base =  (void __iomem *)((u32)pci_base_addr + FPGA_SCALER3_REG);
-            handles[i]. is_scalered_to_1_16 = 1;
-        } else if (i == 4) {
-            handles[i].base = (void __iomem *)((u32)pci_base_addr + FPGA_SCALER4_REG);
-            handles[i]. is_scalered_to_1_16 = 0;
-        }
+			handles[i]. is_scalered_to_1_16 = 1;
+		} else if (i == 4) {
+			handles[i].base = (void __iomem *)((u32)pci_base_addr + FPGA_SCALER4_REG);
+			handles[i]. is_scalered_to_1_16 = 0;
+		}
         handles[i].ctrl = 0x0000;
         handles[i].status =  0x0004;
         handles[i].error = 0x0008;
@@ -275,9 +274,9 @@ int scaler_initial(void __iomem *pci_base_addr)
             cached_registers[i] = &scaler_cached_registers_2[0];
         else if (i == 3)
             cached_registers[i] = &scaler_cached_registers_3[0];
-        else if (i == 4)
+		else if (i == 4)
             cached_registers[i] = &scaler_cached_registers_4[0];
-
+		
         sw_reset(i);
 
         set_cached_registers(i, handles[i].ctrl , fpga_reg_read(handles[i].base , handles[i].ctrl ));
@@ -482,15 +481,15 @@ int scaler_release(void __iomem *scaler_pci_base_addr)
 int scaler_release_by_index(void __iomem *pci_base_addr, unsigned index)
 {
     int i = index;
-
-    if (is_initialized[i] == 0) return 0;
-
-    mutex_lock(&locks[i]);
+	
+	if (is_initialized[i] == 0) return 0;
+	
+	mutex_lock(&locks[i]);
     is_initialized[i] = 0;
-    mutex_unlock(&locks[i]);
+	mutex_unlock(&locks[i]);
 
-    mutex_destroy(&locks[i]);
-
+	mutex_destroy(&locks[i]);
+   
     return 0;
 }
 
@@ -562,20 +561,20 @@ int scaler_config_input_size(unsigned index, unsigned int in_width, unsigned int
 
     if (is_initialized[index] == 0) return 0;
 
-    //  if ((in_width == handles[index].width) && (in_height == handles[index].height) )  return 0;
+  //  if ((in_width == handles[index].width) && (in_height == handles[index].height) )  return 0;
 
     size.width = in_width;
     size.height = in_height;
-    set_source_size(&size, index);
-
-    if (handles[index]. is_scalered_to_1_16 == 1) {
-        out_width = in_width >> 2;
-        out_height = in_height >> 2;
-    } else {
-        out_width = in_width;
-        out_height = in_height;
-    }
-
+	set_source_size(&size, index);
+	
+	if (handles[index]. is_scalered_to_1_16 == 1) {
+		out_width = in_width >> 2;
+   		out_height = in_height >> 2;
+	} else {
+		out_width = in_width;
+   		out_height = in_height;
+	}
+	
     size.width = out_width;
     size.height = out_height;
     set_dest_size(&size, index);
@@ -583,18 +582,17 @@ int scaler_config_input_size(unsigned index, unsigned int in_width, unsigned int
     return 0;
 }
 
-int scaler_config_output_size(unsigned index, unsigned int out_width, unsigned int out_height)
-{
-
-    scaler_size_t size;
-
-    if (is_initialized[index] == 0) return 0;
-
-    size.width = out_width;
+int scaler_config_output_size(unsigned index, unsigned int out_width, unsigned int out_height) {
+	
+	 scaler_size_t size;
+	
+	 if (is_initialized[index] == 0) return 0;
+	 
+	 size.width = out_width;
     size.height = out_height;
-    set_dest_size(&size, index);
-
-    return 0;
+     set_dest_size(&size, index);
+	 
+	return 0;
 }
 
 int scaler_config_crop(unsigned int index,  unsigned int crop_start_x,  unsigned int crop_start_y,  unsigned int crop_width,   unsigned int crop_height)
@@ -631,8 +629,8 @@ int scaler_set_reg(unsigned index, u16 offset, u32 value)
 
     if (index >= SCALER_MAX_NUM) return  -1;
 
-    if (is_initialized[index] == 0) return 0;
-
+	if (is_initialized[index] == 0) return 0;
+	   
     mutex_lock(&locks[index]);
     fpga_reg_write(handles[index].base, offset, value);
     set_cached_registers(index, offset, value);

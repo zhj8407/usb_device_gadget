@@ -82,7 +82,7 @@
 #define DC_COM_PIN_OUTPUT_POLARITY1_INIT_VAL	0x01000000
 #define DC_COM_PIN_OUTPUT_POLARITY3_INIT_VAL	0x0
 
-struct fb_videomode tegra_dc_vga_mode = {
+static struct fb_videomode tegra_dc_vga_mode = {
 	.refresh = 60,
 	.xres = 640,
 	.yres = 480,
@@ -2660,18 +2660,17 @@ bool tegra_dc_stats_get(struct tegra_dc *dc)
 }
 
 /* blank selected windows by disabling them */
-int tegra_dc_blank(struct tegra_dc *dc, unsigned windows)
+void tegra_dc_blank(struct tegra_dc *dc, unsigned windows)
 {
 	struct tegra_dc_win *dcwins[DC_N_WINDOWS];
 	unsigned i;
 	unsigned long int blank_windows;
 	int nr_win = 0;
-	int ret = 0;
 
 	blank_windows = windows & dc->valid_windows;
 
 	if (!blank_windows)
-		return ret;
+		return;
 
 	for_each_set_bit(i, &blank_windows, DC_N_WINDOWS) {
 		dcwins[nr_win] = tegra_dc_get_window(dc, i);
@@ -2681,14 +2680,8 @@ int tegra_dc_blank(struct tegra_dc *dc, unsigned windows)
 	}
 
 	tegra_dc_update_windows(dcwins, nr_win, NULL);
-	ret = tegra_dc_sync_windows(dcwins, nr_win);
-	if (ret <= 0) {
-		dev_dbg(&dc->ndev->dev, "Error %d\n", ret);
-		return ret;
-	}
-
+	tegra_dc_sync_windows(dcwins, nr_win);
 	tegra_dc_program_bandwidth(dc, true);
-	return ret;
 }
 
 int tegra_dc_restore(struct tegra_dc *dc)

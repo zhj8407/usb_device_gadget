@@ -135,7 +135,6 @@ phys_addr_t tegra_carveout_start;
 phys_addr_t tegra_carveout_size;
 phys_addr_t tegra_vpr_start;
 phys_addr_t tegra_vpr_size;
-EXPORT_SYMBOL(tegra_vpr_size);
 phys_addr_t tegra_tsec_start;
 phys_addr_t tegra_tsec_size;
 phys_addr_t tegra_lp0_vec_start;
@@ -1036,10 +1035,7 @@ void __init tegra11x_init_early(void)
 #ifdef CONFIG_ARCH_TEGRA_12x_SOC
 void __init tegra12x_init_early(void)
 {
-	struct device_node *np =
-		of_find_compatible_node(NULL, NULL, "arm,psci");
-
-	if (np && of_device_is_available(np))
+	if (of_find_compatible_node(NULL, NULL, "arm,psci"))
 		tegra_with_secure_firmware = 1;
 
 	display_tegra_dt_info();

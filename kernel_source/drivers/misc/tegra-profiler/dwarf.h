@@ -77,9 +77,5 @@
 
 #define DW_EH_PE_indirect	0x80
 
-#define DW_CIE_ID	0xffffffff
-#define DW64_CIE_ID	0xffffffffffffffffULL
-
-#define DW_CIE_VERSION	1
 
 #endif  /* __QUADD_DWARF_H */

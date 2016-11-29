@@ -225,7 +225,7 @@ uvc_function_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 	struct uvc_device *uvc = req->context;
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
-	printk(KERN_INFO "uvc_function_ep0_complete, uvc->event_setup_out=0x%x\n", uvc->event_setup_out);
+
 	if (uvc->event_setup_out) {
 		uvc->event_setup_out = 0;
 
@@ -243,8 +243,6 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct uvc_device *uvc = to_uvc(f);
 	struct v4l2_event v4l2_event;
 	struct uvc_event *uvc_event = (void *)&v4l2_event.u.data;
-	struct usb_request *req = uvc->control_req;
-	struct usb_composite_dev *cdev = f->config->cdev;
 
 	/* printk(KERN_INFO "setup request %02x %02x value %04x index %04x %04x\n",
 	 *	ctrl->bRequestType, ctrl->bRequest, le16_to_cpu(ctrl->wValue),
@@ -259,19 +257,6 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	/* Stall too big requests. */
 	if (le16_to_cpu(ctrl->wLength) > UVC_MAX_REQUEST_SIZE)
 		return -EINVAL;
-
-	if ((ctrl->bRequestType & USB_DIR_IN) == 0 &&
-		(ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS &&
-		(ctrl->bRequestType & USB_RECIP_MASK) == USB_RECIP_INTERFACE &&
-		ctrl->bRequest == UVC_SET_CUR) {
-
-		pr_info("uvc_function_setup: set cur req\n");
-		req->length = le16_to_cpu(ctrl->wLength);
-		req->zero = 1;
-		req->context = uvc;
-
-		usb_ep_queue(cdev->gadget->ep0, req, GFP_KERNEL);
-	}
 
 	memset(&v4l2_event, 0, sizeof(v4l2_event));
 	v4l2_event.type = UVC_EVENT_SETUP;
@@ -737,7 +722,7 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		goto error;
 
 	/* Initialise video. */
-	ret = uvc_video_init(&uvc->video, 0, 512, 2, 0, 4);
+	ret = uvc_video_init(&uvc->video);
 	if (ret < 0)
 		goto error;
 

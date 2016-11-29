@@ -100,8 +100,6 @@ struct adv762x_ctx {
 } ;
 struct adv762x_ctx  g_ctx;
 
-static atomic_t g_interrupt_sevice_done;
-static atomic_t g_interrupt_sevice_first_run;
 extern unsigned char  HdmiRecomInitTable[];
 
 static int create_control_sysfs(struct kobject *kobj) ;
@@ -120,7 +118,7 @@ static void  adv_smbus_write_byte_field8 (struct i2c_client *client,
 										  unsigned char RegAddr, unsigned int Mask, 
                          					unsigned int BitPos, unsigned char  FieldVal);
 
-static int adv762x_hw_reset(struct adv762x_ctx  *ctx);
+//static int adv762x_hw_reset(struct adv762x_ctx  *ctx);
 static int adv762x_init(struct adv762x_ctx  *ctx);
 static int adv762x_rls(struct adv762x_ctx  *ctx);
 static inline void adv762x_delay(unsigned int msec);
@@ -221,8 +219,6 @@ static int adv762x_probe(struct i2c_client *client,  const struct i2c_device_id 
 
 	adv762x_edid_debug_add(&g_ctx);
 	
-	atomic_set(&g_interrupt_sevice_done, -1);
-	atomic_set(&g_interrupt_sevice_first_run, -1);
 exit:
 	printk(KERN_INFO "[zynq_adv762xi] Leave  adv762x_probe()\n");
 	return  0;
@@ -568,7 +564,7 @@ static inline void adv762x_delay(unsigned int msec) {
 	 msleep_interruptible(msec);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-#if 1
+#if 0
 static int adv762x_hw_reset(struct adv762x_ctx  *ctx) {
 	unsigned int reset_gpio_pin = ADV762x_RST_PIN;
 	int ret = 0;
@@ -1252,7 +1248,7 @@ exit:
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////
 static int transceiver_mode_rls(struct adv762x_ctx  *ctx) {
-#if 1
+	
 	if (!ctx) return -1;
 	
 	//Disable the edids of all ports
@@ -1260,29 +1256,25 @@ static int transceiver_mode_rls(struct adv762x_ctx  *ctx) {
 	//Disable RX1 and RX2
 	adv_smbus_write_byte_data(ctx->io, 0x01, 0x77);
 	//Power down TX
-	adv_smbus_write_byte_data(ctx->tx_main, 0x41, 0x50);//default=0x50, 01010000		
+	adv_smbus_write_byte_data(ctx->tx_main, 0x41, 0x50);//default=0x50, 01010000
 	//Power down RX1, RX2,  DPLLA, DPLLB, CORE, master
 	adv_smbus_write_byte_data(ctx->io, 0x00, 0xf3);
-#endif
-	adv762x_hw_reset(ctx);
+	
 	return 0;	
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////
 static int mux_mode_rls(struct adv762x_ctx  *ctx) {
-#if 1
+	
 	if (!ctx) return -1;
-
+	
 	//Disable the edids of all ports
 	adv_smbus_write_byte_data(ctx->edid_config, 0x74, 0x00);
 	//Disable RX1 and RX2
 	adv_smbus_write_byte_data(ctx->io, 0x01, 0x77);
 	//Power down TX
 	adv_smbus_write_byte_data(ctx->tx_main, 0x41, 0x50);//default=0x50, 01010000
-
 	//Power down RX1, RX2,  DPLLA, DPLLB, CORE, master
 	adv_smbus_write_byte_data(ctx->io, 0x00, 0xf3);
-#endif
-	adv762x_hw_reset(ctx);
 	return 0;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1296,7 +1288,7 @@ static int set_tx_interrupt(struct adv762x_ctx  *ctx) {
 	interrupt_mask = (u8)adv_smbus_read_byte_data(ctx->tx_main, 0x94);
 	interrupt_mask &= ~(TX_INTS_ALL_BITS);
 	if (ctx->hdmi_src_id == TK1HDMI)
-		interrupt_mask |= TX_HPD_CHNG_INT_BIT | TX_EDID_READY_INT_BIT /* | TX_EDID_READY_INT_BIT | TX_MSEN_CHNG_INT_BIT *//*  | TX_MSEN_CHNG_INT_BIT|TX_EDID_READY_INT_BIT | TX_HDCP_AUTH_INT_BIT*/;
+		interrupt_mask |= TX_HPD_CHNG_INT_BIT  | TX_EDID_READY_INT_BIT | TX_MSEN_CHNG_INT_BIT /*  | TX_MSEN_CHNG_INT_BIT|TX_EDID_READY_INT_BIT | TX_HDCP_AUTH_INT_BIT*/;
 	else 
 		interrupt_mask |= TX_HPD_CHNG_INT_BIT  | TX_EDID_READY_INT_BIT /*  | TX_MSEN_CHNG_INT_BIT|TX_EDID_READY_INT_BIT | TX_HDCP_AUTH_INT_BIT*/;
 
@@ -1462,11 +1454,11 @@ static int process_tx_intrrupt(struct adv762x_ctx  *ctx) {
 #if 1
 			for (k = 0; k < EDID_SEGMENT_SIZE; k++) {
 				if (k < 16) 
-					printk(KERN_INFO"[zynq_adv762x ]jeff123 edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
+					printk(KERN_INFO"[zynq_adv762x ]jeff edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
 				else if (k == 0xe0)
-					printk(KERN_INFO"[zynq_adv762x ]jeff123 edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
+					printk(KERN_INFO"[zynq_adv762x ]jeff edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
 				else if (k == 0xff)
-					printk(KERN_INFO"[zynq_adv762x ]jeff123 edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
+					printk(KERN_INFO"[zynq_adv762x ]jeff edid[%d] = 0x%02x\n",  k,   ctx->edid.edid_buf[k]);
 			}
 #endif
 			if (bHasMoreEdidSegments == 0){
@@ -1474,7 +1466,7 @@ static int process_tx_intrrupt(struct adv762x_ctx  *ctx) {
 				goto re_init;
 			}
 	}
-	
+
 no_re_init:
 
 	return 0;
@@ -1493,8 +1485,6 @@ static void adv762x_interrupt_service(struct work_struct *work){
 	
 	if (!ctx) return;
 	
-	atomic_set(&g_interrupt_sevice_done, -1);
-	
 	intr_status = (u8)adv_smbus_read_byte_data(ctx->io, 0x49);
 	
 	val  = (u8)adv_smbus_read_byte_data(ctx->io, 0x4a);
@@ -1506,27 +1496,20 @@ static void adv762x_interrupt_service(struct work_struct *work){
 	}
 	
 	if (process_tx_intrrupt(ctx) == 2) goto re_init;
-	atomic_set(&g_interrupt_sevice_done, 0);
+	
 	return;
 
 re_init:
-	atomic_set(&g_interrupt_sevice_done, 0);
-	 init_tx_rx(ctx); 
+	 init_tx_rx(ctx);
 	return;
 }
 
 static irqreturn_t adv762x_irq_handler(int irq, void *devid) {
 	struct adv762x_ctx  *ctx = (struct adv762x_ctx  *)devid;
+	
 	//printk(KERN_INFO"[zynq_adv762x] Got interrupt in adv762x_irq_handler()!!\n");
-	if (ctx) {
-			if (atomic_read(&g_interrupt_sevice_done) == -1) {
-				 queue_work(ctx->work_queue, &ctx->interrupt_service);
-				atomic_set(&g_interrupt_sevice_first_run, 0);
-			}
-			 if (atomic_read(&g_interrupt_sevice_done) == 0)
-				 queue_work(ctx->work_queue, &ctx->interrupt_service);
-	}
-exit:	
+	if (ctx) queue_work(ctx->work_queue, &ctx->interrupt_service);
+	
 	return IRQ_HANDLED;
 }
 
@@ -1576,8 +1559,6 @@ static int interrupt_init(struct adv762x_ctx  *ctx) {
 		printk(KERN_INFO"[zynq_adv762x] jeff Set GPIO %u as interrupt %d.\n", ADV762x_INTX_PIN, irq);
 	
 		ctx->irq = irq;
-		
-
 	}
 	return 0;
 	

@@ -34,4 +34,6 @@ hci_uart-objs				:= $(hci_uart-y)
 
 obj-$(CONFIG_SD8897) += sd8897/
 obj-$(CONFIG_SD8797) += sd8797/
-obj-$(CONFIG_BT_BCM4339) += bcm4339.o
+obj-$(CONFIG_BT_BCM43457)		+= bcm43457.o
+obj-$(CONFIG_BT_BCM4339)		+= bcm4339.o
+obj-$(CONFIG_BT_BCM4354)		+= bcm4354.o

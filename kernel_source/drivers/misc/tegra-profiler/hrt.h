@@ -49,7 +49,7 @@ struct quadd_hrt_ctx {
 
 	struct quadd_ctx *quadd_ctx;
 
-	atomic_t active;
+	int active;
 	atomic_t nr_active_all_core;
 
 	atomic64_t counter_samples;
@@ -64,7 +64,7 @@ struct quadd_hrt_ctx {
 	struct timecounter *tc;
 	int use_arch_timer;
 
-	struct quadd_unw_methods um;
+	unsigned int unw_method;
 	int get_stack_offset;
 };
 

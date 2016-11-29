@@ -155,6 +155,8 @@ struct vpif_config_params {
 	u32 channel_bufsize[VPIF_CAPTURE_NUM_CHANNELS];
 	u8 default_device[VPIF_CAPTURE_NUM_CHANNELS];
 	u32 video_limit[VPIF_CAPTURE_NUM_CHANNELS];
+	u32  pixelformat[VPIF_CAPTURE_NUM_CHANNELS];
+	
 	u8 max_device_type;
 };
 

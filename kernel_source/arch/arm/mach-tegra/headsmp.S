@@ -50,13 +50,12 @@
  */
 	__CPUINIT
 ENTRY(tegra_secondary_startup)
-	ldr	r0, =tegra_with_secure_firmware
-	sub	r0, #(PAGE_OFFSET - TEGRA_DRAM_BASE)
-	ldr	r12, [r0]
-
 	bl	__invalidate_cpu_state
 
-	cmp	r12, #1			@ secure firmware present?
+	ldr	r0, =tegra_with_secure_firmware
+	sub	r0, #PAGE_OFFSET
+	ldr	r0, [r0]
+	cmp	r0, #1
 	beq	secondary_startup
 
 	/* enable user space perf counter access */
@@ -86,10 +85,10 @@ ENDPROC(tegra_secondary_startup)
  *	  re-enabling sdram.
  */
 ENTRY(tegra_resume)
-	ldr	r0, =tegra_with_secure_firmware
-	sub	r0, #(PAGE_OFFSET - TEGRA_DRAM_BASE)
-	ldr	r12, [r0]
-	cmp	r12, #1
+	ldr	r1, =tegra_with_secure_firmware
+	sub	r1, #PAGE_OFFSET
+	ldr	r1, [r1]
+	cmp	r1, #1
 	bne	cpu_not_secure
 
 	mov32	r1, TEGRA_TMRUS_BASE
@@ -130,7 +129,9 @@ cpu_not_secure:
 
 #ifdef CONFIG_CACHE_L2X0
 #if !defined(CONFIG_ARCH_TEGRA_14x_SOC)
-	cmp	r12, #1			@ secure firmware present?
+	ldr	r1, =tegra_with_secure_firmware
+	ldr	r1, [r1]
+	cmp	r1, #1
 	beq	cpu_resume
 
 	adr	r0, tegra_resume_l2_init
@@ -239,7 +240,10 @@ __invalidate_cpu_state:
 	teq	r1, r0
 	beq	cortex_a9
 
-	cmp	r12, #1			@ secure firmware present?
+	ldr	r0, =tegra_with_secure_firmware
+	sub	r0, #PAGE_OFFSET
+	ldr	r0, [r0]
+	cmp	r0, #1
 	beq	__enable_i_cache_branch_pred
 
 	mrc	p15, 0x1, r0, c15, c0, 3	@ L2 prefetch control reg
@@ -387,9 +391,10 @@ ENTRY(__tegra_cpu_reset_handler)
 	b	.
 #endif
 
-	adr	r12, __tegra_cpu_reset_handler_data
-	ldr	r7, [r12, #RESET_DATA(SECURE_FW_PRESENT)]
-	cmp	r7, #1 			@ if !secure
+	ldr	r0, =tegra_with_secure_firmware
+	sub	r0, #PAGE_OFFSET
+	ldr	r0, [r0]
+	cmp	r0, #1
 	beq	cpu_is_secure
 
 	cpsid	aif, 0x13			@ SVC mode, interrupts disabled

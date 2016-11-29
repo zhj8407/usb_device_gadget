@@ -29,14 +29,13 @@ static int
 uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
 		u8 *data, int len)
 {
-	memset(data, 0, video->payload_headsize);
-	data[0] = video->payload_headsize;
+	data[0] = 2;
 	data[1] = UVC_STREAM_EOH | video->fid;
 
-	if (buf->bytesused - video->queue.buf_used <= len - video->payload_headsize)
+	if (buf->bytesused - video->queue.buf_used <= len - 2)
 		data[1] |= UVC_STREAM_EOF;
 
-	return video->payload_headsize;
+	return 2;
 }
 
 static int
@@ -213,7 +212,7 @@ uvc_video_free_requests(struct uvc_video *video)
 {
 	unsigned int i;
 
-	for (i = 0; i < video->usb_req_nums; ++i) {
+	for (i = 0; i < UVC_NUM_REQUESTS; ++i) {
 		if (video->req[i]) {
 			usb_ep_free_request(video->ep, video->req[i]);
 			video->req[i] = NULL;
@@ -243,13 +242,7 @@ uvc_video_alloc_requests(struct uvc_video *video)
 		 * max_t(unsigned int, video->ep->maxburst, 1)
 		 * (video->ep->mult + 1);
 
-	if (video->bulk_mode)
-		req_size = video->bulk_req_size;
-
-	pr_debug("uvc_video_alloc_requests: req_size: %d, mult: %d, maxburst: %d\n",
-		req_size, video->ep->mult, video->ep->maxburst);
-
-	for (i = 0; i < video->usb_req_nums; ++i) {
+	for (i = 0; i < UVC_NUM_REQUESTS; ++i) {
 		video->req_buffer[i] = kmalloc(req_size, GFP_KERNEL);
 		if (video->req_buffer[i] == NULL)
 			goto error;
@@ -356,7 +349,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
 	}
 
 	if (!enable) {
-		for (i = 0; i < video->usb_req_nums; ++i)
+		for (i = 0; i < UVC_NUM_REQUESTS; ++i)
 			usb_ep_dequeue(video->ep, video->req[i]);
 
 		uvc_video_free_requests(video);
@@ -370,7 +363,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
 	if ((ret = uvc_video_alloc_requests(video)) < 0)
 		return ret;
 
-	if (video->bulk_mode) {
+	if (video->max_payload_size) {
 		video->encode = uvc_video_encode_bulk;
 		video->payload_size = 0;
 	} else
@@ -383,12 +376,7 @@ uvc_video_enable(struct uvc_video *video, int enable)
  * Initialize the UVC video stream.
  */
 static int
-uvc_video_init(struct uvc_video *video,
-		unsigned char bulkmode,
-		unsigned int bulksize,
-		unsigned char headersize,
-		unsigned int maxpayload,
-		unsigned int usbreqnums)
+uvc_video_init(struct uvc_video *video)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
@@ -398,11 +386,6 @@ uvc_video_init(struct uvc_video *video,
 	video->width = 320;
 	video->height = 240;
 	video->imagesize = 320 * 240 * 2;
-	video->payload_headsize = headersize;
-	video->bulk_mode = bulkmode;
-	video->bulk_req_size = bulksize;
-	video->max_payload_size = maxpayload;
-	video->usb_req_nums = usbreqnums;
 
 	/* Initialize the video buffers queue. */
 	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT);

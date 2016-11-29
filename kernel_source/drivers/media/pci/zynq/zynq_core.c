@@ -130,26 +130,26 @@ static int init_display_resource(struct pci_dev *pdev)
     unsigned int bar_type = 0;
     resource_size_t res_len = 0;
     resource_size_t res_start = 0;
-    unsigned long flags = 0;
-
+	unsigned long flags = 0;
+	  
     bar_type = pci_resource_flags(pdev, bar_num) & PCI_BASE_ADDRESS_SPACE; // 0 = memory, 1 = I/O
-
+    
     if (en_use_fb_mem == 1) {
-        //f8500000-f96fffff : fbmem
-        //f9700000-fdefffff : fbmem
-        res_len = 0x1200000;
-        res_start = 0xf8500000;
-    } else {
-        res_len = pci_resource_len(pdev,  bar_num);
-        res_start = pci_resource_start(pdev, bar_num);
-    }
-
-    if (bar_type != 0) {
-        zynq_printk(0,"[zynq_core]The bar #%d is not IORESOURCE_MEM!! \n", bar_num);
-        return -1;
-    }
-
-    flags = pci_resource_flags(pdev, bar_num);
+		//f8500000-f96fffff : fbmem
+		//f9700000-fdefffff : fbmem
+		res_len = 0x1200000;
+		res_start = 0xf8500000;
+	}else {
+		res_len = pci_resource_len(pdev,  bar_num);
+    	res_start = pci_resource_start(pdev, bar_num);
+	}
+	
+    if (bar_type != 0){
+		 zynq_printk(0,"[zynq_core]The bar #%d is not IORESOURCE_MEM!! \n", bar_num);
+		return -1;
+	}
+	
+	  flags = pci_resource_flags(pdev, bar_num);
 
     if (flags & IORESOURCE_MEM) {
         if (flags & IORESOURCE_CACHEABLE)
@@ -159,21 +159,21 @@ static int init_display_resource(struct pci_dev *pdev)
     }
 
     if (!request_mem_region(res_start,res_len, "zynq video input window")) {
-        zynq_printk(0,"[zynq_core] Cannot reserve video input window memory!!\n");
-        ret = -ENODEV;
-        goto exit;
-    }
-
-    is_sucessful_reseverve_video_input_window_mem = 1;
-
-    if (en_use_dev_mem_map)
-        zynq_video_input_window_base =  ioremap(res_start, res_len);
-    else
-        zynq_video_input_window_base =  ioremap_wc(res_start, res_len);
-
-    zynq_printk(0, "[zynq_core] en_use_dev_mem_map = %d\n", en_use_dev_mem_map);
-
-    if (!zynq_video_input_window_base) {
+			zynq_printk(0,"[zynq_core] Cannot reserve video input window memory!!\n");
+		 ret = -ENODEV;
+		goto exit;
+	}
+    
+     is_sucessful_reseverve_video_input_window_mem = 1;
+	
+	if (en_use_dev_mem_map)
+		zynq_video_input_window_base =  ioremap(res_start, res_len);	
+	else	 
+   		zynq_video_input_window_base =  ioremap_wc(res_start, res_len);
+    
+	zynq_printk(0, "[zynq_core] en_use_dev_mem_map = %d\n", en_use_dev_mem_map);
+	
+	if (!zynq_video_input_window_base) {
         zynq_printk(0,"[zynq_core]Failed to request bar #%d!!\n", bar_num);
         ret = -EBUSY;
         goto exit;
@@ -183,14 +183,14 @@ static int init_display_resource(struct pci_dev *pdev)
 
     zynq_printk(1, "[zynq_core]bar_num = 0x%x , res_start = 0x%x, res_len = 0x%x\n",(unsigned int)bar_num,  (unsigned int)res_start, (unsigned int)res_len);
     zynq_printk(1, "[zynq_core]video Input Window Base Address: 0x%x\n", (unsigned int)zynq_video_input_window_base);
-
-    return  ret;
-
+	
+	return  ret;
+	
 exit:
-    if ( is_sucessful_reseverve_video_input_window_mem) {
-        is_sucessful_reseverve_video_input_window_mem = 0;
-        release_mem_region( zynq_video_input_window_base_dma_handle, zynq_video_input_window_len);
-    }
+	if ( is_sucessful_reseverve_video_input_window_mem) {
+		 is_sucessful_reseverve_video_input_window_mem = 0;
+		release_mem_region( zynq_video_input_window_base_dma_handle, zynq_video_input_window_len);
+	}
     return ret;
 }
 
@@ -200,15 +200,15 @@ static int release_display_resource(struct pci_dev *pdev)
 
 //    if (zynq_video_input_window_base != NULL) pci_iounmap(pdev, zynq_video_input_window_base);
 
-    if (zynq_video_input_window_base != NULL) {
-        iounmap(zynq_video_input_window_base);
-        zynq_video_input_window_base = NULL;
-    }
-
-    if ( is_sucessful_reseverve_video_input_window_mem == 1)  {
-        is_sucessful_reseverve_video_input_window_mem = 0;
-        release_mem_region( zynq_video_input_window_base_dma_handle, zynq_video_input_window_len);
-    }
+	 if (zynq_video_input_window_base != NULL){ 
+		 iounmap(zynq_video_input_window_base);
+		 zynq_video_input_window_base = NULL;
+	 }
+	
+	 if ( is_sucessful_reseverve_video_input_window_mem == 1)  {
+		  is_sucessful_reseverve_video_input_window_mem = 0;
+		 release_mem_region( zynq_video_input_window_base_dma_handle, zynq_video_input_window_len);
+	 }
     return ret;
 
 }
@@ -242,11 +242,11 @@ int vpif_pci_probe(struct pci_dev *pdev)
         goto exit;
     }
 
-    if (!request_mem_region(res_start, res_len, "zynq regisetr region")) {
-        zynq_printk(0,"[zynq_core] Cannot reserve register region!!\n");
-        status = -ENODEV;
+    if (!request_mem_region(res_start, res_len, "zynq regisetr region")){
+    	zynq_printk(0,"[zynq_core] Cannot reserve register region!!\n");
+		status = -ENODEV;
         goto exit;
-    }
+	}
 
     zynq_reg_base =  ioremap(res_start, res_len);
     if (!zynq_reg_base) {
@@ -255,8 +255,8 @@ int vpif_pci_probe(struct pci_dev *pdev)
     }
 
     zynq_reg_len = res_len;
-    zynq_reg_base_dma_handle = res_start;
-
+	zynq_reg_base_dma_handle = res_start;
+	
     zynq_printk(1,"[zynq_core]bar_num = 0x%x , res_start = 0x%x, res_len = 0x%x\n",(unsigned int)bar_num,  (unsigned int)res_start, (unsigned int)res_len);
     //zynq_printk(1,"[zynq_core] Zynq Regisetr Base Address: 0x%x\n", (unsigned int)zynq_reg_base);
     zynq_printk(1,"[zynq_core]FPGA logical version is 0x%08x .\n", (unsigned int)fpga_reg_read(zynq_reg_base, FPGA_LOGIC_VERSION_REG));
@@ -292,13 +292,13 @@ int vpif_pci_remove(struct pci_dev *pdev)
     if (zynq_reg_base != NULL) {
         vpif_control_release_pipeline(pdev);
         iounmap(zynq_reg_base);
-        zynq_reg_base = NULL;
+		zynq_reg_base = NULL;
     }
 #if 1
     release_display_resource(pdev);
 #endif
     if (bIsReleasePCI == 0) {
-        release_mem_region(zynq_reg_base_dma_handle, zynq_reg_len);
+         release_mem_region(zynq_reg_base_dma_handle, zynq_reg_len);
         bIsReleasePCI = 1;
     }
     return 0;

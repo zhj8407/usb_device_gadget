@@ -39,7 +39,7 @@ static struct usb_gadget_strings *audio_strings[] = {
 	&stringtab_dev,
 	NULL,
 };
-#if 0
+
 #ifdef CONFIG_GADGET_UAC1
 #include "u_uac1.h"
 #include "u_uac1.c"
@@ -47,8 +47,7 @@ static struct usb_gadget_strings *audio_strings[] = {
 #else
 #include "f_uac2.c"
 #endif
-#endif
-#include "f_uac_plcm.c"
+
 /*-------------------------------------------------------------------------*/
 
 /* DO NOT REUSE THESE IDs with a protocol-incompatible driver!!  Ever!!
@@ -128,7 +127,7 @@ static struct usb_configuration audio_config_driver = {
 	/* .iConfiguration = DYNAMIC */
 	.bmAttributes		= USB_CONFIG_ATT_SELFPOWER,
 #ifndef CONFIG_GADGET_UAC1
-	.unbind			= audio_unbind_config,
+	.unbind			= uac2_unbind_config,
 #endif
 };
 

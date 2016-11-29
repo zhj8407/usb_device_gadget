@@ -54,10 +54,10 @@ static int  pci_probe_imp(struct pci_dev *pdev)
 
 
     bar_type = pci_resource_flags(pdev, bar_num) & PCI_BASE_ADDRESS_SPACE; // 0 = memory, 1 = I/O
-    //f8500000-f96fffff : fbmem
-    //f9700000-fdefffff : fbmem
-    res_len = 0x1200000;
-    res_start = 0xf8500000;
+  	//f8500000-f96fffff : fbmem
+	//f9700000-fdefffff : fbmem
+	res_len = 0x1200000;
+	res_start = 0xf8500000;
 
     dev_info(&pdev->dev,"[fake_zynq_pci]zynq bar type is %s (%lu)(%lu)\n", (bar_type  == 1)?"I/O":"memory", pci_resource_flags (pdev, bar_num) & IORESOURCE_IO, pci_resource_flags (pdev, bar_num) & IORESOURCE_MEM);
 
@@ -94,86 +94,86 @@ static int  pci_probe_imp(struct pci_dev *pdev)
         goto release_regions_exit;
     }
 #endif
-    printk(KERN_INFO">>>>>>>>>>>>>>>>>>>res_len = 0x%08x, res_length= 0x%08x\n", res_len, res_start);
-    if (!request_mem_region(res_start,res_len,
-                            "zynq fb")) {
-        printk(KERN_ERR "[fake_zynq_pci] cannot reserve frame "
-               "buffer memory\n");
-        status = -ENODEV;
-        goto exit;
-    }
-    /*
-    	32800000-33ffffff : PCI Bus 0000:01
-        32800000-32803fff : 0000:01:00.0
-        33000000-33ffffff : 0000:01:00.0
-    */
-    if (bar_num == PCIE_BAR_0)
-        pci_reg_base =  ioremap_wc(res_start, res_len);
-    else
-        pci_reg_base = ioremap(res_start, res_len);
-
+	printk(KERN_INFO">>>>>>>>>>>>>>>>>>>res_len = 0x%08x, res_length= 0x%08x\n", res_len, res_start);
+	if (!request_mem_region(res_start,res_len,
+				"zynq fb")) {
+		printk(KERN_ERR "[fake_zynq_pci] cannot reserve frame "
+				"buffer memory\n");
+		 status = -ENODEV;
+		goto exit;
+	}
+/*
+	32800000-33ffffff : PCI Bus 0000:01
+    32800000-32803fff : 0000:01:00.0
+    33000000-33ffffff : 0000:01:00.0
+*/
+	if (bar_num == PCIE_BAR_0)
+		pci_reg_base =  ioremap_wc(res_start, res_len);
+	else
+		pci_reg_base = ioremap(res_start, res_len);
+	
     if (!pci_reg_base) {
         status = -EBUSY;
         goto release_regions_exit;
     }
+   
 
+	if (bar_num == PCIE_BAR_1) {
+    	dev_err(&pdev->dev, "[fake_zynq_pci]bar_num = 0x%lx , res_start = 0x%lx (virt : 0x%lx)\n",(unsigned long)bar_num,  (unsigned long)res_start, (unsigned long)phys_to_virt(res_start));
+    	dev_err(&pdev->dev, "[fake_zynq_pci]Zynq Regisetr Base Address: 0x%lx  (phy : 0x%lx)\n", (unsigned long)pci_reg_base,  (unsigned long)virt_to_phys((void *)pci_reg_base));
+    	dev_err(&pdev->dev, "[fake_zynq_pci] offset 0x00 value 0x%lx\n", (unsigned long) ioread32(pci_reg_base));
+    	dev_err(&pdev->dev, "[fake_zynq_pci] offset 0x04 value 0x%lx\n",  (unsigned long)ioread32(pci_reg_base+0x4));
+	}
 
-    if (bar_num == PCIE_BAR_1) {
-        dev_err(&pdev->dev, "[fake_zynq_pci]bar_num = 0x%lx , res_start = 0x%lx (virt : 0x%lx)\n",(unsigned long)bar_num,  (unsigned long)res_start, (unsigned long)phys_to_virt(res_start));
-        dev_err(&pdev->dev, "[fake_zynq_pci]Zynq Regisetr Base Address: 0x%lx  (phy : 0x%lx)\n", (unsigned long)pci_reg_base,  (unsigned long)virt_to_phys((void *)pci_reg_base));
-        dev_err(&pdev->dev, "[fake_zynq_pci] offset 0x00 value 0x%lx\n", (unsigned long) ioread32(pci_reg_base));
-        dev_err(&pdev->dev, "[fake_zynq_pci] offset 0x04 value 0x%lx\n",  (unsigned long)ioread32(pci_reg_base+0x4));
-    }
-
-    {
-        unsigned char  *ptr = (unsigned  char  *)((unsigned long)pci_reg_base + 0x3000);
-        unsigned int res_length = 0;
-        unsigned int i  =0;
-
-        if (bar_num == PCIE_BAR_1)
-            res_length = 8;
-        else
-            res_length = sizeof(data_mem);
-
-        memset(data_mem, 0x1a, sizeof(data_mem));
-        printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
-        *(unsigned char *)ptr  = (unsigned char)(*((unsigned char *)data_mem));
-        /*if (bar_num == PCIE_BAR_1)*/printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
-
-        memset(data_mem, 0x1b, sizeof(data_mem));
-        printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+	{
+		  unsigned char  *ptr = (unsigned  char  *)((unsigned long)pci_reg_base + 0x3000);
+		 unsigned int res_length = 0;
+		 unsigned int i  =0;
+		 
+		 if (bar_num == PCIE_BAR_1) 
+			 res_length = 8;
+		 else
+			 res_length = sizeof(data_mem);
+		 
+		memset(data_mem, 0x1a, sizeof(data_mem));
+		printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+		*(unsigned char *)ptr  = (unsigned char)(*((unsigned char *)data_mem));
+		/*if (bar_num == PCIE_BAR_1)*/printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		
+		memset(data_mem, 0x1b, sizeof(data_mem));
+		printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
         *(unsigned short *)ptr = (unsigned short)(*((unsigned short *)data_mem));
-        /*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		/*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
 
         memset(data_mem, 0x1c, sizeof(data_mem));
-        printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
-        *(unsigned int *)ptr   =  (unsigned int)(*((unsigned int *)data_mem));
-        /*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+		*(unsigned int *)ptr   =  (unsigned int)(*((unsigned int *)data_mem));
+		/*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
 
-        memset(data_mem, 0x1e, sizeof(data_mem));
-        for (i = 0; i < res_length; i++) {
-            //ptr[i] = data_mem[i];
-            //wmb();
-            *((unsigned  char *)ptr + i)  = (unsigned char)(*((unsigned  char *)(data_mem + i)));
-        }
-        printk(KERN_INFO"(without wmb)src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
-        /*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"(without wmb)dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
-
-        memset(data_mem, 0x2a, sizeof(data_mem));
-        for (i = 0; i < res_length; i++) {
-            //ptr[i] = data_mem[i];
-            wmb();
-            *((unsigned  char *)ptr + i)  = (unsigned char)(*((unsigned  char *)(data_mem + i)));
-        }
-        printk(KERN_INFO"(with wmb)src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
-        /*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"(with wmb)dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		memset(data_mem, 0x1e, sizeof(data_mem));
+		for (i = 0; i < res_length; i++){
+					//ptr[i] = data_mem[i];
+					 //wmb();
+					 *((unsigned  char *)ptr + i)  = (unsigned char)(*((unsigned  char *)(data_mem + i))); 
+		}
+		printk(KERN_INFO"(without wmb)src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+   		/*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"(without wmb)dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		
+		memset(data_mem, 0x2a, sizeof(data_mem));
+		for (i = 0; i < res_length; i++){
+					//ptr[i] = data_mem[i];
+					 wmb();
+					 *((unsigned  char *)ptr + i)  = (unsigned char)(*((unsigned  char *)(data_mem + i))); 
+		}
+		printk(KERN_INFO"(with wmb)src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+   		/*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"(with wmb)dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
 #if 0
-        memset(data_mem, 0x2a, sizeof(data_mem));
-        memcpy_toio((unsigned char *)ptr, (unsigned char *)data_mem, res_length);
-        printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
-        /*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
+		memset(data_mem, 0x2a, sizeof(data_mem));
+		memcpy_toio((unsigned char *)ptr, (unsigned char *)data_mem, res_length);
+		printk(KERN_INFO"src: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", data_mem[0], data_mem[1], data_mem[2], data_mem[3], data_mem, res_length);
+   		/*if (bar_num == PCIE_BAR_1)*/ printk(KERN_INFO"dest: [0, 1, 2, 3] -> [%02x, %02x, %02x, %02x] (ptr, len)-->(%p,0x%08x)\n", ptr[0], ptr[1], ptr[2], ptr[3], ptr, res_length);
 #endif
-    }
+	}
 
     kbuf = dma_alloc_coherent(NULL, size, &handle, GFP_KERNEL);
     dev_err(&pdev->dev, "[fake_zynq_pci] dma address :0x%lx, size :%u\n", (unsigned long)handle, (unsigned int)size);
@@ -183,12 +183,12 @@ static int  pci_probe_imp(struct pci_dev *pdev)
     return 0;
 //release_zynq_reg_base:
     if (pci_reg_base) {
-        //pci_iounmap(pdev, pci_reg_base);
-        iounmap(pci_reg_base);
-    }
+		//pci_iounmap(pdev, pci_reg_base);
+		iounmap(pci_reg_base);
+	}
 release_regions_exit:
-    //  pci_release_regions(pdev);
-    release_mem_region(res_start,res_len);
+  	//  pci_release_regions(pdev);
+  	 release_mem_region(res_start,res_len);
 exit:
     dev_info(&pdev->dev,"[fake_zynq_pci]Failed to request bar #%d!!\n", bar_num);
     return status;
@@ -200,14 +200,14 @@ static int pci_remove_imp(struct pci_dev *pdev)
 
         dev_info(&pdev->dev,"[fake_zynq_pci]xxxfff Call pci_iounmap()\n");
         //pci_iounmap(pdev, pci_reg_base);
-        iounmap(pci_reg_base);
+		iounmap(pci_reg_base);
     }
 
     if (kbuf != NULL)
         dma_free_coherent(NULL, size, kbuf, handle);
 
     //pci_release_regions(pdev);
-    release_mem_region(res_start,res_len);
+	release_mem_region(res_start,res_len);
     return 0;
 }
 

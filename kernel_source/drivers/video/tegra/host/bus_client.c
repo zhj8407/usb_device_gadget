@@ -1,7 +1,7 @@
 /*
  * Tegra Graphics Host Client Module
  *
- * Copyright (c) 2010-2016, NVIDIA Corporation. All rights reserved.
+ * Copyright (c) 2010-2014, NVIDIA Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -61,10 +61,6 @@ static int validate_reg(struct platform_device *ndev, u32 offset, int count)
 	int err = 0;
 	struct resource *r;
 	struct nvhost_device_data *pdata = platform_get_drvdata(ndev);
-
-	/* check if offset is u32 aligned */
-	if (offset & 3)
-		return -EINVAL;
 
 	r = platform_get_resource(pdata->master ? pdata->master : ndev,
 			IORESOURCE_MEM, 0);
@@ -248,9 +244,10 @@ static int __nvhost_channelopen(struct inode *inode,
 	trace_nvhost_channel_open(dev_name(&ch->dev->dev));
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv)
+	if (!priv) {
+		nvhost_putchannel(ch, 1);
 		goto fail;
-
+	}
 	filp->private_data = priv;
 	priv->ch = ch;
 	if (nvhost_module_add_client(ch->dev, priv))
@@ -280,15 +277,13 @@ static int __nvhost_channelopen(struct inode *inode,
 		priv->timeout = 0;
 	mutex_unlock(&channel_lock);
 	return 0;
-
 fail_priv:
 	nvhost_module_remove_client(ch->dev, priv);
 fail_add_client:
 	kfree(priv);
 fail:
-	nvhost_putchannel(ch, 1);
 	mutex_unlock(&channel_lock);
-
+	nvhost_channelrelease(inode, filp);
 	return -ENOMEM;
 }
 
@@ -327,12 +322,10 @@ void nvhost_free_error_notifiers(struct nvhost_channel *ch)
 }
 
 static int nvhost_init_error_notifier(struct nvhost_channel *ch,
-		struct nvhost_set_error_notifier *args)
-{
-	u64 end = args->offset + sizeof(struct nvhost_notification);
-	struct dma_buf *dmabuf;
+		struct nvhost_set_error_notifier *args) {
 	void *va;
 
+	struct dma_buf *dmabuf;
 	if (!args->mem) {
 		dev_err(&ch->dev->dev, "invalid memory handle\n");
 		return -EINVAL;
@@ -340,19 +333,13 @@ static int nvhost_init_error_notifier(struct nvhost_channel *ch,
 
 	dmabuf = dma_buf_get(args->mem);
 
+	if (ch->error_notifier_ref)
+		nvhost_free_error_notifiers(ch);
+
 	if (IS_ERR(dmabuf)) {
 		dev_err(&ch->dev->dev, "Invalid handle: %d\n", args->mem);
 		return -EINVAL;
 	}
-
-	if (end > dmabuf->size || end < sizeof(struct nvhost_notification)) {
-		dma_buf_put(dmabuf);
-		pr_err("%s: invalid offset\n", __func__);
-		return -EINVAL;
-	}
-
-	if (ch->error_notifier_ref)
-		nvhost_free_error_notifiers(ch);
 
 	/* map handle */
 	va = dma_buf_vmap(dmabuf);

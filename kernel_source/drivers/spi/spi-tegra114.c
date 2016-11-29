@@ -899,10 +899,11 @@ static int tegra_spi_setup(struct spi_device *spi)
 			SPI_CS_POL_INACTIVE_3,
 	};
 
-	dev_dbg(&spi->dev, "setup %d bpw, %scpol, %scpha, %dHz\n",
+	printk(KERN_ALERT"spi %s: setup %d bpw, %scpol, %scpha, %scs_high, %dHz\n", __func__,
 		spi->bits_per_word,
 		spi->mode & SPI_CPOL ? "" : "~",
 		spi->mode & SPI_CPHA ? "" : "~",
+		spi->mode & SPI_CS_HIGH ? "" : "~",
 		spi->max_speed_hz);
 
 	BUG_ON(spi->chip_select >= MAX_CHIP_SELECT);

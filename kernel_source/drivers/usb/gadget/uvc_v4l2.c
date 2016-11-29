@@ -50,42 +50,16 @@ uvc_send_response(struct uvc_device *uvc, struct uvc_request_data *data)
 /* --------------------------------------------------------------------------
  * V4L2
  */
-#define FORMAT_FLAGS_PLANAR       0x01
-#define FORMAT_FLAGS_COMPRESSED   0x02
 
 struct uvc_format
 {
-	char *name;
-	u32 fcc;
 	u8 bpp;
-	u32 flags;
+	u32 fcc;
 };
 
 static struct uvc_format uvc_formats[] = {
-	{
-		.name	= "4:2:2, packed, YUYV",
-		.fcc	= V4L2_PIX_FMT_YUYV,
-		.bpp	= 16,
-		.flags	= 0,
-	},
-	{
-		.name	= "4:2:0, planar, Y-Cb-Cr",
-		.fcc	= V4L2_PIX_FMT_YUV420,
-		.bpp	= 12,
-		.flags	= FORMAT_FLAGS_PLANAR,
-	},
-	{
-		.name	= "4:2:0, planner, NV12",
-		.fcc	= V4L2_PIX_FMT_NV12,
-		.bpp	= 12,
-		.flags	= FORMAT_FLAGS_PLANAR,
-	},
-	{
-		.name	= "Motion-JPEG",
-		.fcc	= V4L2_PIX_FMT_MJPEG,
-		.bpp	= 32,
-		.flags	= FORMAT_FLAGS_COMPRESSED,
-	},
+	{ 16, V4L2_PIX_FMT_YUYV  },
+	{ 0,  V4L2_PIX_FMT_MJPEG },
 };
 
 static int
@@ -95,15 +69,7 @@ uvc_v4l2_get_format(struct uvc_video *video, struct v4l2_format *fmt)
 	fmt->fmt.pix.width = video->width;
 	fmt->fmt.pix.height = video->height;
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
-	/* In GStreamer, for the I420 or NV12 format, the
-	 * bytesperline needs to be equal to the width.
-	 */
-	if (video->fcc == V4L2_PIX_FMT_YUV420 ||
-			video->fcc == V4L2_PIX_FMT_NV12)
-		fmt->fmt.pix.bytesperline = video->width;
-	else
-		fmt->fmt.pix.bytesperline = video->bpp * video->width / 8;
-
+	fmt->fmt.pix.bytesperline = video->bpp * video->width / 8;
 	fmt->fmt.pix.sizeimage = video->imagesize;
 	fmt->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
 	fmt->fmt.pix.priv = 0;
@@ -141,11 +107,7 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 	video->imagesize = imagesize;
 
 	fmt->fmt.pix.field = V4L2_FIELD_NONE;
-	if (video->fcc == V4L2_PIX_FMT_YUV420 ||
-			video->fcc == V4L2_PIX_FMT_NV12)
-		fmt->fmt.pix.bytesperline = video->width;
-	else
-		fmt->fmt.pix.bytesperline = bpl;
+	fmt->fmt.pix.bytesperline = bpl;
 	fmt->fmt.pix.sizeimage = imagesize;
 	fmt->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
 	fmt->fmt.pix.priv = 0;
@@ -282,34 +244,16 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		if (*type != video->queue.queue.type)
 			return -EINVAL;
 
-		/*
-		 * In bulk mode, there is not set_alt request.
-		 * So we shall configure and enable the ep here.
-		 */
-		if (video->bulk_mode)
-		{
-			if (uvc->video.ep) {
-				ret = config_ep_by_speed(uvc->func.config->cdev->gadget,
-						&(uvc->func), uvc->video.ep);
-				if (ret)
-					return ret;
-
-				usb_ep_enable(uvc->video.ep);
-			}
-		}
-
 		/* Enable UVC video. */
 		ret = uvc_video_enable(video, 1);
 		if (ret < 0)
 			return ret;
 
-		if (!video->bulk_mode) {
-			/*
-			 * Complete the alternate setting selection setup phase now that
-			 * userspace is ready to provide video frames.
-			 */
-			uvc_function_setup_continue(uvc);
-		}
+		/*
+		 * Complete the alternate setting selection setup phase now that
+		 * userspace is ready to provide video frames.
+		 */
+		uvc_function_setup_continue(uvc);
 		uvc->state = UVC_STATE_STREAMING;
 
 		return 0;
@@ -325,41 +269,6 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		return uvc_video_enable(video, 0);
 	}
 
-	case UVCIOC_PLUGOUT_CLEANUP:
-	{
-		int *type = arg;
-
-		if (*type != video->queue.queue.type)
-			return -EINVAL;
-
-		/* Can not disable the ep in the suspend callback because
-		 * of the potential deadlock.
-		 * So do it here to make sure the ep is disabled.
-		 */
-		if (uvc->video.ep)
-			usb_ep_disable(uvc->video.ep);
-
-		return uvc_video_enable(video, 0);
-	}
-
-	case VIDIOC_ENUM_FMT:
-	{
-		struct v4l2_fmtdesc *f = arg;
-		const struct uvc_format *uvc_fmt;
-
-		if (f->index < 0 || f->index >= ARRAY_SIZE(uvc_formats))
-			return -EINVAL;
-
-		uvc_fmt = &uvc_formats[f->index];
-
-		f->pixelformat = uvc_fmt->fcc;
-		f->flags = uvc_fmt->flags;
-
-		snprintf(f->description, sizeof(f->description), "%s", uvc_fmt->name);
-
-		return 0;
-	}
-
 	/* Events */
 	case VIDIOC_DQEVENT:
 	{
@@ -369,6 +278,15 @@ uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 					 file->f_flags & O_NONBLOCK);
 		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
 			struct uvc_event *uvc_event = (void *)&event->u.data;
+
+			#if 0 /* joseph modify */
+			/* Tell the complete callback to generate an event for
+			 * the next request that will be enqueued by
+			 * uvc_event_write.
+			 */
+			uvc->event_setup_out =
+				!(uvc_event->req.bRequestType & USB_DIR_IN);
+			#endif
 
 			uvc->event_length = uvc_event->req.wLength;
 		}

@@ -3,7 +3,7 @@
  *
  * GK20A Graphics channel
  *
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2014, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -418,23 +418,6 @@ void gk20a_disable_channel_no_update(struct channel_gk20a *ch)
 		     ccsr_channel_enable_clr_true_f());
 }
 
-static void channel_gk20a_enable(struct channel_gk20a *ch)
-{
-	/* enable channel */
-	gk20a_writel(ch->g, ccsr_channel_r(ch->hw_chid),
-		gk20a_readl(ch->g, ccsr_channel_r(ch->hw_chid)) |
-		ccsr_channel_enable_set_true_f());
-}
-
-static void channel_gk20a_disable(struct channel_gk20a *ch)
-{
-	/* disable channel */
-	gk20a_writel(ch->g, ccsr_channel_r(ch->hw_chid),
-		gk20a_readl(ch->g,
-			ccsr_channel_r(ch->hw_chid)) |
-			ccsr_channel_enable_clr_true_f());
-}
-
 int gk20a_wait_channel_idle(struct channel_gk20a *ch)
 {
 	bool channel_idle = false;
@@ -538,12 +521,10 @@ static int gk20a_channel_cycle_stats(struct channel_gk20a *ch,
 #endif
 
 static int gk20a_init_error_notifier(struct channel_gk20a *ch,
-		struct nvhost_set_error_notifier *args)
-{
-	struct device *dev = dev_from_gk20a(ch->g);
-	struct dma_buf *dmabuf;
+		struct nvhost_set_error_notifier *args) {
 	void *va;
-	u64 end = args->offset + sizeof(struct nvhost_notification);
+
+	struct dma_buf *dmabuf;
 
 	if (!args->mem) {
 		pr_err("gk20a_init_error_notifier: invalid memory handle\n");
@@ -559,13 +540,6 @@ static int gk20a_init_error_notifier(struct channel_gk20a *ch,
 		pr_err("Invalid handle: %d\n", args->mem);
 		return -EINVAL;
 	}
-
-	if (end > dmabuf->size || end < sizeof(struct nvhost_notification)) {
-		dma_buf_put(dmabuf);
-		gk20a_err(dev, "gk20a_init_error_notifier: invalid offset\n");
-		return -EINVAL;
-	}
-
 	/* map handle */
 	va = dma_buf_vmap(dmabuf);
 	if (!va) {
@@ -1732,7 +1706,6 @@ static int gk20a_channel_wait(struct channel_gk20a *ch,
 	u32 offset;
 	unsigned long timeout;
 	int remain, ret = 0;
-	u64 end;
 
 	gk20a_dbg_fn("");
 
@@ -1748,18 +1721,11 @@ static int gk20a_channel_wait(struct channel_gk20a *ch,
 	case NVHOST_WAIT_TYPE_NOTIFIER:
 		id = args->condition.notifier.nvmap_handle;
 		offset = args->condition.notifier.offset;
-		end = offset + sizeof(struct notification);
 
 		dmabuf = dma_buf_get(id);
 		if (IS_ERR(dmabuf)) {
 			gk20a_err(d, "invalid notifier nvmap handle 0x%lx",
 				   id);
-			return -EINVAL;
-		}
-
-		if (end > dmabuf->size || end < sizeof(struct notification)) {
-			dma_buf_put(dmabuf);
-			gk20a_err(d, "invalid notifier offset\n");
 			return -EINVAL;
 		}
 
@@ -1973,8 +1939,6 @@ clean_up:
 void gk20a_init_channel(struct gpu_ops *gops)
 {
 	gops->fifo.bind_channel = channel_gk20a_bind;
-	gops->fifo.disable_channel = channel_gk20a_disable;
-	gops->fifo.enable_channel = channel_gk20a_enable;
 }
 
 long gk20a_channel_ioctl(struct file *filp,

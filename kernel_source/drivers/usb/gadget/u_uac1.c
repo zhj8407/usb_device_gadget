@@ -23,7 +23,7 @@
  * This component encapsulates the ALSA devices for USB audio gadget
  */
 
-#define FILE_PCM_PLAYBACK	"/dev/snd/pcmC0D3p"
+#define FILE_PCM_PLAYBACK	"/dev/snd/pcmC0D0p"
 #define FILE_PCM_CAPTURE	"/dev/snd/pcmC0D0c"
 #define FILE_CONTROL		"/dev/snd/controlC0"
 
@@ -301,7 +301,7 @@ static struct gaudio *the_card;
  *
  * Returns negative errno, or zero on success
  */
-int gaudio_setup(struct gaudio *card)
+int __init gaudio_setup(struct gaudio *card)
 {
 	int	ret;
 
