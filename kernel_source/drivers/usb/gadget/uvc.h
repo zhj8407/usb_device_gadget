@@ -25,7 +25,8 @@
 #define UVC_EVENT_SETUP			(V4L2_EVENT_PRIVATE_START + 4)
 #define UVC_EVENT_DATA			(V4L2_EVENT_PRIVATE_START + 5)
 #define UVC_EVENT_FRAMEDONE		(V4L2_EVENT_PRIVATE_START + 6)
-#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 6)
+#define UVC_EVENT_PLUGOUT		(V4L2_EVENT_PRIVATE_START + 7)
+#define UVC_EVENT_LAST			(V4L2_EVENT_PRIVATE_START + 7)
 
 struct uvc_request_data
 {
@@ -51,6 +52,7 @@ struct uvc_event
 };
 
 #define UVCIOC_SEND_RESPONSE		_IOW('U', 1, struct uvc_request_data)
+#define UVCIOC_PLUGOUT_CLEANUP		_IOW('U', 2, int)
 
 #define UVC_INTF_CONTROL		0
 #define UVC_INTF_STREAMING		1
@@ -161,8 +163,7 @@ enum uvc_state
 
 struct uvc_device
 {
-	struct video_device *ctrl_vdev;
-	struct video_device *strm_vdev;
+	struct video_device *vdev;
 	enum uvc_state state;
 	struct usb_function func;
 	struct uvc_video video;

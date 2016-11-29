@@ -21,7 +21,7 @@ config BCM4339
 	depends on BCMDHD
 	---help---
 		Enable any BCM4339 specific options.
-
+	
 config BCM43241
 	tristate "Broadcom 43241 wireless cards support"
 	depends on WLAN

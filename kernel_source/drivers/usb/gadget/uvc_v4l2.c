@@ -154,7 +154,7 @@ uvc_v4l2_set_format(struct uvc_video *video, struct v4l2_format *fmt)
 }
 
 static int
-uvc_v4l2_ctrl_open(struct file *file)
+uvc_v4l2_open(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
@@ -175,14 +175,7 @@ uvc_v4l2_ctrl_open(struct file *file)
 }
 
 static int
-uvc_v4l2_strm_open(struct file *file)
-{
-	/* TODO. Add something here?. */
-	return 0;
-}
-
-static int
-uvc_v4l2_ctrl_release(struct file *file)
+uvc_v4l2_release(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
@@ -202,101 +195,12 @@ uvc_v4l2_ctrl_release(struct file *file)
 	return 0;
 }
 
-static int
-uvc_v4l2_strm_release(struct file *file)
-{
-	struct video_device *vdev = video_devdata(file);
-	struct uvc_device *uvc = video_get_drvdata(vdev);
-	struct uvc_video *video = &uvc->video;
-
-	uvc_video_enable(video, 0);
-	uvc_free_buffers(&video->queue);
-
-	return 0;
-}
-
 static long
-uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg);
-
-static long
-uvc_v4l2_ctrl_do_ioctl(struct file *file, unsigned int cmd, void *arg)
+uvc_v4l2_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);
 	struct uvc_file_handle *handle = to_uvc_file_handle(file->private_data);
-	struct uvc_video *video = &uvc->video;
-	int ret = 0;
-
-	/* To be compatible with previous uvc-gadget app. We also need to
-	 * handle streaming relevant here.
-	 */
-	ret = uvc_v4l2_strm_do_ioctl(file, cmd, arg);
-	if (ret != -ENOIOCTLCMD)
-		return ret;
-
-	switch (cmd) {
-	/* Events */
-	case VIDIOC_DQEVENT:
-	{
-		struct v4l2_event *event = arg;
-
-		ret = v4l2_event_dequeue(&handle->vfh, event,
-					 file->f_flags & O_NONBLOCK);
-		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
-			struct uvc_event *uvc_event = (void *)&event->u.data;
-
-			uvc->event_length = uvc_event->req.wLength;
-		}
-
-		return ret;
-	}
-
-	case VIDIOC_SUBSCRIBE_EVENT:
-	{
-		struct v4l2_event_subscription *sub = arg;
-
-		if (sub->type < UVC_EVENT_FIRST || sub->type > UVC_EVENT_LAST)
-			return -EINVAL;
-
-		return v4l2_event_subscribe(&handle->vfh, arg, 2, NULL);
-	}
-
-	case VIDIOC_UNSUBSCRIBE_EVENT:
-		return v4l2_event_unsubscribe(&handle->vfh, arg);
-
-	case UVCIOC_SEND_RESPONSE:
-		ret = uvc_send_response(uvc, arg);
-		break;
-
-	case VIDIOC_STREAMOFF:
-	{
-		int *type = arg;
-
-		if (*type != video->queue.queue.type)
-			return -EINVAL;
-
-		/* Can not disable the ep in the suspend callback because
-		 * of the potential deadlock.
-		 * So do it here to make sure the ep is disabled.
-		 */
-		if (uvc->suspended && uvc->video.ep)
-			usb_ep_disable(uvc->video.ep);
-
-		return uvc_video_enable(video, 0);
-	}
-
-	default:
-		return -ENOIOCTLCMD;
-	}
-
-	return ret;
-}
-
-static long
-uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
-{
-	struct video_device *vdev = video_devdata(file);
-	struct uvc_device *uvc = video_get_drvdata(vdev);
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
 	struct uvc_video *video = &uvc->video;
 	int ret = 0;
@@ -389,6 +293,7 @@ uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 						&(uvc->func), uvc->video.ep);
 				if (ret)
 					return ret;
+
 				usb_ep_enable(uvc->video.ep);
 			}
 		}
@@ -417,11 +322,21 @@ uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 		if (*type != video->queue.queue.type)
 			return -EINVAL;
 
+		return uvc_video_enable(video, 0);
+	}
+
+	case UVCIOC_PLUGOUT_CLEANUP:
+	{
+		int *type = arg;
+
+		if (*type != video->queue.queue.type)
+			return -EINVAL;
+
 		/* Can not disable the ep in the suspend callback because
 		 * of the potential deadlock.
 		 * So do it here to make sure the ep is disabled.
 		 */
-		if (uvc->suspended && uvc->video.ep)
+		if (uvc->video.ep)
 			usb_ep_disable(uvc->video.ep);
 
 		return uvc_video_enable(video, 0);
@@ -442,8 +357,41 @@ uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 
 		snprintf(f->description, sizeof(f->description), "%s", uvc_fmt->name);
 
-		break;
+		return 0;
 	}
+
+	/* Events */
+	case VIDIOC_DQEVENT:
+	{
+		struct v4l2_event *event = arg;
+
+		ret = v4l2_event_dequeue(&handle->vfh, event,
+					 file->f_flags & O_NONBLOCK);
+		if (ret == 0 && event->type == UVC_EVENT_SETUP) {
+			struct uvc_event *uvc_event = (void *)&event->u.data;
+
+			uvc->event_length = uvc_event->req.wLength;
+		}
+
+		return ret;
+	}
+
+	case VIDIOC_SUBSCRIBE_EVENT:
+	{
+		struct v4l2_event_subscription *sub = arg;
+
+		if (sub->type < UVC_EVENT_FIRST || sub->type > UVC_EVENT_LAST)
+			return -EINVAL;
+
+		return v4l2_event_subscribe(&handle->vfh, arg, 2, NULL);
+	}
+
+	case VIDIOC_UNSUBSCRIBE_EVENT:
+		return v4l2_event_unsubscribe(&handle->vfh, arg);
+
+	case UVCIOC_SEND_RESPONSE:
+		ret = uvc_send_response(uvc, arg);
+		break;
 
 	default:
 		return -ENOIOCTLCMD;
@@ -453,15 +401,9 @@ uvc_v4l2_strm_do_ioctl(struct file *file, unsigned int cmd, void *arg)
 }
 
 static long
-uvc_v4l2_ctrl_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+uvc_v4l2_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	return video_usercopy(file, cmd, arg, uvc_v4l2_ctrl_do_ioctl);
-}
-
-static long
-uvc_v4l2_strm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	return video_usercopy(file, cmd, arg, uvc_v4l2_strm_do_ioctl);
+	return video_usercopy(file, cmd, arg, uvc_v4l2_do_ioctl);
 }
 
 static int
@@ -494,25 +436,13 @@ static unsigned long uvc_v4l2_get_unmapped_area(struct file *file,
 }
 #endif
 
-static struct v4l2_file_operations uvc_v4l2_ctrl_fops = {
+static struct v4l2_file_operations uvc_v4l2_fops = {
 	.owner		= THIS_MODULE,
-	.open		= uvc_v4l2_ctrl_open,
-	.release	= uvc_v4l2_ctrl_release,
-	.ioctl		= uvc_v4l2_ctrl_ioctl,
+	.open		= uvc_v4l2_open,
+	.release	= uvc_v4l2_release,
+	.ioctl		= uvc_v4l2_ioctl,
 	.mmap		= uvc_v4l2_mmap,
 	.poll		= uvc_v4l2_poll,
-#ifndef CONFIG_MMU
-	.get_unmapped_area = uvc_v4l2_get_unmapped_area,
-#endif
-};
-
-static struct v4l2_file_operations uvc_v4l2_strm_fops = {
-	.owner		= THIS_MODULE,
-	.open 		= uvc_v4l2_strm_open,
-	.release 	= uvc_v4l2_strm_release,
-	.ioctl 		= uvc_v4l2_strm_ioctl,
-	.mmap 		= uvc_v4l2_mmap,
-	.poll 		= uvc_v4l2_poll,
 #ifndef CONFIG_MMU
 	.get_unmapped_area = uvc_v4l2_get_unmapped_area,
 #endif

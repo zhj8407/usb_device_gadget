@@ -47,7 +47,7 @@ static void uvc_buffer_done_notify(struct uvc_video_queue *queue,
 		buf->bytesused;
 	uvc_event->frame_done.status = buffer_status;
 
-	v4l2_event_queue(uvc->ctrl_vdev, &v4l2_event);
+	v4l2_event_queue(uvc->vdev, &v4l2_event);
 }
 
 /* ------------------------------------------------------------------------

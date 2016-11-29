@@ -78,7 +78,8 @@ void fpga_reg_rmw_set(void __iomem *base, u32 reg, u32 val);
  */
 
 
-static inline void enable_channel0_video(int enable) {
+static inline void enable_channel0_video(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
@@ -87,7 +88,8 @@ static inline void enable_channel0_video(int enable) {
     }
 }
 
-static inline void enable_channel1_video(int enable) {
+static inline void enable_channel1_video(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
@@ -97,7 +99,8 @@ static inline void enable_channel1_video(int enable) {
 
 }
 
-static inline void enable_channel2_video(int enable) {
+static inline void enable_channel2_video(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
@@ -106,7 +109,8 @@ static inline void enable_channel2_video(int enable) {
     }
 }
 
-static inline void enable_channel3_video(int enable) {
+static inline void enable_channel3_video(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
@@ -115,8 +119,9 @@ static inline void enable_channel3_video(int enable) {
     }
 }
 
-static inline void enable_channel4_video(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel4_video(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
     } else {
@@ -124,8 +129,9 @@ static inline void enable_channel4_video(int enable) {
     }
 }
 
-static inline void enable_channel5_video(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel5_video(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_VIDEO_READY_REG, 0);
     } else {
@@ -134,8 +140,9 @@ static inline void enable_channel5_video(int enable) {
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void enable_channel0_intr(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel0_intr(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
 //	fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_MASK);
     if (enable == 0) {
         //	fpga_reg_rmw_clr(base, FPGA_INTERRUPT_REG, FPGA_VIDEO0_INTERRUPT_ST_MASK);
@@ -148,7 +155,8 @@ static inline void enable_channel0_intr(int enable) {
 }
 
 
-static inline void enable_channel1_intr(int enable) {
+static inline void enable_channel1_intr(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO1_INTERRUPT_MASK);
     if (enable == 0) {
@@ -162,7 +170,8 @@ static inline void enable_channel1_intr(int enable) {
 
 }
 
-static inline void enable_channel2_intr(int enable) {
+static inline void enable_channel2_intr(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO2_INTERRUPT_MASK);
     if (enable == 0) {
@@ -176,7 +185,8 @@ static inline void enable_channel2_intr(int enable) {
 }
 
 
-static inline void enable_channel3_intr(int enable) {
+static inline void enable_channel3_intr(int enable)
+{
     void __iomem *base =   zynq_reg_base;
     //fpga_reg_rmw_set(base, FPGA_INTERRUPT_REG, FPGA_VIDEO3_INTERRUPT_MASK);
     if (enable == 0) {
@@ -189,8 +199,9 @@ static inline void enable_channel3_intr(int enable) {
     return;
 }
 
-static inline void enable_channel4_intr(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel4_intr(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO6_INTERRUPT_MASK);
     } else {
@@ -199,8 +210,9 @@ static inline void enable_channel4_intr(int enable) {
     return;
 }
 
-static inline void enable_channel5_intr(int enable) {
-		void __iomem *base =   zynq_reg_base;
+static inline void enable_channel5_intr(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         fpga_reg_write(base, FPGA_INTERRUPT_REG,  FPGA_VIDEO7_INTERRUPT_MASK);
     } else {
@@ -261,8 +273,9 @@ static inline void enable_channel3(int enable)
     }
     return;
 }
-static inline void enable_channel4(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel4(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO6_PCI_PUSH_READY_MASK);
     } else {
@@ -270,8 +283,9 @@ static inline void enable_channel4(int enable) {
     }
     return;
 }
-static inline void enable_channel5(int enable) {
-	void __iomem *base =   zynq_reg_base;
+static inline void enable_channel5(int enable)
+{
+    void __iomem *base =   zynq_reg_base;
     if (enable == 0) {
         //fpga_reg_rmw_clr(base, FPGA_PCI_PUSH_READY_REG, FPGA_VIDEO7_PCI_PUSH_READY_MASK);
     } else {
@@ -280,115 +294,129 @@ static inline void enable_channel5(int enable) {
     return;
 }
 ///////////////////////////////////////////////////////////////////////////////
-static inline int ch0_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch0_set_videobuf_res(unsigned long width, unsigned long height)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 }
 
-static inline int ch1_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch1_set_videobuf_res(unsigned long width, unsigned long height)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 }
 #if 0
-static inline int  webcam_stream_enable(unsigned int enable) {
-  	u32 val = 0;
-	
+static inline int  webcam_stream_enable(unsigned int enable)
+{
+    u32 val = 0;
+
     if (!zynq_reg_base) return -1;
 
-	val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-	if (enable)
-			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
-	else
-			fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
-	
-    return 0;	
+    val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+    if (enable)
+        fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
+    else
+        fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
+
+    return 0;
 }
 #endif
-static inline int webcam_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int webcam_set_videobuf_res(unsigned long width, unsigned long height)
+{
 #if 0
-	void __iomem *base =   zynq_reg_base;
-	unsigned int in_width =(unsigned int)-1;
+    void __iomem *base =   zynq_reg_base;
+    unsigned int in_width =(unsigned int)-1;
     unsigned int in_height =(unsigned int)-1;
-	
-	m10mo_get_resolution(&in_width, &in_height);
-	
-	if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) {
-		zynq_printk(0, "[zynq_core] Could not set the resolution of web cam !!\n");
-		return;
-	} else {
-		zynq_printk(0, "[zynq_core] Set the resolution of web cam from (%u, %u) to (%lu, %lu)\n", in_width, in_height, width, height);
-	}
-	webcam_stream_enable(0);
-	fpga_reg_write(base,  FPGA_WEBCAM_VIDEO_RES_REG, ((width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | height));
-	webcam_stream_enable(1);
+
+    m10mo_get_resolution(&in_width, &in_height);
+
+    if ((in_width == (unsigned int) -1) ||  (in_height == (unsigned int) -1)) {
+        zynq_printk(0, "[zynq_core] Could not set the resolution of web cam !!\n");
+        return;
+    } else {
+        zynq_printk(0, "[zynq_core] Set the resolution of web cam from (%u, %u) to (%lu, %lu)\n", in_width, in_height, width, height);
+    }
+    webcam_stream_enable(0);
+    fpga_reg_write(base,  FPGA_WEBCAM_VIDEO_RES_REG, ((width << FPGA_WEBCAM_VIDEO_RES_WIDTH_OFFSET) | height));
+    webcam_stream_enable(1);
 #endif
-	return vpif_control_config_webcam_res(width, height );
-	
+    return vpif_control_config_webcam_res(width, height );
+
 }
 
-static inline int ch2_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch2_set_videobuf_res(unsigned long width, unsigned long height)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 }
 
-static inline int ch3_set_videobuf_res(unsigned long width, unsigned long height) {
+static inline int ch3_set_videobuf_res(unsigned long width, unsigned long height)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 
 }
-static inline int ch4_set_videobuf_res(unsigned long width, unsigned long height) {
-	void __iomem *base =   zynq_reg_base;
+static inline int ch4_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 }
-static inline int ch5_set_videobuf_res(unsigned long width, unsigned long height) {
-	void __iomem *base =   zynq_reg_base;
+static inline int ch5_set_videobuf_res(unsigned long width, unsigned long height)
+{
+    void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base,  FPGA_VIDEO_RES_REG, ((width << FPGA_VIDEO_RES_WIDTH_OFFSET) | height));
-	return 0;
+    return 0;
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline void ch0_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
+static inline void ch0_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO0_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO0_UV_ADDR_REG, uv_addr);
     return;
 }
 
-static inline void ch1_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
+static inline void ch1_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO1_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO1_UV_ADDR_REG, uv_addr);
     return;
 }
 
-static inline void ch2_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
+static inline void ch2_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO2_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO2_UV_ADDR_REG, uv_addr);
     return;
 }
 
-static inline void ch3_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
+static inline void ch3_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
     void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO3_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO3_UV_ADDR_REG, uv_addr);
     return;
 }
 
-static inline void ch4_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
-	void __iomem *base =   zynq_reg_base;
+static inline void ch4_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
+    void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO6_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO6_UV_ADDR_REG, uv_addr);
     return;
 }
 
-static inline void ch5_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr) {
-	void __iomem *base =   zynq_reg_base;
+static inline void ch5_set_videobuf_addr(unsigned long y_addr, unsigned long uv_addr)
+{
+    void __iomem *base =   zynq_reg_base;
     fpga_reg_write(base, FPGA_VIDEO7_Y_ADDR_REG, y_addr);
     fpga_reg_write(base, FPGA_VIDEO7_UV_ADDR_REG, uv_addr);
     return;

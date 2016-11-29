@@ -142,91 +142,91 @@ static int zynq_pci_probe(struct pci_dev *pdev,
     if (en_video_capture) {
         ret = vpif_capture_init(pdev);
         capture_init_status = ret;
-		// if (ret) goto exit_disable_pci;
+        // if (ret) goto exit_disable_pci;
     }
-    
+
     if (en_video_display) {
         ret = vpif_display_init(pdev);
-		display_init_status = ret;
-       	//if (ret) goto exit_disable_pci;
-	}
-	
-    if (en_video_control) {
-        ret =  vpif_control_init(pdev);
-		control_init_status = ret;
+        display_init_status = ret;
         //if (ret) goto exit_disable_pci;
     }
-    
+
+    if (en_video_control) {
+        ret =  vpif_control_init(pdev);
+        control_init_status = ret;
+        //if (ret) goto exit_disable_pci;
+    }
+
     if (en_audio) {
         ret = zynq_audio_init(pdev);
-		audio_init_status = ret;
-       // if (ret) goto exit_disable_pci;
+        audio_init_status = ret;
+        // if (ret) goto exit_disable_pci;
     }
-    
+
     if (en_uart) {
         ret =zynq_uart_probe(pdev);
-		uart_init_status = ret;
-       // if (ret)  goto exit_disable_pci;
+        uart_init_status = ret;
+        // if (ret)  goto exit_disable_pci;
     }
 
     if (en_diagnostic) {
         ret = zynq_diagnostic_probe(pdev);
-		diagnostic_init_status = ret;
-       // if (ret)  goto exit_disable_pci;
+        diagnostic_init_status = ret;
+        // if (ret)  goto exit_disable_pci;
     }
 
-    
-    if ((capture_init_status != 0) && (display_init_status != 0) && (audio_init_status != 0) && (uart_init_status != 0) && (control_init_status != 0) && (diagnostic_init_status != 0)){
-		zynq_printk (0, "[zynq_driver] The init status for functions all are not zero:  (cap, disp, audio uart, control, diagnostic) -> (%d, %d, %d, %d, %d, %d).\n", capture_init_status, display_init_status, audio_init_status, uart_init_status, control_init_status, diagnostic_init_status);
-		goto exit_disable_pci;
-	}
-    
+
+    if ((capture_init_status != 0) && (display_init_status != 0) && (audio_init_status != 0) && (uart_init_status != 0) && (control_init_status != 0) && (diagnostic_init_status != 0)) {
+        zynq_printk (0, "[zynq_driver] The init status for functions all are not zero:  (cap, disp, audio uart, control, diagnostic) -> (%d, %d, %d, %d, %d, %d).\n", capture_init_status, display_init_status, audio_init_status, uart_init_status, control_init_status, diagnostic_init_status);
+        goto exit_disable_pci;
+    }
+
 #ifdef CONFIG_PM_SLEEP
     card = (struct zynq_card *) vmalloc(sizeof(struct zynq_card));
 
     if (card != NULL) {
-		
-		if (capture_init_status == 0) {
-			card->capture_suspend_func = vpif_capture_suspend;
-    		card->capture_resume_func = vpif_capture_resume;
-		}
-		if (display_init_status == 0) {
-			card->display_suspend_func  = vpif_display_suspend;
-    		card->display_resume_func = vpif_display_resume;
-		}
-	
-		if (audio_init_status == 0) {
-    		card->audio_suspend_func = zynq_audio_suspend;
-    		card->audio_resume_func = zynq_audio_resume;
-		}
-		
-		if (uart_init_status == 0) {
-			card->uart_suspend_func = zynq_uart_suspend;
-    		card->uart_resume_func = zynq_uart_resume;
-		}
-    	card->pci_suspend_func = vpif_pci_suspend;
-    	card->pci_resume_func = vpif_pci_resume;
-    	
-    	pci_set_drvdata(pdev, card);
-	}
+
+        if (capture_init_status == 0) {
+            card->capture_suspend_func = vpif_capture_suspend;
+            card->capture_resume_func = vpif_capture_resume;
+        }
+        if (display_init_status == 0) {
+            card->display_suspend_func  = vpif_display_suspend;
+            card->display_resume_func = vpif_display_resume;
+        }
+
+        if (audio_init_status == 0) {
+            card->audio_suspend_func = zynq_audio_suspend;
+            card->audio_resume_func = zynq_audio_resume;
+        }
+
+        if (uart_init_status == 0) {
+            card->uart_suspend_func = zynq_uart_suspend;
+            card->uart_resume_func = zynq_uart_resume;
+        }
+        card->pci_suspend_func = vpif_pci_suspend;
+        card->pci_resume_func = vpif_pci_resume;
+
+        pci_set_drvdata(pdev, card);
+    }
 #endif
-	
-	zynq_printk (0, "[zynq_driver] The init status for functions are (cap, disp, audio uart, control, diagnostic) -> (%d, %d, %d, %d, %d, %d).\n", capture_init_status, display_init_status, audio_init_status, uart_init_status, control_init_status, diagnostic_init_status);
-	
-	{
-		dma_addr_t v1 = (dma_addr_t)NULL;
-		unsigned long v2 = (unsigned long)NULL;
-		u32 v3 = (u32)NULL;
-		dma_addr_t v4 = (dma_addr_t)0;
-		unsigned long  v5 = (unsigned long)0;
-		u32 v6 = (u32)0;
-		if ((v1 == v2) && (v2 ==v3) && (v3 == v4) && (v4 == v5) && (v5 == v6)){
-			zynq_printk (0, "[zynq_driver] (%d) All the same !!\n", __LINE__);
-		} else {
-			zynq_printk (0, "[zynq_driver] (%d) Not All the same !!\n", __LINE__);
-		}
-	}
-	return 0;
+
+    zynq_printk (0, "[zynq_driver] The init status for functions are (cap, disp, audio uart, control, diagnostic) -> (%d, %d, %d, %d, %d, %d).\n", capture_init_status, display_init_status, audio_init_status, uart_init_status, control_init_status, diagnostic_init_status);
+
+    {
+        dma_addr_t v1 = (dma_addr_t)NULL;
+        unsigned long v2 = (unsigned long)NULL;
+        u32 v3 = (u32)NULL;
+        dma_addr_t v4 = (dma_addr_t)0;
+        unsigned long  v5 = (unsigned long)0;
+        u32 v6 = (u32)0;
+        if ((v1 == v2) && (v2 ==v3) && (v3 == v4) && (v4 == v5) && (v5 == v6)) {
+            zynq_printk (0, "[zynq_driver] (%d) All the same !!\n", __LINE__);
+        } else {
+            zynq_printk (0, "[zynq_driver] (%d) Not All the same !!\n", __LINE__);
+        }
+    }
+    return 0;
 
 exit_disable_pci:
     pci_disable_device(pdev);

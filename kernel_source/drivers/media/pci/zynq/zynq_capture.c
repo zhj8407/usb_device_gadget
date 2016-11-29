@@ -111,82 +111,82 @@ unsigned int video_cap_dev_num = 0;
 #define MIN_HEIGHT 720
 
 struct vivi_fmt {
-	const char *name;
-	u32   fourcc;          /* v4l2 format id */
-	u8    depth;
-	bool  is_yuv;
+    const char *name;
+    u32   fourcc;          /* v4l2 format id */
+    u8    depth;
+    bool  is_yuv;
 };
 #define FPS_MAX 1000
 /* timeperframe: min/max and default */
 
 static const struct v4l2_fract
-	tpf_min = {.numerator = 1,		.denominator = FPS_MAX},
-	tpf_max     = {.numerator = FPS_MAX,	.denominator = 1},
-	tpf_30fps = {.numerator = 1001,	.denominator = 30000},	/* 30 fps*/
-	tpf_15fps = {.numerator = 1001,	.denominator = 15000},	/* 15 fps*/
-	tpf_60fps = {.numerator = 1001,	.denominator = 60000},	/* 60 fps*/
-	tpf_10fps = {.numerator = 1001,	.denominator = 10000},	/* 10 fps*/
-	tpf_55fps = {.numerator = 1001,	.denominator = 55000};	/* 10 fps*/
-	
-	
+        tpf_min = {.numerator = 1,		.denominator = FPS_MAX},
+            tpf_max     = {.numerator = FPS_MAX,	.denominator = 1},
+            tpf_30fps = {.numerator = 1001,	.denominator = 30000},	/* 30 fps*/
+            tpf_15fps = {.numerator = 1001,	.denominator = 15000},	/* 15 fps*/
+            tpf_60fps = {.numerator = 1001,	.denominator = 60000},	/* 60 fps*/
+            tpf_10fps = {.numerator = 1001,	.denominator = 10000},	/* 10 fps*/
+            tpf_55fps = {.numerator = 1001,	.denominator = 55000};	/* 10 fps*/
+
+
 static const struct vivi_fmt default_formats[] = {
-	/*
-	{
-		.name     = "4:2:2, packed, UYVY",
-		.fourcc   = V4L2_PIX_FMT_UYVY,
-		.depth    = 16,
-		.is_yuv   = true,
-	},
-	{
-		.name     = "4:2:2, packed, YUYV",
-		.fourcc   = V4L2_PIX_FMT_YUYV,
-		.depth    = 16,
-		.is_yuv   = true,
-	}*/
-		{
-		.name     = "4:2:0, planner, NV12",
-		.fourcc   = V4L2_PIX_FMT_NV12,
-		.depth    = 12, //8+8/4+8/4= 12
-		.is_yuv   = true,
-	}
-};	
+    /*
+    {
+    	.name     = "4:2:2, packed, UYVY",
+    	.fourcc   = V4L2_PIX_FMT_UYVY,
+    	.depth    = 16,
+    	.is_yuv   = true,
+    },
+    {
+    	.name     = "4:2:2, packed, YUYV",
+    	.fourcc   = V4L2_PIX_FMT_YUYV,
+    	.depth    = 16,
+    	.is_yuv   = true,
+    }*/
+    {
+        .name     = "4:2:0, planner, NV12",
+        .fourcc   = V4L2_PIX_FMT_NV12,
+        .depth    = 12, //8+8/4+8/4= 12
+        .is_yuv   = true,
+    }
+};
 static  struct vivi_fmt formats[] = {
-/*
-	{
-		.name     = CAP_VIDEO_FORMAT_STR,
-		.fourcc   = CAP_VIDEO_FORMAT,
-		.depth    = 16, //8+8/2+8/2 = 16
-		.is_yuv   = true,
-	},
-*/
-	{
-		.name     = "4:2:0, planner, NV12",
-		.fourcc   = V4L2_PIX_FMT_NV12,
-		.depth    = 12, //8+8/4+8/4= 12
-		.is_yuv   = true,
-	}
+    /*
+    	{
+    		.name     = CAP_VIDEO_FORMAT_STR,
+    		.fourcc   = CAP_VIDEO_FORMAT,
+    		.depth    = 16, //8+8/2+8/2 = 16
+    		.is_yuv   = true,
+    	},
+    */
+    {
+        .name     = "4:2:0, planner, NV12",
+        .fourcc   = V4L2_PIX_FMT_NV12,
+        .depth    = 12, //8+8/4+8/4= 12
+        .is_yuv   = true,
+    }
 };
 
 static const struct vivi_fmt *__get_format(u32 pixelformat)
 {
-	const struct vivi_fmt *fmt;
-	unsigned int k;
+    const struct vivi_fmt *fmt;
+    unsigned int k;
 
-	for (k = 0; k < ARRAY_SIZE(formats); k++) {
-		fmt = &formats[k];
-		if (fmt->fourcc == pixelformat)
-			break;
-	}
+    for (k = 0; k < ARRAY_SIZE(formats); k++) {
+        fmt = &formats[k];
+        if (fmt->fourcc == pixelformat)
+            break;
+    }
 
-	if (k == ARRAY_SIZE(formats))
-		return NULL;
+    if (k == ARRAY_SIZE(formats))
+        return NULL;
 
-	return &formats[k];
+    return &formats[k];
 }
 
 static const struct vivi_fmt *get_format(struct v4l2_format *f)
 {
-	return __get_format(f->fmt.pix.pixelformat);
+    return __get_format(f->fmt.pix.pixelformat);
 }
 
 static struct vpif_config_params config_params = {
@@ -195,38 +195,38 @@ static struct vpif_config_params config_params = {
     .numbuffers[VPIF_CHANNEL1_VIDEO] = DEFAULF_BUFFER_NUM,
     .numbuffers[VPIF_CHANNEL2_VIDEO] = DEFAULF_BUFFER_NUM,
     .numbuffers[VPIF_CHANNEL3_VIDEO] = DEFAULF_BUFFER_NUM,
-	.numbuffers[VPIF_CHANNEL4_VIDEO] = DEFAULF_BUFFER_NUM,
-	.numbuffers[VPIF_CHANNEL5_VIDEO] = DEFAULF_BUFFER_NUM,
-	.min_bufsize[VPIF_CHANNEL0_VIDEO] = (1920 * 1080 *  3) >>1,
+    .numbuffers[VPIF_CHANNEL4_VIDEO] = DEFAULF_BUFFER_NUM,
+    .numbuffers[VPIF_CHANNEL5_VIDEO] = DEFAULF_BUFFER_NUM,
+    .min_bufsize[VPIF_CHANNEL0_VIDEO] = (1920 * 1080 *  3) >>1,
     .min_bufsize[VPIF_CHANNEL1_VIDEO] = (1920 * 1080 *  3) >>1,
     .min_bufsize[VPIF_CHANNEL2_VIDEO] = (1920 * 1080 *  3) >>1,
     .min_bufsize[VPIF_CHANNEL3_VIDEO] = (1920 * 1080 *  3) >>1,
-	.min_bufsize[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3) >>1,
-	.min_bufsize[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3) >>1,
-	.channel_bufsize[VPIF_CHANNEL0_VIDEO] = (1920 * 1080 *  3) >>1,
+    .min_bufsize[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3) >>1,
+    .min_bufsize[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3) >>1,
+    .channel_bufsize[VPIF_CHANNEL0_VIDEO] = (1920 * 1080 *  3) >>1,
     .channel_bufsize[VPIF_CHANNEL1_VIDEO] = (1920 * 1080 *  3)>>1,
     .channel_bufsize[VPIF_CHANNEL2_VIDEO] = (1920 * 1080 *  3)>>1,
     .channel_bufsize[VPIF_CHANNEL3_VIDEO] = (1920 * 1080 *  3)>>1,
-	.channel_bufsize[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3)>>1,
-	.channel_bufsize[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3)>>1,
+    .channel_bufsize[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3)>>1,
+    .channel_bufsize[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3)>>1,
     .channel_bufstride[VPIF_CHANNEL0_VIDEO] = 1920,
     .channel_bufstride[VPIF_CHANNEL1_VIDEO] = 1920,
     .channel_bufstride[VPIF_CHANNEL2_VIDEO] = 1920,
     .channel_bufstride[VPIF_CHANNEL3_VIDEO] = 1920,
-	.channel_bufstride[VPIF_CHANNEL4_VIDEO] = 1920,
-	.channel_bufstride[VPIF_CHANNEL5_VIDEO] = 1920,
+    .channel_bufstride[VPIF_CHANNEL4_VIDEO] = 1920,
+    .channel_bufstride[VPIF_CHANNEL5_VIDEO] = 1920,
     .video_limit[VPIF_CHANNEL0_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
     .video_limit[VPIF_CHANNEL1_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
     .video_limit[VPIF_CHANNEL2_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
     .video_limit[VPIF_CHANNEL3_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
-	.video_limit[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
-	.video_limit[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
-	.pixelformat[VPIF_CHANNEL0_VIDEO] =  V4L2_PIX_FMT_NV12,
+    .video_limit[VPIF_CHANNEL4_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
+    .video_limit[VPIF_CHANNEL5_VIDEO] = (1920 * 1080 *  3) >>1 * MAX_BUFFER_NUM,
+    .pixelformat[VPIF_CHANNEL0_VIDEO] =  V4L2_PIX_FMT_NV12,
     .pixelformat[VPIF_CHANNEL1_VIDEO] =  V4L2_PIX_FMT_NV12,
     .pixelformat[VPIF_CHANNEL2_VIDEO] =  V4L2_PIX_FMT_NV12,
     .pixelformat[VPIF_CHANNEL3_VIDEO] =  V4L2_PIX_FMT_NV12,
-	.pixelformat[VPIF_CHANNEL4_VIDEO] =  V4L2_PIX_FMT_NV12,
-	.pixelformat[VPIF_CHANNEL5_VIDEO] =  V4L2_PIX_FMT_NV12
+    .pixelformat[VPIF_CHANNEL4_VIDEO] =  V4L2_PIX_FMT_NV12,
+    .pixelformat[VPIF_CHANNEL5_VIDEO] =  V4L2_PIX_FMT_NV12
 };
 
 static u8 channel_first_int[VPIF_NUMBER_OF_OBJECTS][VPIF_CAPTURE_NUM_CHANNELS] = { {1, 1,1,1, 1, 1} };
@@ -241,7 +241,7 @@ static struct device *vpif_dev = NULL;
 
 
 #define WEBCAM_RES_SUPPORT_DATE (0x20160608)
-static  unsigned int fpga_release_date = 0; 
+static  unsigned int fpga_release_date = 0;
 
 
 static void print_pixel_format( struct v4l2_pix_format *pixfmt)
@@ -295,19 +295,19 @@ static int initialize_channel_pxiel_format(struct channel_obj *ch)
 
     common->fmt.fmt.pix.width = config_params.channel_bufstride[ch->channel_id ];
     common->fmt.fmt.pix.pixelformat = config_params.pixelformat[ch->channel_id ];
-	
+
     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUV422P)
         common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
     else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUV420)
         common->fmt.fmt.pix.height = ((config_params.channel_bufsize[ch->channel_id ]*2) /3) /config_params.channel_bufstride[ch->channel_id ];
     else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
         common->fmt.fmt.pix.height = ((config_params.channel_bufsize[ch->channel_id ]*2) /3) /config_params.channel_bufstride[ch->channel_id ];
-	else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV)
-		common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
-	else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY) 
-		common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
-	else if (common->fmt.fmt.pix.pixelformat ==  V4L2_PIX_FMT_VYUY)
-		common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
+    else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV)
+        common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
+    else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY)
+        common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
+    else if (common->fmt.fmt.pix.pixelformat ==  V4L2_PIX_FMT_VYUY)
+        common->fmt.fmt.pix.height = (config_params.channel_bufsize[ch->channel_id ]/2) /config_params.channel_bufstride[ch->channel_id ];
 
     common->fmt.fmt.pix.field = V4L2_FIELD_NONE;
     common->fmt.fmt.pix.bytesperline = config_params.channel_bufstride[ch->channel_id ];
@@ -357,158 +357,163 @@ static void *capture_dam_framebuffer_addrs[VPIF_CAPTURE_NUM_CHANNELS][ MAX_BUFFE
 static unsigned int capture_dma_buffer_nums[VPIF_CAPTURE_NUM_CHANNELS] = {DEFAULF_BUFFER_NUM};
 
 #if 1
-static int release_reserved_memory_by_channel_id(struct device *dev, unsigned int channel_id) {
- 	int status = 0;
-	int j = 0;
-	int i = channel_id;
-	
-	for (j = 0 ; j < capture_dma_buffer_nums[channel_id]; j++) {
-			if (capture_dma_handles[i][j] != (dma_addr_t)0) {
-				dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
-				capture_dma_handles[i][j] = (dma_addr_t)0;
-			}
-			if (capture_dma_addrs[i][j]  != NULL) {
-				kfree(capture_dma_addrs[i][j]);
-				capture_dma_addrs[i][j] = NULL;
-			}
-	}
-	
-	return status; 
+static int release_reserved_memory_by_channel_id(struct device *dev, unsigned int channel_id)
+{
+    int status = 0;
+    int j = 0;
+    int i = channel_id;
+
+    for (j = 0 ; j < capture_dma_buffer_nums[channel_id]; j++) {
+        if (capture_dma_handles[i][j] != (dma_addr_t)0) {
+            dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
+            capture_dma_handles[i][j] = (dma_addr_t)0;
+        }
+        if (capture_dma_addrs[i][j]  != NULL) {
+            kfree(capture_dma_addrs[i][j]);
+            capture_dma_addrs[i][j] = NULL;
+        }
+    }
+
+    return status;
 }
 
-static int allocate_reserved_memory_by_channel_id(struct device *dev, unsigned int channel_id, unsigned int buffer_num) {
- 	int status = 0;
-	int j = 0;
-	int i = channel_id;
-	for (j  = 0; j < buffer_num; j++) {
-    		capture_dma_addrs[i][j] = kmalloc(capture_dma_size, GFP_KERNEL);
-			if (!capture_dma_addrs[i][j]) {
-					zynq_printk(0,"[zynq_capture]failed to kmalloc  %d memory for (ch:%d, index:%d) !!\n", capture_dma_size, i, j);
-        			status = -1;
-        			goto exit;
-			}
-			capture_dma_handles[i][j] =   dma_map_single(dev, capture_dma_addrs[i][j],capture_dma_size, capture_direction);
-			if (dma_mapping_error(dev, capture_dma_handles[i][j])) {
-        		zynq_printk(0,"[zynq_capture]failed to mapp  0x%p memory to DMA  for (ch:%d, index:%d) !!\n",capture_dma_addrs[i][j], i, j);
-        		status = -1;
-        		goto exit;
-	    	} else {
-      			capture_dam_framebuffer_handles[i][j] = (dma_addr_t) ((u8 *)capture_dma_handles[i][j] + FRAME_BUFFER_OFFSET);
-       	 		capture_dam_framebuffer_addrs[i][j] = capture_dma_addrs[i][j]  + FRAME_BUFFER_OFFSET;
-   			 }
-   			 zynq_printk(1, "[zynq_capture]Successfull to allocate %d bytes video memory: (ch:%d,  index:%d) --->  (virt:0x%p, phy:0x%p) !!\n", capture_dma_framebuffer_size,i, j, capture_dam_framebuffer_addrs[i][j] , (void *)capture_dam_framebuffer_handles[i][j]);
-	}
-	capture_dma_buffer_nums[channel_id] = buffer_num;
-	return status;
+static int allocate_reserved_memory_by_channel_id(struct device *dev, unsigned int channel_id, unsigned int buffer_num)
+{
+    int status = 0;
+    int j = 0;
+    int i = channel_id;
+    for (j  = 0; j < buffer_num; j++) {
+        capture_dma_addrs[i][j] = kmalloc(capture_dma_size, GFP_KERNEL);
+        if (!capture_dma_addrs[i][j]) {
+            zynq_printk(0,"[zynq_capture]failed to kmalloc  %d memory for (ch:%d, index:%d) !!\n", capture_dma_size, i, j);
+            status = -1;
+            goto exit;
+        }
+        capture_dma_handles[i][j] =   dma_map_single(dev, capture_dma_addrs[i][j],capture_dma_size, capture_direction);
+        if (dma_mapping_error(dev, capture_dma_handles[i][j])) {
+            zynq_printk(0,"[zynq_capture]failed to mapp  0x%p memory to DMA  for (ch:%d, index:%d) !!\n",capture_dma_addrs[i][j], i, j);
+            status = -1;
+            goto exit;
+        } else {
+            capture_dam_framebuffer_handles[i][j] = (dma_addr_t) ((u8 *)capture_dma_handles[i][j] + FRAME_BUFFER_OFFSET);
+            capture_dam_framebuffer_addrs[i][j] = capture_dma_addrs[i][j]  + FRAME_BUFFER_OFFSET;
+        }
+        zynq_printk(1, "[zynq_capture]Successfull to allocate %d bytes video memory: (ch:%d,  index:%d) --->  (virt:0x%p, phy:0x%p) !!\n", capture_dma_framebuffer_size,i, j, capture_dam_framebuffer_addrs[i][j] , (void *)capture_dam_framebuffer_handles[i][j]);
+    }
+    capture_dma_buffer_nums[channel_id] = buffer_num;
+    return status;
 exit:
-	for (j = 0 ; j < capture_dma_buffer_nums[channel_id]; j++) {
-		if (capture_dma_handles[i][j] != (dma_addr_t)0) {
-			dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
-					capture_dma_handles[i][j] = (dma_addr_t)0;
-		}
-		if (capture_dma_addrs[i][j]  != NULL) {
-			kfree(capture_dma_addrs[i][j]);
-			capture_dma_addrs[i][j] = NULL;
-		}
-	}
-	return status; 
-} 
+    for (j = 0 ; j < capture_dma_buffer_nums[channel_id]; j++) {
+        if (capture_dma_handles[i][j] != (dma_addr_t)0) {
+            dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
+            capture_dma_handles[i][j] = (dma_addr_t)0;
+        }
+        if (capture_dma_addrs[i][j]  != NULL) {
+            kfree(capture_dma_addrs[i][j]);
+            capture_dma_addrs[i][j] = NULL;
+        }
+    }
+    return status;
+}
 #endif
 
-static int release_reserved_memory(struct device *dev) {
-	
-	int  status = 0;
-	int i =0;
-	int j = 0;
-	if (!dev) {
-			zynq_printk(0,"[zynq_capture]dev == NULL !!\n");
-        	status = -1;
-        	goto exit;
-	}
-	for (i = 0; i < video_cap_dev_num; i++) {
-		for (j = 0 ; j < capture_dma_buffer_nums[i]; j++) {
-			if (capture_dma_handles[i][j] != (dma_addr_t)0) {
-				dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
-				capture_dma_handles[i][j] = (dma_addr_t)0;
-			}
-			if (capture_dma_addrs[i][j]  != NULL) {
-				kfree(capture_dma_addrs[i][j]);
-				capture_dma_addrs[i][j] = NULL;
-			}
-		}
-	}
-exit:
-    return status;
-}
+static int release_reserved_memory(struct device *dev)
+{
 
-
-static int allocate_reserved_memory(struct device *dev) {
     int  status = 0;
-	int i = 0;
-	int j  = 0;
-	
-	if (!dev) {
-			zynq_printk(0,"[zynq_capture]dev == NULL !!\n");
-        	status = -1;
-        	goto exit;
-	}
-	
-	for (i = 0; i < video_cap_dev_num; i++) capture_dma_buffer_nums[i] = config_params.numbuffers[i];
-	
-	for (i = 0; i < video_cap_dev_num; i++) {
-		for (j  = 0; j < capture_dma_buffer_nums[i]; j++) {
-    		capture_dma_addrs[i][j] = kmalloc(capture_dma_size, GFP_KERNEL);
-			if (!capture_dma_addrs[i][j]) {
-					zynq_printk(0,"[zynq_capture]failed to kmalloc  %d memory for (ch:%d, index:%d) !!\n", capture_dma_size, i, j);
-        			status = -1;
-        			goto exit;
-			}
-			capture_dma_handles[i][j] =   dma_map_single(dev, capture_dma_addrs[i][j],capture_dma_size, capture_direction);
-			if (dma_mapping_error(dev, capture_dma_handles[i][j])) {
-        		zynq_printk(0,"[zynq_capture]failed to mapp  0x%p memory to DMA  for (ch:%d, index:%d) !!\n",capture_dma_addrs[i][j], i, j);
-        		status = -1;
-        		goto exit;
-	    	} else {
-      			capture_dam_framebuffer_handles[i][j] = (dma_addr_t) ((u8 *)capture_dma_handles[i][j] + FRAME_BUFFER_OFFSET);
-       	 		capture_dam_framebuffer_addrs[i][j] = capture_dma_addrs[i][j]  + FRAME_BUFFER_OFFSET;
-				memset(capture_dam_framebuffer_addrs[i][j], 0xff,  capture_dma_size);
-   			 }
-   			 zynq_printk(1, "[zynq_capture]Successfull to allocate %d bytes video memory: (ch:%d,  index:%d) --->  (virt:0x%p, phy:0x%p) !!\n", capture_dma_framebuffer_size,i, j, capture_dam_framebuffer_addrs[i][j] , (void *)capture_dam_framebuffer_handles[i][j]);
-		}
-	}
-	return status;
-	
+    int i =0;
+    int j = 0;
+    if (!dev) {
+        zynq_printk(0,"[zynq_capture]dev == NULL !!\n");
+        status = -1;
+        goto exit;
+    }
+    for (i = 0; i < video_cap_dev_num; i++) {
+        for (j = 0 ; j < capture_dma_buffer_nums[i]; j++) {
+            if (capture_dma_handles[i][j] != (dma_addr_t)0) {
+                dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
+                capture_dma_handles[i][j] = (dma_addr_t)0;
+            }
+            if (capture_dma_addrs[i][j]  != NULL) {
+                kfree(capture_dma_addrs[i][j]);
+                capture_dma_addrs[i][j] = NULL;
+            }
+        }
+    }
 exit:
-	for (i = 0; i < video_cap_dev_num; i++) {
-		for (j = 0 ; j < capture_dma_buffer_nums[i]; j++) {
-				if (capture_dma_handles[i][j] != (dma_addr_t)0) {
-					dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
-					capture_dma_handles[i][j] = (dma_addr_t)0;
-				}
-			
-				if (capture_dma_addrs[i][j]  != NULL) {
-					kfree(capture_dma_addrs[i][j]);
-					capture_dma_addrs[i][j] = NULL;
-				}
-			}
-	}
+    return status;
+}
+
+
+static int allocate_reserved_memory(struct device *dev)
+{
+    int  status = 0;
+    int i = 0;
+    int j  = 0;
+
+    if (!dev) {
+        zynq_printk(0,"[zynq_capture]dev == NULL !!\n");
+        status = -1;
+        goto exit;
+    }
+
+    for (i = 0; i < video_cap_dev_num; i++) capture_dma_buffer_nums[i] = config_params.numbuffers[i];
+
+    for (i = 0; i < video_cap_dev_num; i++) {
+        for (j  = 0; j < capture_dma_buffer_nums[i]; j++) {
+            capture_dma_addrs[i][j] = kmalloc(capture_dma_size, GFP_KERNEL);
+            if (!capture_dma_addrs[i][j]) {
+                zynq_printk(0,"[zynq_capture]failed to kmalloc  %d memory for (ch:%d, index:%d) !!\n", capture_dma_size, i, j);
+                status = -1;
+                goto exit;
+            }
+            capture_dma_handles[i][j] =   dma_map_single(dev, capture_dma_addrs[i][j],capture_dma_size, capture_direction);
+            if (dma_mapping_error(dev, capture_dma_handles[i][j])) {
+                zynq_printk(0,"[zynq_capture]failed to mapp  0x%p memory to DMA  for (ch:%d, index:%d) !!\n",capture_dma_addrs[i][j], i, j);
+                status = -1;
+                goto exit;
+            } else {
+                capture_dam_framebuffer_handles[i][j] = (dma_addr_t) ((u8 *)capture_dma_handles[i][j] + FRAME_BUFFER_OFFSET);
+                capture_dam_framebuffer_addrs[i][j] = capture_dma_addrs[i][j]  + FRAME_BUFFER_OFFSET;
+                memset(capture_dam_framebuffer_addrs[i][j], 0xff,  capture_dma_size);
+            }
+            zynq_printk(1, "[zynq_capture]Successfull to allocate %d bytes video memory: (ch:%d,  index:%d) --->  (virt:0x%p, phy:0x%p) !!\n", capture_dma_framebuffer_size,i, j, capture_dam_framebuffer_addrs[i][j] , (void *)capture_dam_framebuffer_handles[i][j]);
+        }
+    }
+    return status;
+
+exit:
+    for (i = 0; i < video_cap_dev_num; i++) {
+        for (j = 0 ; j < capture_dma_buffer_nums[i]; j++) {
+            if (capture_dma_handles[i][j] != (dma_addr_t)0) {
+                dma_unmap_single(dev, capture_dma_handles[i][j], capture_dma_size, capture_direction);
+                capture_dma_handles[i][j] = (dma_addr_t)0;
+            }
+
+            if (capture_dma_addrs[i][j]  != NULL) {
+                kfree(capture_dma_addrs[i][j]);
+                capture_dma_addrs[i][j] = NULL;
+            }
+        }
+    }
 
     return status;
 }
 
-static int is_vaild_buffer(int channel_id, dma_addr_t addr) {
-	int j = 0;
-	int i = channel_id;
-	unsigned int buffer_num = capture_dma_buffer_nums[channel_id];
-	int is_valid = 0;
-	
-	for (j  = 0; j < buffer_num; j++) {
-		if (capture_dam_framebuffer_handles[i][j] == addr) {
-			is_valid = 1;
-		}
-	}
+static int is_vaild_buffer(int channel_id, dma_addr_t addr)
+{
+    int j = 0;
+    int i = channel_id;
+    unsigned int buffer_num = capture_dma_buffer_nums[channel_id];
+    int is_valid = 0;
 
-	return is_valid;
+    for (j  = 0; j < buffer_num; j++) {
+        if (capture_dam_framebuffer_handles[i][j] == addr) {
+            is_valid = 1;
+        }
+    }
+
+    return is_valid;
 }
 
 #endif
@@ -538,14 +543,14 @@ static void process_progressive_mode(struct common_obj *common)
     spin_lock(&common->irqlock);
 
 #if defined(USE_ZYNQ_MALLOC)
-	addr =  zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
-	if ((addr != (dma_addr_t)0) && vpif_dev != NULL) {
-			//zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
-			dma_sync_single_for_cpu(vpif_dev, addr, capture_dma_size, capture_direction);
-			//zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
-	}
+    addr =  zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
+    if ((addr != (dma_addr_t)0) && vpif_dev != NULL) {
+        //zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
+        dma_sync_single_for_cpu(vpif_dev, addr, capture_dma_size, capture_direction);
+        //zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
+    }
 #endif
-	
+
     /* Get the next buffer from buffer queue */
     common->next_frm = list_entry(common->dma_queue.next,
                                   struct vpif_cap_buffer, list);
@@ -602,10 +607,10 @@ static void thread_tick(struct thread_context  *ctx)
             unsigned int fourcc = fmt_ptr->fmt.pix.pixelformat;
             //zynq_printk(0, "[zynq_capture](w, h, s, c, f) ---> (%u, %u, %u, %lu, %d) \n", width, height, stride, count, fourcc );
             //NOTE:For RGB table: http://www.wahart.com.hk/rgb.htm
-           if (fourcc == V4L2_PIX_FMT_YUV422P)
-               draw_yuv422p(vbuf, 255, 255, 0, 255, 0, 0, width, height, stride,  count);//Yellow1 (255, 255, 0)  , Red (255, 0, 0)
-           else if (fourcc == V4L2_PIX_FMT_YUV420)
-               draw_yuv420(vbuf, 0, 238, 0, 0, 0, 255, width, height, stride,  count);//Green2 (0, 238, 0), Blue(0, 0, 255)
+            if (fourcc == V4L2_PIX_FMT_YUV422P)
+                draw_yuv422p(vbuf, 255, 255, 0, 255, 0, 0, width, height, stride,  count);//Yellow1 (255, 255, 0)  , Red (255, 0, 0)
+            else if (fourcc == V4L2_PIX_FMT_YUV420)
+                draw_yuv420(vbuf, 0, 238, 0, 0, 0, 255, width, height, stride,  count);//Green2 (0, 238, 0), Blue(0, 0, 255)
             ctx->frame_count++;
         }
 
@@ -740,7 +745,7 @@ static int vpif_buffer_prepare(struct vb2_buffer *vb)
     common = &ch->common[VPIF_VIDEO_INDEX];
 
     if (vb->state != VB2_BUF_STATE_ACTIVE &&
-        vb->state != VB2_BUF_STATE_PREPARED) {
+            vb->state != VB2_BUF_STATE_PREPARED) {
         vb2_set_plane_payload(vb, 0, common->fmt.fmt.pix.sizeimage);
         if (vb2_plane_vaddr(vb, 0) && (vb2_get_plane_payload(vb, 0) > vb2_plane_size(vb, 0))) {
             zynq_printk(0, "[zynq_capture]payload size:%lu, size:%lu\n", vb2_get_plane_payload(vb, 0), vb2_plane_size(vb, 0));
@@ -776,50 +781,54 @@ static int vpif_buffer_queue_setup(struct vb2_queue *vq,
     struct channel_obj *ch = fh->channel;
     struct common_obj *common;
     unsigned int size = 0;
-	unsigned int req_buffers = *nbuffers;
-	
+    unsigned int req_buffers = *nbuffers;
+
     common = &ch->common[VPIF_VIDEO_INDEX];
     /* Calculate the size of the buffer */
     //size = 1920 * 1920 *2;/*common->fmt.fmt.pix.sizeimage*/
     size = common->fmt.fmt.pix.sizeimage;
-	
-	if (*nbuffers < MIN_BUFFER_NUM) { *nbuffers = MIN_BUFFER_NUM;}
-	
-	if (*nbuffers > MAX_BUFFER_NUM) {*nbuffers = MAX_BUFFER_NUM;}
-	
-	if (fixed_cap_buffer_num_modes [ch->channel_id]!= 0 ) {
-		*nbuffers =  config_params.numbuffers[ch->channel_id];
-		zynq_printk(1, "[zynq_capture](%d)real nbuffers = %u (req nbuffers = %u)  (size for each buffer = %u bytes)(channel_id = %u)\n", __LINE__,  *nbuffers, req_buffers, size, ch->channel_id);
-		goto exit;
-	}
-	
+
+    if (*nbuffers < MIN_BUFFER_NUM) {
+        *nbuffers = MIN_BUFFER_NUM;
+    }
+
+    if (*nbuffers > MAX_BUFFER_NUM) {
+        *nbuffers = MAX_BUFFER_NUM;
+    }
+
+    if (fixed_cap_buffer_num_modes [ch->channel_id]!= 0 ) {
+        *nbuffers =  config_params.numbuffers[ch->channel_id];
+        zynq_printk(1, "[zynq_capture](%d)real nbuffers = %u (req nbuffers = %u)  (size for each buffer = %u bytes)(channel_id = %u)\n", __LINE__,  *nbuffers, req_buffers, size, ch->channel_id);
+        goto exit;
+    }
+
 #if defined(USE_ZYNQ_MALLOC)
-	if (*nbuffers != capture_dma_buffer_nums[ch->channel_id]) {
-		unsigned int pre_num = capture_dma_buffer_nums[ch->channel_id];
-		capture_dma_buffer_nums[ch->channel_id] = *nbuffers;
-		zynq_printk(1, "[zynq_capture](%d)real nbuffers = %u (req nbuffers = %u)  (pre_num = %u) (size for each buffer = %u bytes)(channel_id = %u)\n", __LINE__,  *nbuffers, req_buffers, pre_num,size, ch->channel_id);
-		if (release_reserved_memory_by_channel_id(vpif_dev, ch->channel_id) != 0) return -EINVAL;
-		if (allocate_reserved_memory_by_channel_id(vpif_dev, ch->channel_id, capture_dma_buffer_nums[ch->channel_id]) != 0) return -EINVAL;
-		//////////////////////////////////////////////////////////////////////////////////
-		{
-        	zynq_malloc_conf_t  ctx;
-			ctx.en_non_cache_map = ch->en_non_cache_map ;
-			ctx.is_always_get_first_memory = 0;
-			ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
-			ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
-			ctx.buffer_num = capture_dma_buffer_nums[ch->channel_id];
-			ctx.channel_id = ch->channel_id;
-			ctx.available_buffer_size = capture_dma_size;
-        	zynq_printk(1, "[zynq_capture](%d)ctx.buffer_num = %u (channel_id = %u)\n", __LINE__, ctx.buffer_num, ch->channel_id);
-			if (common->alloc_ctx) zynq_malloc_cleanup_ctx(common->alloc_ctx);
-			common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
-        	if (IS_ERR(common->alloc_ctx)) {
-            	zynq_printk(0, "[zynq_capture][vpif_buffer_queue_setup] (%d)Call zynq_malloc_init_ctx() failed!! (channel_id = %u)\n", __LINE__, ch->channel_id);
-            	return -1;
-        	}
-   		 }
-		////////////////////////////////////////////////////////////
-	}
+    if (*nbuffers != capture_dma_buffer_nums[ch->channel_id]) {
+        unsigned int pre_num = capture_dma_buffer_nums[ch->channel_id];
+        capture_dma_buffer_nums[ch->channel_id] = *nbuffers;
+        zynq_printk(1, "[zynq_capture](%d)real nbuffers = %u (req nbuffers = %u)  (pre_num = %u) (size for each buffer = %u bytes)(channel_id = %u)\n", __LINE__,  *nbuffers, req_buffers, pre_num,size, ch->channel_id);
+        if (release_reserved_memory_by_channel_id(vpif_dev, ch->channel_id) != 0) return -EINVAL;
+        if (allocate_reserved_memory_by_channel_id(vpif_dev, ch->channel_id, capture_dma_buffer_nums[ch->channel_id]) != 0) return -EINVAL;
+        //////////////////////////////////////////////////////////////////////////////////
+        {
+            zynq_malloc_conf_t  ctx;
+            ctx.en_non_cache_map = ch->en_non_cache_map ;
+            ctx.is_always_get_first_memory = 0;
+            ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
+            ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
+            ctx.buffer_num = capture_dma_buffer_nums[ch->channel_id];
+            ctx.channel_id = ch->channel_id;
+            ctx.available_buffer_size = capture_dma_size;
+            zynq_printk(1, "[zynq_capture](%d)ctx.buffer_num = %u (channel_id = %u)\n", __LINE__, ctx.buffer_num, ch->channel_id);
+            if (common->alloc_ctx) zynq_malloc_cleanup_ctx(common->alloc_ctx);
+            common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
+            if (IS_ERR(common->alloc_ctx)) {
+                zynq_printk(0, "[zynq_capture][vpif_buffer_queue_setup] (%d)Call zynq_malloc_init_ctx() failed!! (channel_id = %u)\n", __LINE__, ch->channel_id);
+                return -1;
+            }
+        }
+        ////////////////////////////////////////////////////////////
+    }
 #endif
 exit:
     *nplanes = 1;
@@ -958,11 +967,11 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
                 break;
             case VPIF_CHANNEL2_VIDEO:
                 common->set_addr = ch2_set_videobuf_addr;
-				if (fpga_release_date >= WEBCAM_RES_SUPPORT_DATE){
-					common->set_res = webcam_set_videobuf_res;
-				} else {
-					common->set_res = ch2_set_videobuf_res;
-				}
+                if (fpga_release_date >= WEBCAM_RES_SUPPORT_DATE) {
+                    common->set_res = webcam_set_videobuf_res;
+                } else {
+                    common->set_res = ch2_set_videobuf_res;
+                }
                 common->enable_channel = enable_channel2;
                 common->enable_channel_intr = enable_channel2_intr;
                 common->enable_channel_video = enable_channel2_video;
@@ -974,20 +983,20 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
                 common->enable_channel_intr = enable_channel3_intr;
                 common->enable_channel_video = enable_channel3_video;
                 break;
-			case VPIF_CHANNEL4_VIDEO:
-				common->set_addr = ch4_set_videobuf_addr;
+            case VPIF_CHANNEL4_VIDEO:
+                common->set_addr = ch4_set_videobuf_addr;
                 common->set_res = ch4_set_videobuf_res;
                 common->enable_channel = enable_channel4;
                 common->enable_channel_intr = enable_channel4_intr;
                 common->enable_channel_video = enable_channel4_video;
-				break;
-			case VPIF_CHANNEL5_VIDEO:
-				common->set_addr = ch5_set_videobuf_addr;
+                break;
+            case VPIF_CHANNEL5_VIDEO:
+                common->set_addr = ch5_set_videobuf_addr;
                 common->set_res = ch5_set_videobuf_res;
                 common->enable_channel = enable_channel5;
                 common->enable_channel_intr = enable_channel5_intr;
                 common->enable_channel_video = enable_channel5_video;
-				break;
+                break;
             default:
                 common->set_addr = NULL;
                 common->set_res = NULL;
@@ -1007,18 +1016,18 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
 #endif
     if ((addr != 0) && (common->set_addr != NULL)) {
 #if defined(USE_ZYNQ_MALLOC)
-		 if (is_vaild_buffer(ch->channel_id, addr) == 0) {
-			 zynq_printk(0, "[zynq_capture](%d) jeff The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
-			 goto  exit;
-		 }
+        if (is_vaild_buffer(ch->channel_id, addr) == 0) {
+//            zynq_printk(0, "[zynq_capture](%d) jeff The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
+            goto  exit;
+        }
 #endif
         common->set_addr(addr+common->y_off,  addr+common->uv_off);
         if (common->set_res != NULL) {
-			if (common->set_res(fmt_ptr->fmt.pix.width, fmt_ptr->fmt.pix.height) != 0)
-				goto exit;
-		}
-        if (common->enable_channel != NULL) 
-			common->enable_channel(1);
+            if (common->set_res(fmt_ptr->fmt.pix.width, fmt_ptr->fmt.pix.height) != 0)
+                goto exit;
+        }
+        if (common->enable_channel != NULL)
+            common->enable_channel(1);
     }
 
     if (common->enable_channel_video != NULL)
@@ -1030,10 +1039,10 @@ static int vpif_start_streaming(struct vb2_queue *vq, unsigned int count)
 
     common->is_start_streaming = 1;
     common->is_stop_streaming = 0;
-	 return 0;
-exit: 	
-	return -EIO;
-   
+    return 0;
+exit:
+    return -EIO;
+
 }
 
 /* abort streaming and wait for last buffer */
@@ -1071,13 +1080,13 @@ static int vpif_stop_streaming(struct vb2_queue *vq)
 
     common->is_start_streaming = 0;
     common->is_stop_streaming = 1;
-	if (debug_print >= 2) {
-		zynq_printk(2,  "[zynq_capture]jeff Interrupt count:  (intr, dummy) ---> (%u, %u) for channel %u\n", ch->interrupt_count, ch->interrupt_dummy_buffer_count, (unsigned int)ch->channel_id);
-		ch->interrupt_count = 0;
-		ch->interrupt_dummy_buffer_count = 0;
-	}
+    if (debug_print >= 2) {
+        zynq_printk(2,  "[zynq_capture]jeff Interrupt count:  (intr, dummy) ---> (%u, %u) for channel %u\n", ch->interrupt_count, ch->interrupt_dummy_buffer_count, (unsigned int)ch->channel_id);
+        ch->interrupt_count = 0;
+        ch->interrupt_dummy_buffer_count = 0;
+    }
 
-	
+
     return 0;
 }
 
@@ -1148,14 +1157,14 @@ static int vpif_update_std_info(struct channel_obj *ch)
         common->fmt.fmt.pix.sizeimage = (common->fmt.fmt.pix.bytesperline * common->fmt.fmt.pix.height  * 3 )/2;
     else if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_NV12)
         common->fmt.fmt.pix.sizeimage = (common->fmt.fmt.pix.bytesperline * common->fmt.fmt.pix.height  * 3 )/2;
-	else  if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV)
+    else  if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV)
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.bytesperline * common->fmt.fmt.pix.height  * 2;
     else  if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY)
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.bytesperline * common->fmt.fmt.pix.height  * 2;
-	else  if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_VYUY)
+    else  if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_VYUY)
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.bytesperline * common->fmt.fmt.pix.height  * 2;
-	
-	vpifparams->video_params.hpitch = std_info->width;
+
+    vpifparams->video_params.hpitch = std_info->width;
     vpifparams->video_params.storage_mode = std_info->frm_fmt;
 
     return 0;
@@ -1211,7 +1220,7 @@ static int vpif_check_format(struct channel_obj *ch,
     enum v4l2_field field = pixfmt->field;
     int ret = -EINVAL;
 
-#if 0	
+#if 0
     if ((pixfmt->pixelformat != V4L2_PIX_FMT_YUV422P) && (pixfmt->pixelformat != V4L2_PIX_FMT_YUV420)  && (pixfmt->pixelformat != V4L2_PIX_FMT_NV12) && (pixfmt->pixelformat != V4L2_PIX_FMT_YUYV) && (pixfmt->pixelformat != V4L2_PIX_FMT_UYVY) && (pixfmt->pixelformat != V4L2_PIX_FMT_VYUY)) {
         if (!update) {
             print_pixel_format(pixfmt);
@@ -1222,8 +1231,8 @@ static int vpif_check_format(struct channel_obj *ch,
         pixfmt->pixelformat = V4L2_PIX_FMT_YUV422P;
     }
 #endif
-	if (pixfmt->pixelformat != V4L2_PIX_FMT_NV12) {
-		     if (!update) {
+    if (pixfmt->pixelformat != V4L2_PIX_FMT_NV12) {
+        if (!update) {
             print_pixel_format(pixfmt);
             zynq_printk(0, "[zynq_capture]Invalid pixel format !!\n");
             goto exit;
@@ -1231,8 +1240,8 @@ static int vpif_check_format(struct channel_obj *ch,
         //defaul is YUYV
         zynq_printk(0, "[zynq_capture]xxx Set defaul pixel format: YUYV !!\n");
         pixfmt->pixelformat = V4L2_PIX_FMT_YUYV;
-	}
-		
+    }
+
     if (!(VPIF_VALID_FIELD(field))  ||  (field != V4L2_FIELD_NONE)) {
         if (!update) {
             zynq_printk(0, "[zynq_capture]Invalid field format!!\n");
@@ -1358,8 +1367,8 @@ static int vpif_release(struct file *filep)
 
     common = &ch->common[VPIF_VIDEO_INDEX];
 
-	zynq_printk(1, "[zynq_capture](%d) Eneter vpif_release()!!\n", __LINE__);
-	
+    zynq_printk(1, "[zynq_capture](%d) Eneter vpif_release()!!\n", __LINE__);
+
     mutex_lock(&common->lock);
     /* if this instance is doing IO */
     if (fh->io_allowed[VPIF_VIDEO_INDEX]) {
@@ -1368,21 +1377,21 @@ static int vpif_release(struct file *filep)
         /* Disable channel as per its device type and channel id */
         //if (common->enable_channel != NULL)common->enable_channel(0);
         common->started = 0;
-		
-		if (common->io_usrs != 0) {
-			zynq_printk(1, "[zynq_capture](%d) In vpif_release()!!\n", __LINE__);
-			common->io_usrs = 0;
-        /* Free buffers allocated */
-        vb2_queue_release(&common->buffer_queue);
+
+        if (common->io_usrs != 0) {
+            zynq_printk(1, "[zynq_capture](%d) In vpif_release()!!\n", __LINE__);
+            common->io_usrs = 0;
+            /* Free buffers allocated */
+            vb2_queue_release(&common->buffer_queue);
 #if  defined(USE_DMA_COUNTING	)
-        vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
+            vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
 #elif defined(USE_ZYNQ_MALLOC)
-        zynq_malloc_cleanup_ctx(common->alloc_ctx);
+            zynq_malloc_cleanup_ctx(common->alloc_ctx);
 #endif
-			common->alloc_ctx = NULL;
-			common->reqbuf_count = 0;
-			zynq_printk(1, "[zynq_capture](%d) In vpif_release()!!\n", __LINE__);
-		}
+            common->alloc_ctx = NULL;
+            common->reqbuf_count = 0;
+            zynq_printk(1, "[zynq_capture](%d) In vpif_release()!!\n", __LINE__);
+        }
     }
     /* Decrement channel usrs counter */
     ch->usrs--;
@@ -1399,7 +1408,7 @@ static int vpif_release(struct file *filep)
     mutex_unlock(&common->lock);
     filep->private_data = NULL;
     kfree(fh);
-		zynq_printk(1, "[zynq_capture](%d) Leave vpif_release()!!\n", __LINE__);
+    zynq_printk(1, "[zynq_capture](%d) Leave vpif_release()!!\n", __LINE__);
     return 0;
 }
 
@@ -1418,7 +1427,7 @@ static int vpif_reqbufs(struct file *file, void *priv,
     u8 index = 0;
     struct vb2_queue *q = NULL;
     int ret = 0;
-	unsigned int should_reallocate = 0;
+    unsigned int should_reallocate = 0;
 
     //vpif_dbg(2, debug_capture, "vpif_reqbufs\n");
 
@@ -1427,96 +1436,96 @@ static int vpif_reqbufs(struct file *file, void *priv,
      * It is not allowed to do settings
      */
     if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL4_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
+            || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL4_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
         if (!fh->initialized) {
             zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Channel Busy!!\n", __LINE__);
             return -EBUSY;
         }
     }
-    
+
 
     if (V4L2_BUF_TYPE_VIDEO_CAPTURE != reqbuf->type || !vpif_dev) {
-		zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
+        zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
         return -EINVAL;
-	}
+    }
 
     index = VPIF_VIDEO_INDEX;
 
     common = &ch->common[index];
-#if 0	
-	if (0 != common->io_usrs) {
-		zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Channel Busy!! (  %d(io_usrs) !=  0)\n", __LINE__, common->io_usrs);
-		return -EBUSY;
-	}
+#if 0
+    if (0 != common->io_usrs) {
+        zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Channel Busy!! (  %d(io_usrs) !=  0)\n", __LINE__, common->io_usrs);
+        return -EBUSY;
+    }
 #endif
-	
-	if ((common->io_usrs != 0) && (reqbuf->count == 0)) {
-		common->io_usrs = 0;
+
+    if ((common->io_usrs != 0) && (reqbuf->count == 0)) {
+        common->io_usrs = 0;
         /* Free buffers allocated */
         vb2_queue_release(&common->buffer_queue);
 #if  defined(USE_DMA_COUNTING	)
         vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
-		common->alloc_ctx = NULL;
+        common->alloc_ctx = NULL;
 #elif defined(USE_ZYNQ_MALLOC)
         zynq_malloc_cleanup_ctx(common->alloc_ctx);
-		common->alloc_ctx = NULL;
+        common->alloc_ctx = NULL;
 #endif
-		 zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
-		 goto exit;
-	}
-	
+        zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
+        goto exit;
+    }
+
 #if 1
-	if (reqbuf->count != 0) {
-		if (common->io_usrs == 0) {
-			should_reallocate = 1;
-		} else if ((common->reqbuf_count != reqbuf->count) &&  (common->io_usrs != 0)) {
-			should_reallocate = 1;
-     		common->io_usrs = 0;
-			common->reqbuf_count = 0;
-			/* Free buffers allocated */
-       		vb2_queue_release(&common->buffer_queue);
+    if (reqbuf->count != 0) {
+        if (common->io_usrs == 0) {
+            should_reallocate = 1;
+        } else if ((common->reqbuf_count != reqbuf->count) &&  (common->io_usrs != 0)) {
+            should_reallocate = 1;
+            common->io_usrs = 0;
+            common->reqbuf_count = 0;
+            /* Free buffers allocated */
+            vb2_queue_release(&common->buffer_queue);
 #if  defined(USE_DMA_COUNTING	)
-        	vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
-			common->alloc_ctx = NULL;
+            vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
+            common->alloc_ctx = NULL;
 #elif defined(USE_ZYNQ_MALLOC)
-        	zynq_malloc_cleanup_ctx(common->alloc_ctx);
-			common->alloc_ctx = NULL;
+            zynq_malloc_cleanup_ctx(common->alloc_ctx);
+            common->alloc_ctx = NULL;
 #endif
-		 	zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
-			//zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!! (common->io_usrs = %d)\n", __LINE__, common->io_usrs);
-			//return -EBUSY;
-		}
-	}
+            zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to free buffer may be successfull!! (reqbuf->count = %d)\n", __LINE__, reqbuf->count);
+            //zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!! (common->io_usrs = %d)\n", __LINE__, common->io_usrs);
+            //return -EBUSY;
+        }
+    }
 #endif
 
 #if  defined(USE_DMA_COUNTING)
-      if ((common->alloc_ctx  == NULL) &&  should_reallocate) {
-    	/* Initialize videobuf2 queue as per the buffer type */
-    	common->alloc_ctx = vb2_dma_contig_init_ctx(vpif_dev);
-		if (IS_ERR(common->alloc_ctx)) {
-        	zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
-        	return PTR_ERR(common->alloc_ctx);
-   		 }
-	  }
+    if ((common->alloc_ctx  == NULL) &&  should_reallocate) {
+        /* Initialize videobuf2 queue as per the buffer type */
+        common->alloc_ctx = vb2_dma_contig_init_ctx(vpif_dev);
+        if (IS_ERR(common->alloc_ctx)) {
+            zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
+            return PTR_ERR(common->alloc_ctx);
+        }
+    }
 #elif defined(USE_ZYNQ_MALLOC)
 
-   if ((common->alloc_ctx  == NULL) &&  should_reallocate) {
+    if ((common->alloc_ctx  == NULL) &&  should_reallocate) {
         zynq_malloc_conf_t  ctx;
 
         ctx.is_always_get_first_memory = 0;
-		ctx.en_non_cache_map = ch->en_non_cache_map ;
-		ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
-		ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
-		ctx.buffer_num = capture_dma_buffer_nums[ch->channel_id];
-		ctx.channel_id = ch->channel_id;
-		ctx.available_buffer_size = capture_dma_size;
-		  zynq_printk(1, "[zynq_capture](%d)jeff1234----------------> ctx.en_non_cache_map = %u\n", __LINE__, ctx.en_non_cache_map);
+        ctx.en_non_cache_map = ch->en_non_cache_map ;
+        ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[ch->channel_id][0];
+        ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[ch->channel_id][0];
+        ctx.buffer_num = capture_dma_buffer_nums[ch->channel_id];
+        ctx.channel_id = ch->channel_id;
+        ctx.available_buffer_size = capture_dma_size;
+        zynq_printk(1, "[zynq_capture](%d)jeff1234----------------> ctx.en_non_cache_map = %u\n", __LINE__, ctx.en_non_cache_map);
         zynq_printk(1, "[zynq_capture](%d)ctx.buffer_num = %u\n", __LINE__, ctx.buffer_num);
-		common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
+        common->alloc_ctx = zynq_malloc_init_ctx(&ctx);
         if (IS_ERR(common->alloc_ctx)) {
             zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
             return PTR_ERR(common->alloc_ctx);
@@ -1525,57 +1534,57 @@ static int vpif_reqbufs(struct file *file, void *priv,
 #else
     common->alloc_ctx = NULL;
 #endif
-	if ((common->alloc_ctx  != NULL) &&  should_reallocate) {
-    	q = &common->buffer_queue;
-    	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		q->io_modes = VB2_MMAP | VB2_USERPTR;
-    	q->drv_priv = fh;
-    	q->ops = &video_qops;
+    if ((common->alloc_ctx  != NULL) &&  should_reallocate) {
+        q = &common->buffer_queue;
+        q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        q->io_modes = VB2_MMAP | VB2_USERPTR;
+        q->drv_priv = fh;
+        q->ops = &video_qops;
 #if  defined(USE_DMA_COUNTING)
-    	q->mem_ops = &vb2_dma_contig_memops;
+        q->mem_ops = &vb2_dma_contig_memops;
 #elif  defined(USE_ZYNQ_MALLOC)
-    	q->mem_ops = &zynq_malloc_memops;
+        q->mem_ops = &zynq_malloc_memops;
 #else
-    	q->mem_ops = &vb2_vmalloc_memops;
+        q->mem_ops = &vb2_vmalloc_memops;
 #endif
-    	q->buf_struct_size = sizeof(struct vpif_cap_buffer);
+        q->buf_struct_size = sizeof(struct vpif_cap_buffer);
 #if (LINUX_VERSION_CODE <=  KERNEL_VERSION(3,14,0))
-    	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+        q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 #else
-    	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+        q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 #endif
-    	ret = vb2_queue_init(q);
-    	if (ret) {
-       	 	zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
+        ret = vb2_queue_init(q);
+        if (ret) {
+            zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!\n", __LINE__);
 #if  defined(USE_DMA_COUNTING)
-        	vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
+            vb2_dma_contig_cleanup_ctx(common->alloc_ctx);
 #elif defined(USE_ZYNQ_MALLOC)
-        	zynq_malloc_cleanup_ctx(common->alloc_ctx);
+            zynq_malloc_cleanup_ctx(common->alloc_ctx);
 #endif
-        	return ret;
-    	}
-    	/* Set io allowed member of file handle to TRUE */
-    	fh->io_allowed[index] = 1;
-    	/* Increment io usrs member of channel object to 1 */
-   	 	common->io_usrs = 1;
-		common->reqbuf_count = reqbuf->count;
-  	 	/* Store type of memory requested in channel object */
-    	common->memory = reqbuf->memory;
-    	INIT_LIST_HEAD(&common->dma_queue);
-	
-		ret = vb2_reqbufs(&common->buffer_queue, reqbuf);
-	
+            return ret;
+        }
+        /* Set io allowed member of file handle to TRUE */
+        fh->io_allowed[index] = 1;
+        /* Increment io usrs member of channel object to 1 */
+        common->io_usrs = 1;
+        common->reqbuf_count = reqbuf->count;
+        /* Store type of memory requested in channel object */
+        common->memory = reqbuf->memory;
+        INIT_LIST_HEAD(&common->dma_queue);
+
+        ret = vb2_reqbufs(&common->buffer_queue, reqbuf);
+
 //		zynq_printk(0, "[zynq_capture](%d) vb2_queue = %p\n", __LINE__, q);
-	
-		if (ret) {
-			zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!(ret = %d)\n", __LINE__, ret);
-		}else {
-	  		zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to allocate buffer may be successfull!!\n", __LINE__);
-		}
-	}
+
+        if (ret) {
+            zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() failed!!(ret = %d)\n", __LINE__, ret);
+        } else {
+            zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)Call vpif_reqbufs() to allocate buffer may be successfull!!\n", __LINE__);
+        }
+    }
 exit:
-	zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)(vb2_queue, alloc_ctx, reqbuf_count ,count ) = (%p, %p, %u, %u)\n", __LINE__,  &common->buffer_queue,  common->alloc_ctx,  (unsigned int)common->reqbuf_count, (unsigned int)reqbuf->count);
-	  /* Allocate buffers */
+    zynq_printk(0, "[zynq_capture][vpif_reqbufs] (%d)(vb2_queue, alloc_ctx, reqbuf_count ,count ) = (%p, %p, %u, %u)\n", __LINE__,  &common->buffer_queue,  common->alloc_ctx,  (unsigned int)common->reqbuf_count, (unsigned int)reqbuf->count);
+    /* Allocate buffers */
     return ret;
 }
 
@@ -1796,12 +1805,12 @@ static int vpif_input_to_subdev(
     /* loop through the sub device list to get the sub device info */
     for (i = 0; i < vpif_cfg->subdev_count; i++) {
         subdev_info = &vpif_cfg->subdev_info[i];
-		
-		zynq_printk(0, "[zynq_capture] subdev_info->name = %s, subdev_name=%s\n",  subdev_info->name, subdev_name);
-		
-		if ((subdev_info->name == NULL) || (subdev_name == NULL)) continue;
-        
-		if (!strcmp(subdev_info->name, subdev_name))
+
+        zynq_printk(0, "[zynq_capture] subdev_info->name = %s, subdev_name=%s\n",  subdev_info->name, subdev_name);
+
+        if ((subdev_info->name == NULL) || (subdev_name == NULL)) continue;
+
+        if (!strcmp(subdev_info->name, subdev_name))
             return i;
     }
     return -1;
@@ -1865,8 +1874,8 @@ static int vpif_set_input(
     ch->vpifparams.iface = chan_cfg->vpif_if;
 
     /* update tvnorms from the sub device input info */
-   ch->video_dev->tvnorms =   V4L2_STD_ALL; //V4L2_STD_UNKNOWN;//chan_cfg->inputs[index].input.std;
-	zynq_printk(0, "[zynq_capture]  tvnorms = 0x%08x\n", (unsigned int)ch->video_dev->tvnorms);
+    ch->video_dev->tvnorms =   V4L2_STD_ALL; //V4L2_STD_UNKNOWN;//chan_cfg->inputs[index].input.std;
+    zynq_printk(0, "[zynq_capture]  tvnorms = 0x%08x\n", (unsigned int)ch->video_dev->tvnorms);
     return 0;
 }
 
@@ -1935,12 +1944,12 @@ static int vpif_s_std(struct file *file, void *priv, v4l2_std_id std_id)
         return -EBUSY;
     }
 #if 0
-  if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL4_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
+    if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL4_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
         if (!fh->initialized) {
             zynq_printk(0, "[zynq_capture]Channel Busy!!\n");
             return -EBUSY;
@@ -2044,12 +2053,12 @@ static int vpif_s_input(struct file *file, void *priv, unsigned int index)
         return -EBUSY;
     }
 #if 0
-  if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL4_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
+    if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL4_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
         if (!fh->initialized) {
             zynq_printk(0, "[zynq_capture]Channel Busy!!\n");
             return -EBUSY;
@@ -2073,135 +2082,137 @@ static int vpif_s_input(struct file *file, void *priv, unsigned int index)
 static int vpif_enum_fmt_vid_cap(struct file *file, void  *priv,
                                  struct v4l2_fmtdesc *f)
 {
-	
-	const struct vivi_fmt *fmt;
 
-	if (f->index >= ARRAY_SIZE(formats))
-		return -EINVAL;
+    const struct vivi_fmt *fmt;
 
-	fmt = &formats[f->index];
+    if (f->index >= ARRAY_SIZE(formats))
+        return -EINVAL;
 
-	strlcpy(f->description, fmt->name, sizeof(f->description));
-	f->pixelformat = fmt->fourcc;
-	return 0;
-#if 0	
+    fmt = &formats[f->index];
+
+    strlcpy(f->description, fmt->name, sizeof(f->description));
+    f->pixelformat = fmt->fourcc;
+    return 0;
 #if 0
-	struct vpif_fh *fh = priv;
+#if 0
+    struct vpif_fh *fh = priv;
     struct channel_obj *ch = fh->channel;
     struct common_obj *common = &ch->common[VPIF_VIDEO_INDEX];
 #endif
-	
-	 if (fmt->index >= 1) {
-      //  zynq_printk(0, "[zynq_capture](%d)FPGA only could support NV12  (index = %d)!!\n", __LINE__,fmt->index);
+
+    if (fmt->index >= 1) {
+        //  zynq_printk(0, "[zynq_capture](%d)FPGA only could support NV12  (index = %d)!!\n", __LINE__,fmt->index);
         return -EINVAL;
     }
-    
-	if (fmt->index == 0 ){
-		/* Fill in the information about format */
-    	strcpy(fmt->description, " YCbCr 4:2:0 (NV12)");
-    	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    	fmt->pixelformat = V4L2_PIX_FMT_NV12;
-    	zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_NV12 (index = %d)\n", __LINE__, fmt->index);
-	}
+
+    if (fmt->index == 0 ) {
+        /* Fill in the information about format */
+        strcpy(fmt->description, " YCbCr 4:2:0 (NV12)");
+        fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt->pixelformat = V4L2_PIX_FMT_NV12;
+        zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_NV12 (index = %d)\n", __LINE__, fmt->index);
+    }
 #if 0
-	else if (fmt->index == 1) {
-		/* Fill in the information about format */
-    	strcpy(fmt->description, " YCbCr 4:2:2 (YUYV)");
-    	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    	fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-    	zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_YUYV (index = %d)\n", __LINE__, fmt->index);
-	} else if (fmt->index == 2) {
-		/* Fill in the information about format */
-    	strcpy(fmt->description, " YCbCr 4:2:2 (UYVY)");
-    	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    	fmt->pixelformat = V4L2_PIX_FMT_UYVY;
-    	zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_UYVY (index = %d)\n", __LINE__, fmt->index);
-	} else if (fmt->index == 3) {
-		/* Fill in the information about format */
-    	strcpy(fmt->description, " YCbCr 4:2:2 ( VYUY )");
-    	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    	fmt->pixelformat = V4L2_PIX_FMT_VYUY;
-    	zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_VYUY (index = %d)\n", __LINE__, fmt->index);
-	} 
+    else if (fmt->index == 1) {
+        /* Fill in the information about format */
+        strcpy(fmt->description, " YCbCr 4:2:2 (YUYV)");
+        fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt->pixelformat = V4L2_PIX_FMT_YUYV;
+        zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_YUYV (index = %d)\n", __LINE__, fmt->index);
+    } else if (fmt->index == 2) {
+        /* Fill in the information about format */
+        strcpy(fmt->description, " YCbCr 4:2:2 (UYVY)");
+        fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt->pixelformat = V4L2_PIX_FMT_UYVY;
+        zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_UYVY (index = %d)\n", __LINE__, fmt->index);
+    } else if (fmt->index == 3) {
+        /* Fill in the information about format */
+        strcpy(fmt->description, " YCbCr 4:2:2 ( VYUY )");
+        fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt->pixelformat = V4L2_PIX_FMT_VYUY;
+        zynq_printk(0, "[zynq_capture](%d) V4L2_PIX_FMT_VYUY (index = %d)\n", __LINE__, fmt->index);
+    }
 #endif
 
     return 0;
-	#endif
+#endif
 }
 
 #define MAX_SUPPORT_RES_NUM 2 //1920x1080 and 1280x720
- static int vpif_enum_framesizes(struct file *file, void  *priv, struct v4l2_frmsizeenum *fsize) {
+static int vpif_enum_framesizes(struct file *file, void  *priv, struct v4l2_frmsizeenum *fsize)
+{
 
-	int i = 0;
-	
-	for (i = 0; i < ARRAY_SIZE(formats); i++)
-		if (formats[i].fourcc == fsize->pixel_format)
-			break;
-	
-	if (i == ARRAY_SIZE(formats))
-		return -EINVAL;
-	
-	
-	if (fsize->index >= MAX_SUPPORT_RES_NUM)
-		return -EINVAL;
-	
-	if (fsize->index  == 0) {
-		fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	 	fsize->discrete.width =1920; 
-	 	fsize->discrete.height =1080;
-	} else if (fsize->index  == 1) {
-		fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-		 fsize->discrete.width =1280; 
-		 fsize->discrete.height =720;
-	}
+    int i = 0;
 
-	return 0;
+    for (i = 0; i < ARRAY_SIZE(formats); i++)
+        if (formats[i].fourcc == fsize->pixel_format)
+            break;
+
+    if (i == ARRAY_SIZE(formats))
+        return -EINVAL;
+
+
+    if (fsize->index >= MAX_SUPPORT_RES_NUM)
+        return -EINVAL;
+
+    if (fsize->index  == 0) {
+        fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+        fsize->discrete.width =1920;
+        fsize->discrete.height =1080;
+    } else if (fsize->index  == 1) {
+        fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+        fsize->discrete.width =1280;
+        fsize->discrete.height =720;
+    }
+
+    return 0;
 }
 
 static const struct v4l2_fract channle_frame_intervals[VPIF_CAPTURE_NUM_CHANNELS] = {
-		{  1, 60 }, // video0
-		{  1, 60 }, // video1
-		{  1, 15 }, // video2
-		{  1, 60 }, //video3
-		{  1, 60},
-		{  1, 60}
+    {  1, 60 }, // video0
+    {  1, 60 }, // video1
+    {  1, 15 }, // video2
+    {  1, 60 }, //video3
+    {  1, 60},
+    {  1, 60}
 };
 
-static  int vpif_enum_frameintervals(struct file *file, void *priv, struct v4l2_frmivalenum *fival) {
-	
-	struct vpif_fh *fh = priv;
+static  int vpif_enum_frameintervals(struct file *file, void *priv, struct v4l2_frmivalenum *fival)
+{
+
+    struct vpif_fh *fh = priv;
     struct channel_obj *ch = fh->channel;
-	const struct vivi_fmt *fmt;
+    const struct vivi_fmt *fmt;
 
-	if (fival->index)
-		return -EINVAL;
+    if (fival->index)
+        return -EINVAL;
 
-	fmt = __get_format(fival->pixel_format);
-	if (!fmt)
-		return -EINVAL;
-	
-	if (ch->channel_id == VPIF_CHANNEL2_VIDEO) {
-		if ((fival->width  ==  1920) && (fival->height  == 1080)) {
-			fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	 		fival->discrete.numerator=1;
-	 		fival->discrete.denominator = 15;
-		} else if ((fival->width  ==  1280) && (fival->height  == 720)){
-			fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	 		fival->discrete.numerator=1; 
-	 		fival->discrete.denominator = 15;
-		}
-	} else {
-		if ((fival->width  ==  1920) && (fival->height  == 1080)) {
-			fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	 		fival->discrete.numerator=1;
-	 		fival->discrete.denominator = 60;
-		} else if ((fival->width  ==  1280) && (fival->height  == 720)){
-			fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	 		fival->discrete.numerator=1; 
-	 		fival->discrete.denominator = 50;
-		}
-	}
-	return 0;
+    fmt = __get_format(fival->pixel_format);
+    if (!fmt)
+        return -EINVAL;
+
+    if (ch->channel_id == VPIF_CHANNEL2_VIDEO) {
+        if ((fival->width  ==  1920) && (fival->height  == 1080)) {
+            fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+            fival->discrete.numerator=1;
+            fival->discrete.denominator = 15;
+        } else if ((fival->width  ==  1280) && (fival->height  == 720)) {
+            fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+            fival->discrete.numerator=1;
+            fival->discrete.denominator = 15;
+        }
+    } else {
+        if ((fival->width  ==  1920) && (fival->height  == 1080)) {
+            fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+            fival->discrete.numerator=1;
+            fival->discrete.denominator = 60;
+        } else if ((fival->width  ==  1280) && (fival->height  == 720)) {
+            fival->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+            fival->discrete.numerator=1;
+            fival->discrete.denominator = 50;
+        }
+    }
+    return 0;
 
 }
 
@@ -2221,39 +2232,40 @@ static int vpif_try_fmt_vid_cap(struct file *file, void *priv,
 
     return vpif_check_format(ch, pixfmt, 1);
 #endif
-	//	struct vivi_dev *dev = video_drvdata(file);
-	const struct vivi_fmt *fmt;
+    //	struct vivi_dev *dev = video_drvdata(file);
+    const struct vivi_fmt *fmt = NULL;
 
-	fmt = get_format(f);
+    fmt = get_format(f);
 	
-	if (!fmt) {
-		if (ARRAY_SIZE(default_formats) <= default_cap_video_format) {
-			f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
-			fmt = get_format(f);
-		}else { 
-			fmt = &default_formats[default_cap_video_format];
-			f->fmt.pix.pixelformat = fmt->fourcc; 
-		}
-		zynq_printk(0, "[zynq_capture](%d)xx Because getting the format error, use the defult format %s !!(width = %u)\n", __LINE__, fmt->name, f->fmt.pix.width);
-	} else {
-		zynq_printk(0, "[zynq_capture](%d)Get the format %s !! (width = %u)\n", __LINE__, fmt->name, f->fmt.pix.width);
+    if (!fmt) {
+        if (ARRAY_SIZE(default_formats) <= default_cap_video_format) {
+            f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
+            fmt = get_format(f);
+        } else {
+            fmt = &default_formats[default_cap_video_format];
+            f->fmt.pix.pixelformat = fmt->fourcc;
+        }
+    } 
+    
+    f->fmt.pix.field = V4L2_FIELD_INTERLACED;
+    v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
+                          &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
+    f->fmt.pix.bytesperline =f->fmt.pix.width;
+    if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ) {
+        f->fmt.pix.sizeimage = (f->fmt.pix.height * f->fmt.pix.width * 3) >> 1;
+    } else if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
+        f->fmt.pix.sizeimage = f->fmt.pix.height * f->fmt.pix.width * 2;
+    }
+    
+    f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	
+    if (fmt) {
+    	if (fmt->is_yuv)
+        	f->fmt.pix.colorspace = V4L2_COLORSPACE_SMPTE170M;
 	}
-
-	f->fmt.pix.field = V4L2_FIELD_NONE;
-	v4l_bound_align_image(&f->fmt.pix.width, 48, MAX_WIDTH, 2,
-			      &f->fmt.pix.height, 32, MAX_HEIGHT, 0, 0);
-	f->fmt.pix.bytesperline =f->fmt.pix.width;
-	if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ) {
-		f->fmt.pix.sizeimage = (f->fmt.pix.height * f->fmt.pix.width * 3) >> 1;
-	} else if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
-		f->fmt.pix.sizeimage = f->fmt.pix.height * f->fmt.pix.width * 2;
-	}
-	if (fmt->is_yuv)
-		f->fmt.pix.colorspace = V4L2_COLORSPACE_SMPTE170M;
-	else
-		f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
-	f->fmt.pix.priv = 0;
-	return 0;
+    
+    f->fmt.pix.priv = 0;
+    return 0;
 
 }
 
@@ -2271,17 +2283,17 @@ static int vpif_g_fmt_vid_cap(struct file *file, void *priv,
     struct channel_obj *ch = NULL;
     struct common_obj *common = NULL;
 
-	
-	if (!fh) return -EINVAL;
-	
-	ch = fh->channel;
-	
-	if (!ch) return -EINVAL;
-	
-	common = &ch->common[VPIF_VIDEO_INDEX];
-	
-	if(!common || !fmt) return -EINVAL;
-	
+
+    if (!fh) return -EINVAL;
+
+    ch = fh->channel;
+
+    if (!ch) return -EINVAL;
+
+    common = &ch->common[VPIF_VIDEO_INDEX];
+
+    if(!common || !fmt) return -EINVAL;
+
     /* Check the validity of the buffer type */
     if (common->fmt.type != fmt->type) {
         zynq_printk(0, "[zynq_capture]buffer type %d is not supported!! \n",  fmt->type);
@@ -2316,12 +2328,12 @@ static int vpif_s_fmt_vid_cap(struct file *file, void *priv,
         return -EBUSY;
     }
 #if 0
-     if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
-        || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL4_VIDEO == ch->channel_id)
-		|| (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
+    if ((VPIF_CHANNEL0_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL1_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL2_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL3_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL4_VIDEO == ch->channel_id)
+            || (VPIF_CHANNEL5_VIDEO == ch->channel_id)) {
         if (!fh->initialized) {
             zynq_printk(0, "[zynq_capture]Channel Busy\n");
             return -EBUSY;
@@ -2336,9 +2348,9 @@ static int vpif_s_fmt_vid_cap(struct file *file, void *priv,
 
     pixfmt = &fmt->fmt.pix;
     /* Check for valid field format */
-   // ret = vpif_check_format(ch, pixfmt, 0);
+    // ret = vpif_check_format(ch, pixfmt, 0);
 
-   	ret = vpif_try_fmt_vid_cap(file, priv, fmt);
+    ret = vpif_try_fmt_vid_cap(file, priv, fmt);
     if (ret < 0)
         return ret;
     /* store the format in the channel object */
@@ -2354,15 +2366,15 @@ static int vpif_s_fmt_vid_cap(struct file *file, void *priv,
         common->fmt.fmt.pix.sizeimage = (common->fmt.fmt.pix.width * common->fmt.fmt.pix.height * 3 )/2;
     } else     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.width * common->fmt.fmt.pix.height *2;
-	}  else     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY) {
+    }  else     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_UYVY) {
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.width * common->fmt.fmt.pix.height *2;
-	}  else     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_VYUY) {
+    }  else     if (common->fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_VYUY) {
         common->fmt.fmt.pix.sizeimage = common->fmt.fmt.pix.width * common->fmt.fmt.pix.height *2;
-	} 
+    }
     common->fmt.fmt.pix.bytesperline = common->fmt.fmt.pix.width;
-	common->height = pixfmt->height;
+    common->height = pixfmt->height;
     common->width = pixfmt->width;
-	
+
     print_pixel_format( pixfmt);
 
     return 0;
@@ -2545,12 +2557,12 @@ static int vpif_s_dv_timings(struct file *file, void *priv,
     }
 
     if (!(timings->bt.width && timings->bt.height &&
-          (timings->bt.hbackporch ||
-           timings->bt.hfrontporch ||
-           timings->bt.hsync) &&
-          timings->bt.vfrontporch &&
-          (timings->bt.vbackporch ||
-           timings->bt.vsync))) {
+            (timings->bt.hbackporch ||
+             timings->bt.hfrontporch ||
+             timings->bt.hsync) &&
+            timings->bt.vfrontporch &&
+            (timings->bt.vbackporch ||
+             timings->bt.vsync))) {
         zynq_printk(0, "[zynq_capture]Timings for width, height, "
                     "horizontal back porch, horizontal sync, "
                     "horizontal front porch, vertical back porch, "
@@ -2639,7 +2651,7 @@ static int vpif_g_chip_ident(struct file *file, void *priv,
     chip->ident = V4L2_IDENT_NONE;
     chip->revision = 0;
     if (chip->match.type != V4L2_CHIP_MATCH_I2C_DRIVER &&
-        chip->match.type != V4L2_CHIP_MATCH_I2C_ADDR) {
+            chip->match.type != V4L2_CHIP_MATCH_I2C_ADDR) {
         zynq_printk(0, "[zynq_capture]match_type %u is invalid !!\n", chip->match.type);
         return -EINVAL;
     }
@@ -2719,8 +2731,8 @@ static int vpif_queryctrl(struct file *file, void *priv, struct v4l2_queryctrl *
     /* we only support hue/saturation/contrast/brightness */
     if (ctrl->id < V4L2_CID_BRIGHTNESS || ctrl->id > V4L2_CID_HUE)
         return -EINVAL;
-	
-   if (ch->sd != NULL) ret = v4l2_subdev_call(ch->sd, core,queryctrl, ctrl);
+
+    if (ch->sd != NULL) ret = v4l2_subdev_call(ch->sd, core,queryctrl, ctrl);
 
     return ret;
 }
@@ -2751,7 +2763,7 @@ static int vpif_s_ctrl(struct file *file, void *priv, struct v4l2_control *ctrl)
     int ret = 0;
     struct vpif_fh *fh = priv;
     struct channel_obj *ch = fh->channel;
-	
+
     /* we only support hue/saturation/contrast/brightness */
     if (ctrl->id < V4L2_CID_BRIGHTNESS || ctrl->id > V4L2_CID_HUE)
         return -EINVAL;
@@ -2781,8 +2793,8 @@ static const struct v4l2_ioctl_ops vpif_ioctl_ops = {
     .vidioc_g_priority		= vpif_g_priority,
     .vidioc_s_priority		= vpif_s_priority,
     .vidioc_enum_fmt_vid_cap	= vpif_enum_fmt_vid_cap,
-	.vidioc_enum_framesizes         = vpif_enum_framesizes,
-	.vidioc_enum_frameintervals     = vpif_enum_frameintervals,
+    .vidioc_enum_framesizes         = vpif_enum_framesizes,
+    .vidioc_enum_frameintervals     = vpif_enum_frameintervals,
     .vidioc_g_fmt_vid_cap  		= vpif_g_fmt_vid_cap,
     .vidioc_s_fmt_vid_cap		= vpif_s_fmt_vid_cap,
     .vidioc_try_fmt_vid_cap		= vpif_try_fmt_vid_cap,
@@ -2794,20 +2806,20 @@ static const struct v4l2_ioctl_ops vpif_ioctl_ops = {
     .vidioc_s_std           	= vpif_s_std,
     .vidioc_g_std			= vpif_g_std,
 #if 1
-	 .vidioc_reqbufs         	= vpif_reqbufs,
+    .vidioc_reqbufs         	= vpif_reqbufs,
     .vidioc_querybuf        	= vpif_querybuf,
-	.vidioc_qbuf            	= vpif_qbuf,
+    .vidioc_qbuf            	= vpif_qbuf,
     .vidioc_dqbuf           	= vpif_dqbuf,
-  	.vidioc_streamon        	= vpif_streamon,
+    .vidioc_streamon        	= vpif_streamon,
     .vidioc_streamoff       	= vpif_streamoff,
 #endif
 #if 0
-		.vidioc_reqbufs       = vb2_ioctl_reqbufs,
-	.vidioc_create_bufs   = vb2_ioctl_create_bufs,
-	.vidioc_prepare_buf   = vb2_ioctl_prepare_buf,
-	.vidioc_querybuf      = vb2_ioctl_querybuf,
-	.vidioc_qbuf          = vb2_ioctl_qbuf,
-	.vidioc_dqbuf         = vb2_ioctl_dqbuf,
+    .vidioc_reqbufs       = vb2_ioctl_reqbufs,
+    .vidioc_create_bufs   = vb2_ioctl_create_bufs,
+    .vidioc_prepare_buf   = vb2_ioctl_prepare_buf,
+    .vidioc_querybuf      = vb2_ioctl_querybuf,
+    .vidioc_qbuf          = vb2_ioctl_qbuf,
+    .vidioc_dqbuf         = vb2_ioctl_dqbuf,
 #endif
     .vidioc_cropcap         	= vpif_cropcap,
     .vidioc_s_crop  			= vpif_s_crop,
@@ -2858,33 +2870,33 @@ static int initialize_vpif(void)
     int err = 0, i, j;
     int free_channel_objects_index;
 
-	for (i = 0 ; i < VPIF_CAPTURE_NUM_CHANNELS; i++)  fixed_cap_buffer_num_modes[i] = 0;
-	
-	 if (fixed_cap0_buffer_num) {
-		 ch0_numbuffers = fixed_cap0_buffer_num;
-		 fixed_cap_buffer_num_modes[VPIF_CHANNEL0_VIDEO] = 1;
-	 }
-	 if (fixed_cap1_buffer_num){
-		 ch1_numbuffers = fixed_cap1_buffer_num;
-		  fixed_cap_buffer_num_modes[VPIF_CHANNEL1_VIDEO] = 1;
-	 }
-	 if (fixed_cap2_buffer_num) {
-		 ch2_numbuffers = fixed_cap2_buffer_num;
-		  fixed_cap_buffer_num_modes[VPIF_CHANNEL2_VIDEO] = 1;
-	 }
-	 if (fixed_cap3_buffer_num) {
-		 ch3_numbuffers = fixed_cap3_buffer_num;
-		  fixed_cap_buffer_num_modes[VPIF_CHANNEL3_VIDEO] = 1;
-	 }
-	 if (fixed_cap4_buffer_num) {
-		 ch4_numbuffers = fixed_cap4_buffer_num;
-		  fixed_cap_buffer_num_modes[VPIF_CHANNEL4_VIDEO] = 1;
-	 }
-	 if (fixed_cap5_buffer_num) {
-		 ch5_numbuffers = fixed_cap5_buffer_num;
-		 fixed_cap_buffer_num_modes[VPIF_CHANNEL5_VIDEO] = 1;
-	 }
-	 
+    for (i = 0 ; i < VPIF_CAPTURE_NUM_CHANNELS; i++)  fixed_cap_buffer_num_modes[i] = 0;
+
+    if (fixed_cap0_buffer_num) {
+        ch0_numbuffers = fixed_cap0_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL0_VIDEO] = 1;
+    }
+    if (fixed_cap1_buffer_num) {
+        ch1_numbuffers = fixed_cap1_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL1_VIDEO] = 1;
+    }
+    if (fixed_cap2_buffer_num) {
+        ch2_numbuffers = fixed_cap2_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL2_VIDEO] = 1;
+    }
+    if (fixed_cap3_buffer_num) {
+        ch3_numbuffers = fixed_cap3_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL3_VIDEO] = 1;
+    }
+    if (fixed_cap4_buffer_num) {
+        ch4_numbuffers = fixed_cap4_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL4_VIDEO] = 1;
+    }
+    if (fixed_cap5_buffer_num) {
+        ch5_numbuffers = fixed_cap5_buffer_num;
+        fixed_cap_buffer_num_modes[VPIF_CHANNEL5_VIDEO] = 1;
+    }
+
     /* Default number of buffers should be 3 */
     if ((ch0_numbuffers > 0) && (ch0_numbuffers < config_params.min_numbuffers))
         ch0_numbuffers = config_params.min_numbuffers;
@@ -2894,11 +2906,11 @@ static int initialize_vpif(void)
         ch2_numbuffers = config_params.min_numbuffers;
     if ((ch3_numbuffers > 0) && (ch3_numbuffers < config_params.min_numbuffers))
         ch3_numbuffers = config_params.min_numbuffers;
-  	if ((ch4_numbuffers > 0) && (ch4_numbuffers < config_params.min_numbuffers))
+    if ((ch4_numbuffers > 0) && (ch4_numbuffers < config_params.min_numbuffers))
         ch4_numbuffers = config_params.min_numbuffers;
-	if ((ch5_numbuffers > 0) && (ch5_numbuffers < config_params.min_numbuffers))
+    if ((ch5_numbuffers > 0) && (ch5_numbuffers < config_params.min_numbuffers))
         ch5_numbuffers = config_params.min_numbuffers;
-	
+
     /* Set buffer size to min buffers size if it is invalid */
     if (ch0_bufsize < config_params.min_bufsize[VPIF_CHANNEL0_VIDEO])
         ch0_bufsize =  config_params.min_bufsize[VPIF_CHANNEL0_VIDEO];
@@ -2908,25 +2920,25 @@ static int initialize_vpif(void)
         ch2_bufsize = config_params.min_bufsize[VPIF_CHANNEL2_VIDEO];
     if (ch3_bufsize < config_params.min_bufsize[VPIF_CHANNEL3_VIDEO])
         ch3_bufsize = config_params.min_bufsize[VPIF_CHANNEL3_VIDEO];
-	if (ch4_bufsize < config_params.min_bufsize[VPIF_CHANNEL4_VIDEO])
+    if (ch4_bufsize < config_params.min_bufsize[VPIF_CHANNEL4_VIDEO])
         ch4_bufsize = config_params.min_bufsize[VPIF_CHANNEL4_VIDEO];
-	 if (ch5_bufsize < config_params.min_bufsize[VPIF_CHANNEL5_VIDEO])
+    if (ch5_bufsize < config_params.min_bufsize[VPIF_CHANNEL5_VIDEO])
         ch5_bufsize = config_params.min_bufsize[VPIF_CHANNEL5_VIDEO];
-	
+
     config_params.numbuffers[VPIF_CHANNEL0_VIDEO] = ch0_numbuffers;
     config_params.numbuffers[VPIF_CHANNEL1_VIDEO] = ch1_numbuffers;
     config_params.numbuffers[VPIF_CHANNEL2_VIDEO] = ch2_numbuffers;
     config_params.numbuffers[VPIF_CHANNEL3_VIDEO] = ch3_numbuffers;
-	config_params.numbuffers[VPIF_CHANNEL4_VIDEO] = ch4_numbuffers;
-	config_params.numbuffers[VPIF_CHANNEL5_VIDEO] = ch5_numbuffers;
-	
+    config_params.numbuffers[VPIF_CHANNEL4_VIDEO] = ch4_numbuffers;
+    config_params.numbuffers[VPIF_CHANNEL5_VIDEO] = ch5_numbuffers;
+
     if (ch0_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL0_VIDEO] = ch0_bufsize;
-	if (ch1_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL1_VIDEO] = ch1_bufsize;
-	if (ch2_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL2_VIDEO] = ch2_bufsize;
-	if (ch3_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL3_VIDEO] = ch3_bufsize;
-	if (ch4_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL4_VIDEO] = ch4_bufsize;
-	if (ch5_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL5_VIDEO] = ch5_bufsize;
-	
+    if (ch1_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL1_VIDEO] = ch1_bufsize;
+    if (ch2_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL2_VIDEO] = ch2_bufsize;
+    if (ch3_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL3_VIDEO] = ch3_bufsize;
+    if (ch4_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL4_VIDEO] = ch4_bufsize;
+    if (ch5_numbuffers) config_params.channel_bufsize[VPIF_CHANNEL5_VIDEO] = ch5_bufsize;
+
     /* Allocate memory for six channel objects */
     for (i = 0; i < video_cap_dev_num; i++) {
         vpif_obj.dev[i] =
@@ -2950,7 +2962,7 @@ vpif_init_free_channel_objects:
 
 static void vpif_process_buffer_complete(int channel_id, struct common_obj *common)
 {
-	v4l2_get_timestamp(&common->cur_frm->vb.v4l2_buf.timestamp);
+    v4l2_get_timestamp(&common->cur_frm->vb.v4l2_buf.timestamp);
 
     vb2_buffer_done(&common->cur_frm->vb,
                     VB2_BUF_STATE_DONE);
@@ -2965,12 +2977,12 @@ static void vpif_schedule_next_buffer(int channel_id, struct common_obj *common)
 
     spin_lock(&common->irqlock);
 #if defined(USE_ZYNQ_MALLOC)
-	addr =  zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
-	if ((addr != (dma_addr_t)NULL) && vpif_dev != NULL) {
-			//zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
-			dma_sync_single_for_cpu(vpif_dev, addr, capture_dma_size, capture_direction);
-			//zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
-	}
+    addr =  zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
+    if ((addr != (dma_addr_t)NULL) && vpif_dev != NULL) {
+        //zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
+        dma_sync_single_for_cpu(vpif_dev, addr, capture_dma_size, capture_direction);
+        //zynq_printk(0, "[zynq_capture](%d)>>>>>>>>>>>>>>\n", __LINE__);
+    }
 #endif
     common->next_frm = list_entry(common->dma_queue.next,
                                   struct vpif_cap_buffer, list);
@@ -2981,39 +2993,39 @@ static void vpif_schedule_next_buffer(int channel_id, struct common_obj *common)
 
 #if defined(USE_ZYNQ_MALLOC)
     /*addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);*/
-	/*DST: should be cur_frm since cur_frm has been set to next_frm*/
-	//addr =	zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
-	 addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);
+    /*DST: should be cur_frm since cur_frm has been set to next_frm*/
+    //addr =	zynq_malloc_plane_dma_addr(&common->cur_frm->vb, 0);
+    addr =  zynq_malloc_plane_dma_addr(&common->next_frm->vb, 0);
 #elif defined(USE_DMA_COUNTING)
     addr = vb2_dma_contig_plane_dma_addr(&common->next_frm->vb, 0);
-	//addr =	 vb2_dma_contig_plane_dma_addr(&common->cur_frm->vb, 0);
+    //addr =	 vb2_dma_contig_plane_dma_addr(&common->cur_frm->vb, 0);
 #endif
     if ((addr != (dma_addr_t)NULL) && (common->set_addr != NULL)) {
 #if defined(USE_ZYNQ_MALLOC)
-		 if (is_vaild_buffer(channel_id, addr) == 0) {
-			 zynq_printk(0, "[zynq_capture](%d)jeff  The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
-			 goto  exit;
-		 }
+        if (is_vaild_buffer(channel_id, addr) == 0) {
+            zynq_printk(0, "[zynq_capture](%d)jeff  The buffer address (0x%08x) is invalid !!\n", __LINE__, addr);
+            goto  exit;
+        }
 #endif
         common->set_addr(addr+common->y_off,  addr+common->uv_off);
         if (common->enable_channel != NULL) common->enable_channel(1);
         if (common->enable_channel_video != NULL)common->enable_channel_video(1);
     }
 exit:
-	return;
+    return;
 }
 
 static void set_to_dummy_buffer(struct common_obj *common)
 {
     u32 addr = common->dummy_buffer_handle;
-	
-	if (addr != (u32)NULL) {
-    	if (common->set_addr != NULL) {
-        	common->set_addr(addr+common->y_off,  addr+common->uv_off);
-        	if (common->enable_channel != NULL) common->enable_channel(1);
-        	if (common->enable_channel_video != NULL)common->enable_channel_video(1);
-    	}
-	}
+
+    if (addr != (u32)NULL) {
+        if (common->set_addr != NULL) {
+            common->set_addr(addr+common->y_off,  addr+common->uv_off);
+            if (common->enable_channel != NULL) common->enable_channel(1);
+            if (common->enable_channel_video != NULL)common->enable_channel_video(1);
+        }
+    }
 }
 #if 0
 static void channel_interrupt_service(struct work_struct *work)
@@ -3071,17 +3083,17 @@ static irqreturn_t vpif_channel_isr(int irq, void *dev_id)
             common->enable_channel_intr(0);
         }
     }
-    
+
     {
         if (0 == common->started) goto exit;
         spin_lock(&common->irqlock);
-		
+
         if (debug_print >= 2) ch->interrupt_count++;
-	
-		if (list_empty(&common->dma_queue)) {
+
+        if (list_empty(&common->dma_queue)) {
             spin_unlock(&common->irqlock);
             set_to_dummy_buffer(common);
-			 if (debug_print >= 2) ch->interrupt_dummy_buffer_count++;
+            if (debug_print >= 2) ch->interrupt_dummy_buffer_count++;
             goto exit;
         }
 
@@ -3116,8 +3128,8 @@ int vpif_capture_release(struct pci_dev *pdev)
 
     if (vpif_obj.sd_of_sd) kfree(vpif_obj.sd_of_sd);
 
-	destroy_control_sysfs(&pdev->dev.kobj);
-	
+    destroy_control_sysfs(&pdev->dev.kobj);
+
     /* un-register device */
     for (i = 0; i < video_cap_dev_num; i++) {
         /* Get the pointer to the channel object */
@@ -3154,7 +3166,7 @@ int vpif_capture_release(struct pci_dev *pdev)
 #ifdef USE_ZYNQ_MALLOC
     release_reserved_memory(&pdev->dev);
 #endif
-	
+
     zynq_printk(1,  "[zynq_capture]The capture function is released !! \n");
     return 0;
 }
@@ -3306,20 +3318,20 @@ int vpif_capture_init(struct pci_dev *pdev)
 //	struct resource *res;
     int subdev_count;
 
-	if (en_er_board)
-		video_cap_dev_num = VPIF_CAPTURE_NUM_CHANNELS;
-	else 
-		video_cap_dev_num = 4;
-	
+    if (en_er_board)
+        video_cap_dev_num = VPIF_CAPTURE_NUM_CHANNELS;
+    else
+        video_cap_dev_num = 4;
+
     pdev->dev.platform_data = &vpif_capture_cfg;
 
     vpif_dev = &pdev->dev;
 
-	if (default_cap_video_format < ARRAY_SIZE(default_formats)) {
-		if (formats[0].fourcc != default_formats[default_cap_video_format].fourcc )
-			memcpy(&formats[0], &default_formats[default_cap_video_format], sizeof(struct vivi_fmt)); 
-	}
-	
+    if (default_cap_video_format < ARRAY_SIZE(default_formats)) {
+        if (formats[0].fourcc != default_formats[default_cap_video_format].fourcc )
+            memcpy(&formats[0], &default_formats[default_cap_video_format], sizeof(struct vivi_fmt));
+    }
+
 //	vpif_dbg(1, debug_capture, "vpif_base = %p,  vpif_dev = %p vpif_dev->platform_data = %p\n", vpif_base, vpif_dev,vpif_dev->platform_data );
 
     err = initialize_vpif();
@@ -3363,22 +3375,22 @@ int vpif_capture_init(struct pci_dev *pdev)
     for (j = 0; j < video_cap_dev_num; j++) {
         ch = vpif_obj.dev[j];
         ch->channel_id = j;
-		ch->interrupt_count = 0;
-		ch->interrupt_dummy_buffer_count = 0;
+        ch->interrupt_count = 0;
+        ch->interrupt_dummy_buffer_count = 0;
     }
 
     for (i = 0; i < video_cap_dev_num; i++) {
         unsigned irq = zynq_get_irq(i);
         ch = vpif_obj.dev[i];
         if (!ch) break;
-		
-		if ((en_er_board == 0) && (i > VPIF_CHANNEL3_VIDEO )) break; 
-		
+
+        if ((en_er_board == 0) && (i > VPIF_CHANNEL3_VIDEO )) break;
+
         if (irq == (unsigned) -1) continue;
-		
-       // printk(KERN_ERR"[zynq_capture] (id, irq) = (%u, %u)\n",  i, irq);
-		
-		err = request_irq(irq,
+
+        // printk(KERN_ERR"[zynq_capture] (id, irq) = (%u, %u)\n",  i, irq);
+
+        err = request_irq(irq,
                           vpif_channel_isr,
                           IRQF_ONESHOT   | IRQF_TRIGGER_HIGH,//IRQF_TRIGGER_HIGH, //IRQF_TRIGGER_RISING,
                           "zynq_capture",  &ch->channel_id);
@@ -3407,30 +3419,30 @@ int vpif_capture_init(struct pci_dev *pdev)
 
     config = pdev->dev.platform_data;
 
-	if (en_no_subdev == 0) {
-		 subdev_count = config->subdev_count;
-    	vpif_obj.sd = kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
-    	if (vpif_obj.sd == NULL) {
-        	zynq_printk(0, "[zynq_capture]unable to allocate memory for subdevice pointers\n");
-        	err = -ENOMEM;
-        	goto rls_irq;
-   		 }
+    if (en_no_subdev == 0) {
+        subdev_count = config->subdev_count;
+        vpif_obj.sd = kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
+        if (vpif_obj.sd == NULL) {
+            zynq_printk(0, "[zynq_capture]unable to allocate memory for subdevice pointers\n");
+            err = -ENOMEM;
+            goto rls_irq;
+        }
 
-    	vpif_obj.sd_of_sd=  kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
-    	if (vpif_obj.sd_of_sd == NULL) {
-        	zynq_printk(0, "[zynq_capture]unable to allocate memory for subdevice of subdevice pointers\n");
-        	err = -ENOMEM;
-        	goto rls_irq;
-    	}
+        vpif_obj.sd_of_sd=  kzalloc(sizeof(struct v4l2_subdev *) * subdev_count, GFP_KERNEL);
+        if (vpif_obj.sd_of_sd == NULL) {
+            zynq_printk(0, "[zynq_capture]unable to allocate memory for subdevice of subdevice pointers\n");
+            err = -ENOMEM;
+            goto rls_irq;
+        }
 
-    	memset(vpif_obj.sd, 0x0 , sizeof(struct v4l2_subdev *) * subdev_count);
-    	memset(vpif_obj.sd_of_sd, 0x0 , sizeof(struct v4l2_subdev *) * subdev_count);
-	} else {
-		subdev_count =  0;
-		vpif_obj.sd = NULL;
-		vpif_obj.sd_of_sd = NULL;
-	}
-	
+        memset(vpif_obj.sd, 0x0 , sizeof(struct v4l2_subdev *) * subdev_count);
+        memset(vpif_obj.sd_of_sd, 0x0 , sizeof(struct v4l2_subdev *) * subdev_count);
+    } else {
+        subdev_count =  0;
+        vpif_obj.sd = NULL;
+        vpif_obj.sd_of_sd = NULL;
+    }
+
     for (i = 0; i < subdev_count; i++) {
 
         unsigned int bus_num = (unsigned int)-1;
@@ -3473,36 +3485,36 @@ int vpif_capture_init(struct pci_dev *pdev)
                 goto rls_sd_obj;
             }
         }
-        
-		vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &subdevdata->board_info, NULL);
-		
-		if (!vpif_obj.sd[i]) {
+
+        vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &subdevdata->board_info, NULL);
+
+        if (!vpif_obj.sd[i]) {
             zynq_printk(0, "[zynq_capture]Error registering v4l2 subdevice %s !!\n",  subdevdata->name);
             g_video_cap_en[i] = 0;
-			continue;
-			// err = -EBUSY;
-           // goto rls_sd_obj;
-		}
+            continue;
+            // err = -EBUSY;
+            // goto rls_sd_obj;
+        }
         actual_subdev_count++;
         //zynq_printk(1, "[zynq_capture]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  subdevdata->name, bus_num, subdevdata->board_info.addr);
     }
-    
+
     if ((err = v4l2_device_register_subdev_nodes(&vpif_obj.v4l2_dev)) != 0) {
-           zynq_printk(0, "[zynq_capture]Failed to call v4l2_device_register_subdev_nodes()!!\n");
-           err = -EBUSY;
-           goto rls_sd_obj;
-	} else {
-		zynq_printk(0, "[zynq_capture]Successful to call v4l2_device_register_subdev_nodes()!!\n");
-	}
-	
+        zynq_printk(0, "[zynq_capture]Failed to call v4l2_device_register_subdev_nodes()!!\n");
+        err = -EBUSY;
+        goto rls_sd_obj;
+    } else {
+        zynq_printk(0, "[zynq_capture]Successful to call v4l2_device_register_subdev_nodes()!!\n");
+    }
+
     config->subdev_count = subdev_count = actual_subdev_count;
     zynq_printk(1, "[zynq_capture]Subdev number : %u\n", subdev_count);
 
     for (j = 0; j < video_cap_dev_num; j++) {
-       
-		if ( g_video_cap_en[j] == 0) continue;
-		
-		ch = vpif_obj.dev[j];
+
+        if ( g_video_cap_en[j] == 0) continue;
+
+        ch = vpif_obj.dev[j];
         ch->usrs  = 0;
         ch->channel_id = j;
         mutex_init(&ch->chan_lock);
@@ -3512,10 +3524,10 @@ int vpif_capture_init(struct pci_dev *pdev)
         common->is_start_streaming = 0;
         common->is_stop_streaming = 0;
 
-		common->io_usrs  = 0;
-		common->reqbuf_count = 0;
-		common->alloc_ctx = NULL;
-		
+        common->io_usrs  = 0;
+        common->reqbuf_count = 0;
+        common->alloc_ctx = NULL;
+
         spin_lock_init(&common->irqlock);
         mutex_init(&common->lock);
         ch->video_dev->lock = &common->lock;
@@ -3527,18 +3539,18 @@ int vpif_capture_init(struct pci_dev *pdev)
         v4l2_prio_init(&ch->prio);
         video_set_drvdata(ch->video_dev, ch);
         vpif_config_format(ch);
-		
-		/* select input 0 */
-		err = vpif_set_input(config, ch, 0);
-		if (err)
-           		 goto rls_sd_obj;
-        
+
+        /* select input 0 */
+        err = vpif_set_input(config, ch, 0);
+        if (err)
+            goto rls_sd_obj;
+
         err = video_register_device(ch->video_dev,
                                     VFL_TYPE_GRABBER, g_video_cap_nr[ch->channel_id]);
-		
+
         if (err) goto rls_sd_obj;
 
-		ch->en_non_cache_map = 0;
+        ch->en_non_cache_map = 0;
         initialize_channel_video_obj(ch);
         initialize_channel_pxiel_format(ch);
         initial_channel_vpif_parameters(ch);
@@ -3560,14 +3572,14 @@ int vpif_capture_init(struct pci_dev *pdev)
 #ifdef USE_ZYNQ_MALLOC
     if (allocate_reserved_memory(&pdev->dev) != 0)  goto unregister_video_device;
 #endif
-	
-	fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG);
-	
-	create_control_sysfs(&pdev->dev.kobj);
-	
-	
-    zynq_printk(1,  "[zynq_capture]jeff The capture function is  initialized !! (fpga_release_date = 0x%08x)\n", fpga_release_date);
-	
+
+    fpga_release_date = fpga_reg_read(zynq_reg_base, FPGA_COMPILE_TIME_REG);
+
+    create_control_sysfs(&pdev->dev.kobj);
+
+
+    zynq_printk(1,  "[zynq_capture]jeff1234 << The capture function is  initialized !! (fpga_release_date = 0x%08x)\n", fpga_release_date);
+
     if (err == 0)
         is_initial_vpif_obj = 1;
     else
@@ -3580,8 +3592,8 @@ unregister_video_device:
         /* Get the pointer to the channel object */
         ch = vpif_obj.dev[k];
         /* Unregister video device */
-		if (ch->video_dev)
-        	video_unregister_device(ch->video_dev);
+        if (ch->video_dev)
+            video_unregister_device(ch->video_dev);
     }
 rls_sd_obj:
     if (vpif_obj.sd) kfree(vpif_obj.sd);
@@ -3631,55 +3643,59 @@ rls_ch_obj:
 
 #ifdef CONFIG_PM_SLEEP
 
-int vpif_capture_suspend(void){
+int vpif_capture_suspend(void)
+{
     return  0;
 }
-int vpif_capture_resume(void) {
+int vpif_capture_resume(void)
+{
     return 0;
 }
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-static void set_en_non_cache_map_for_one_channel(unsigned int channel_id, unsigned int  set_val){
-	
-	   struct channel_obj *ch = NULL;
-	    struct mutex *lock_ptr = NULL;
-	   ch = vpif_obj.dev[channel_id];
-		if (ch) {
-				lock_ptr = &ch->chan_lock;
-				printk(KERN_INFO "[zynq_capture] (channel_id, ch, lock, set_val) = (%u, %p, %p, %u)\n", channel_id, ch, lock_ptr,  set_val);
-				if (lock_ptr) mutex_lock(lock_ptr);
-				ch->en_non_cache_map = set_val;
-				if (lock_ptr) mutex_unlock(lock_ptr);
-		}
-		return;
+static void set_en_non_cache_map_for_one_channel(unsigned int channel_id, unsigned int  set_val)
+{
+
+    struct channel_obj *ch = NULL;
+    struct mutex *lock_ptr = NULL;
+    ch = vpif_obj.dev[channel_id];
+    if (ch) {
+        lock_ptr = &ch->chan_lock;
+        printk(KERN_INFO "[zynq_capture] (channel_id, ch, lock, set_val) = (%u, %p, %p, %u)\n", channel_id, ch, lock_ptr,  set_val);
+        if (lock_ptr) mutex_lock(lock_ptr);
+        ch->en_non_cache_map = set_val;
+        if (lock_ptr) mutex_unlock(lock_ptr);
+    }
+    return;
 }
 
-static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
+static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+{
 
-	const char *name =  attr->attr.name;
-	unsigned int set_val = 0;
-	unsigned int channel_id = (unsigned int)-1;
-	printk(KERN_INFO "[zynq_capture] jeff sysfs  (name, buf, count, strlen(buf)) = (%s, %s, %u, %u)\n", name, buf, count,  strlen(buf));
+    const char *name =  attr->attr.name;
+    unsigned int set_val = 0;
+    unsigned int channel_id = (unsigned int)-1;
 
-	if (name && buf)  {
-			set_val = simple_strtoul(buf, NULL, 16);
-		    if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO0") == 0) {
-				 channel_id = 0;
-			} else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO1") == 0) {
-				channel_id = 1;
-			} else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO2") == 0) {
-				channel_id = 2;
-			} 
-			if (channel_id != (unsigned int)-1) 
-				set_en_non_cache_map_for_one_channel(channel_id, set_val);
-	}
-	 return count;
+    if (name && buf)  {
+        set_val = simple_strtoul(buf, NULL, 16);
+        if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO0") == 0) {
+            channel_id = 0;
+        } else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO1") == 0) {
+            channel_id = 1;
+        } else  if (strcmp(name, "EN_NON_CACHE_MAP_VIDEO2") == 0) {
+            channel_id = 2;
+        }
+        if (channel_id != (unsigned int)-1)
+            set_en_non_cache_map_for_one_channel(channel_id, set_val);
+    }
+    return count;
 };
 
-static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
+static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
 //	const char *name =  attr->attr.name;
-	return  0;
+    return  0;
 };
 
 static struct kobj_attribute en_non_cache_map_video0_attribute = __ATTR(EN_NON_CACHE_MAP_VIDEO0,  S_IRUGO |  S_IWUGO, b_show, b_store);
@@ -3688,28 +3704,30 @@ static struct kobj_attribute en_non_cache_map_video2_attribute = __ATTR(EN_NON_C
 
 
 static struct attribute *attrs[] = {
-	    (struct attribute *)&en_non_cache_map_video0_attribute,
-	    (struct attribute *)&en_non_cache_map_video1_attribute,
-	    (struct attribute *)&en_non_cache_map_video2_attribute,
-	    NULL
+    (struct attribute *)&en_non_cache_map_video0_attribute,
+    (struct attribute *)&en_non_cache_map_video1_attribute,
+    (struct attribute *)&en_non_cache_map_video2_attribute,
+    NULL
 };
 
 static struct attribute_group attr_group = {
     .attrs = attrs,
 };
 
-static int create_control_sysfs(struct kobject *kobj) {
-	   int retval  = -1;
-	
-	if (kobj != NULL) {
+static int create_control_sysfs(struct kobject *kobj)
+{
+    int retval  = -1;
+
+    if (kobj != NULL) {
         retval = sysfs_create_group(kobj, &attr_group);
-	}
-	  return retval;
+    }
+    return retval;
 }
 
-static int destroy_control_sysfs(struct kobject *kobj) {
-    
-	if (!kobj) return -1;
+static int destroy_control_sysfs(struct kobject *kobj)
+{
+
+    if (!kobj) return -1;
 
     sysfs_remove_group(kobj, &attr_group);
 

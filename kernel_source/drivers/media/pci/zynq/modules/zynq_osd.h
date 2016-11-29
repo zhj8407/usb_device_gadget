@@ -10,8 +10,8 @@ typedef enum osd_option_flags {
     OSD_OPTION_ENABLE = 3,
     OSD_OPTION_SET_OUTPUT_ACTIVE_SIZE  =4,
     OSD_OPTION_SET_LAYER = 5,
-	OSD_OPTION_ENABLE_LAYER0 = 6,
-	OSD_OPTION_ENABLE_LAYER1 = 7
+    OSD_OPTION_ENABLE_LAYER0 = 6,
+    OSD_OPTION_ENABLE_LAYER1 = 7
 } EOSDOptionFlags;
 
 typedef enum osd_layer_id {
