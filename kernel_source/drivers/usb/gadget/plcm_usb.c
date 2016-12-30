@@ -52,6 +52,7 @@
 
 #include "f_hidg.c"
 #include "f_webcam.c"
+#include "f_dfu.c"
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Polycom Composite USB Driver");
@@ -163,6 +164,8 @@ static struct usb_configuration plcm_usb_config_driver = {
 	.label		= "plcm_usb",
 	.unbind		= plcm_usb_unbind_config,
 	.bConfigurationValue = 1,
+	.bmAttributes = 0xC0,	/* Self-powered */
+	.MaxPower = __constant_cpu_to_le16(50),	/* 50mA */
 };
 
 static void plcm_usb_gstring_cleanup(struct plcm_usb_dev *dev)
@@ -1125,6 +1128,41 @@ static struct plcm_usb_function nvusb_function = {
 	.bind_config	= nvusb_function_bind_config,
 };
 
+static int
+dfu_function_init(struct plcm_usb_function *f,
+		struct usb_composite_dev *cdev)
+{
+	return dfu_setup();
+}
+
+static void
+dfu_function_cleanup(struct plcm_usb_function *f)
+{
+	dfu_cleanup();
+}
+
+static int
+dfu_function_bind_config(struct plcm_usb_function *f,
+		struct usb_configuration *c)
+{
+	return dfu_bind_config(c);
+}
+
+static int dfu_function_ctrlrequest(struct plcm_usb_function *f,
+			struct usb_composite_dev *cdev,
+			const struct usb_ctrlrequest *ctrlrequest)
+{
+	return dfu_ctrlrequest(cdev, ctrlrequest);
+}
+
+static struct plcm_usb_function dfu_function = {
+	.name		= "adb",
+	.init		= dfu_function_init,
+	.cleanup	= dfu_function_cleanup,
+	.bind_config	= dfu_function_bind_config,
+	.ctrlrequest	= dfu_function_ctrlrequest,
+};
+
 static struct plcm_usb_function *supported_functions[] = {
 	&hidg_function,
 #ifdef PLCM_USB_AUDIO_SOURCE
@@ -1138,6 +1176,7 @@ static struct plcm_usb_function *supported_functions[] = {
 #endif
 	&webcam_function,
 	&nvusb_function,
+	&dfu_function,
 	NULL
 };
 
