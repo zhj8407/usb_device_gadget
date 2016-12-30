@@ -1,0 +1,4 @@
+*.o
+dfu-gadget
+.tags
+.tags*
