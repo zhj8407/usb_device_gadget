@@ -16,6 +16,9 @@
 
 #include "f_dfu.h"
 
+#define DEBUG_PRINT             0
+#define DEBUG_CALCULATE_SPEED   1
+
 #define DFU_BUFFER_SIZE         4096
 
 #define MAX_FILE_NAME_LENGTH    256
@@ -105,6 +108,9 @@ struct wup_device {
     char image_sw_version[32];
 };
 
+#ifdef DEBUG_CALCULATE_SPEED
+static long start_time;
+
 long get_current_time()
 {
     struct timeval tv;
@@ -113,6 +119,7 @@ long get_current_time()
 
     return tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
+#endif
 
 int generate_md5_sum(const char *file_name, char *md5_sum)
 {
@@ -243,9 +250,6 @@ wup_events_process(struct wup_device *dev)
     unsigned char md5[MD5_DIGEST_LENGTH];
     int i;
     unsigned short reply_len = 0;
-#ifdef DEBUG_CALCULATE_SPEED
-    static long start_time;
-#endif
 
     ret = ioctl(dev->fd, DFU_IOC_DQ_CTRL_EVENT, &wup_event);
 
@@ -255,9 +259,11 @@ wup_events_process(struct wup_device *dev)
         return;
     }
 
+#if DEBUG_PRINT
     printf(WHT "Got WUP Control Event. Request: 0x%02x, Value: 0x%04x, "
            "Length: 0x%04x\n" RESET, wup_event.request,
            wup_event.value, wup_event.length);
+#endif
 
     switch (wup_event.request) {
         case 0x01: {
@@ -566,7 +572,7 @@ int main(int argc, char **argv)
 {
     int ret = 0;
     fd_set fds, efds, rfds;
-    const char *device_name = "/dev/android_adb";
+    const char *device_name = "/dev/plcm_dfu";
 
     struct wup_device *dev = NULL;
 

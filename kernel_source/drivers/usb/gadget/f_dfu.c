@@ -36,6 +36,25 @@
 /* ID for Microsoft WINUSB OS String */
 #define WINUSB_OS_STRING_ID   0xEE
 
+/* string IDs are assigned dynamically */
+
+#define DFU_STRING_INTF_IDX				0
+
+static struct usb_string dfu_en_us_strings[] = {
+	[DFU_STRING_INTF_IDX].s = "DFU Interface",
+	{  }
+};
+
+static struct usb_gadget_strings dfu_stringtab = {
+	.language = 0x0409,	/* en-us */
+	.strings = dfu_en_us_strings,
+};
+
+static struct usb_gadget_strings *dfu_function_strings[] = {
+	&dfu_stringtab,
+	NULL,
+};
+
 struct f_dfu_rx_req_list {
 	struct usb_request	*req;
 	unsigned int		pos;
@@ -91,8 +110,9 @@ static struct usb_interface_descriptor dfu_interface_desc = {
 	.bInterfaceNumber       = 0,
 	.bNumEndpoints          = 1,
 	.bInterfaceClass        = 0xFF,
-	.bInterfaceSubClass     = 0x00,
+	.bInterfaceSubClass     = 0xF0,
 	.bInterfaceProtocol     = 0,
+	.iInterface		= 0,
 };
 
 static struct usb_endpoint_descriptor dfu_superspeed_out_desc = {
@@ -235,15 +255,15 @@ struct {
 						0, 0
 						},	/* DeviceInterfaceGUIDs */
 		.dwPropertyDataLength = __constant_cpu_to_le32(0x00000050),
-		.bPropertyData = {'{', 0, 'F', 0, '7', 0, '2', 0, 'F', 0,
-						'E', 0, '0', 0, 'D', 0, '4', 0, '-', 0,
-						'C', 0, 'B', 0, 'C', 0, 'B', 0, '-', 0,
-						'4', 0, '0', 0, '7', 0, 'D', 0, '-', 0,
-						'8', 0, '8', 0, '1', 0, '4', 0, '-', 0,
-						'9', 0, 'E', 0, 'D', 0, '6', 0, '7', 0,
-						'3', 0, 'D', 0, '0', 0, 'D', 0, 'D', 0,
-						'6', 0, 'B', 0, '}', 0,  0,  0,  0,  0
-						},
+		.bPropertyData = {'{', 0, '6', 0, 'B', 0, '1', 0, '1', 0,
+						'E', 0, '5', 0, 'B', 0, 'B', 0, '-', 0,
+						'F', 0, '5', 0, 'C', 0, 'A', 0, '-', 0,
+						'4', 0, '9', 0, '0', 0, '2', 0, '-', 0,
+						'9', 0, '6', 0, '1', 0, '5', 0, '-', 0,
+						'7', 0, '7', 0, '3', 0, 'B', 0, '3', 0,
+						'D', 0, '2', 0, 'F', 0, '2', 0, 'F', 0,
+						'E', 0, 'C', 0, '}', 0,  0,  0,  0,  0
+						}, /* {6B11E5BB-F5CA-4902-9615-773B3D2F2FEC} */
 	},
 };
 
@@ -798,7 +818,7 @@ static int dfu_function_setup(struct usb_function *f,
 		ctrl->bRequestType, ctrl->bRequest, w_value, w_index, w_length);
 
 	switch (ctrl->bRequestType) {
-		case USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+		case USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE:
 			/* Save the setup packet here.
 			 * The data will be received in
 			 * Data stage.
@@ -812,7 +832,7 @@ static int dfu_function_setup(struct usb_function *f,
 			value = w_length;
 			break;
 
-		case USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE:
+		case USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE:
 			/* Enqueue the setup packet directly here.
 			 * The data will be send in the ioctl callback.
 			 */
@@ -945,11 +965,21 @@ static void dfu_function_suspend(struct usb_function *f)
 static int dfu_bind_config(struct usb_configuration *c)
 {
 	struct dfu_dev *dev = _dfu_dev;
+	int ret;
 
 	printk(KERN_INFO "dfu_bind_config\n");
 
+	if (dfu_en_us_strings[DFU_STRING_INTF_IDX].id == 0) {
+		ret = usb_string_ids_tab(c->cdev, dfu_en_us_strings);
+		if (ret)
+			return -ENOMEM;
+		dfu_interface_desc.iInterface =
+			dfu_en_us_strings[DFU_STRING_INTF_IDX].id;
+	}
+
 	dev->cdev = c->cdev;
 	dev->function.name = "dfu";
+	dev->function.strings = dfu_function_strings;
 	dev->function.bind = dfu_function_bind;
 	dev->function.unbind = dfu_function_unbind;
 	dev->function.setup = dfu_function_setup;

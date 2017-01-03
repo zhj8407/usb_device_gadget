@@ -1156,7 +1156,7 @@ static int dfu_function_ctrlrequest(struct plcm_usb_function *f,
 }
 
 static struct plcm_usb_function dfu_function = {
-	.name		= "adb",
+	.name		= "dfu",
 	.init		= dfu_function_init,
 	.cleanup	= dfu_function_cleanup,
 	.bind_config	= dfu_function_bind_config,
