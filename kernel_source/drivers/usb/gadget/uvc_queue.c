@@ -25,6 +25,98 @@
 #include <media/v4l2-event.h>
 
 #include "uvc.h"
+#include "uvc_static_malloc.h"
+
+#define MY_DATA_SIZE (4*1024*1024)
+#define FRAME_BUFFER_OFFSET 0
+
+static size_t capture_dma_size = PAGE_ALIGN(MY_DATA_SIZE);
+static int  capture_direction = DMA_TO_DEVICE;
+static size_t capture_dma_framebuffer_size = PAGE_ALIGN(MY_DATA_SIZE - FRAME_BUFFER_OFFSET + PAGE_SIZE);
+
+static dma_addr_t	capture_dma_handles[UVC_MAX_VIDEO_BUFFERS]= { 0 };
+static void *capture_dma_addrs[UVC_MAX_VIDEO_BUFFERS] = { NULL };
+
+static dma_addr_t  capture_dam_framebuffer_handles[UVC_MAX_VIDEO_BUFFERS]= { 0 };
+static void *capture_dam_framebuffer_addrs[UVC_MAX_VIDEO_BUFFERS] = { 0 };
+
+static unsigned int capture_dma_buffer_nums = UVC_MAX_VIDEO_BUFFERS;
+
+static unsigned int static_memory_allocated = 0;
+
+static struct vb2_alloc_ctx *alloc_ctx;
+
+static int release_reserved_memory(struct device *dev)
+{
+	int status = 0;
+	int j = 0;
+
+	for (j = 0 ; j < capture_dma_buffer_nums; j++) {
+		if (capture_dma_handles[j] != (dma_addr_t)0) {
+			dma_unmap_single(dev, capture_dma_handles[j], capture_dma_size, capture_direction);
+			capture_dma_handles[j] = (dma_addr_t)0;
+		}
+		if (capture_dma_addrs[j]  != NULL) {
+			kfree(capture_dma_addrs[j]);
+			capture_dma_addrs[j] = NULL;
+		}
+	}
+
+	return status;
+}
+
+static int allocate_reserved_memory(struct device *dev, unsigned int buffer_num)
+{
+	int status = 0;
+	int j = 0;
+
+	for (j  = 0; j < buffer_num; j++) {
+		capture_dma_addrs[j] = kmalloc(capture_dma_size, GFP_KERNEL);
+		if (!capture_dma_addrs[j]) {
+			printk(KERN_ERR "[uvc_queue]failed to kmalloc  %d memory for (index:%d) !!\n",
+				capture_dma_size, j);
+			status = -1;
+			goto exit;
+		}
+
+		capture_dma_handles[j] = dma_map_single(dev,
+			capture_dma_addrs[j],
+			capture_dma_size,
+			capture_direction);
+
+		if (dma_mapping_error(dev, capture_dma_handles[j])) {
+			printk(KERN_ERR "[uvc_queue]failed to mapp  0x%p memory to DMA  for (index:%d) !!\n",
+				capture_dma_addrs[j], j);
+			status = -1;
+			goto exit;
+		} else {
+			capture_dam_framebuffer_handles[j] =
+				(dma_addr_t) ((u8 *)capture_dma_handles[j] + FRAME_BUFFER_OFFSET);
+			capture_dam_framebuffer_addrs[j] =
+				capture_dma_addrs[j]  + FRAME_BUFFER_OFFSET;
+		}
+
+		printk(KERN_ERR "[uvc_queue]Successfull to allocate %d bytes video memory: (index:%d)"
+			" --->  (virt:0x%p, phy:0x%p) !!\n",
+			capture_dma_framebuffer_size, j,
+			capture_dam_framebuffer_addrs[j],
+			(void *)capture_dam_framebuffer_handles[j]);
+	}
+	capture_dma_buffer_nums = buffer_num;
+	return status;
+exit:
+	for (j = 0 ; j < capture_dma_buffer_nums; j++) {
+		if (capture_dma_handles[j] != (dma_addr_t)0) {
+			dma_unmap_single(dev, capture_dma_handles[j], capture_dma_size, capture_direction);
+			capture_dma_handles[j] = (dma_addr_t)0;
+		}
+		if (capture_dma_addrs[j]  != NULL) {
+			kfree(capture_dma_addrs[j]);
+			capture_dma_addrs[j] = NULL;
+		}
+	}
+	return status;
+}
 
 /*
  * Send video frame transfer done event through v4l2
@@ -72,13 +164,52 @@ static int uvc_queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 {
 	struct uvc_video_queue *queue = vb2_get_drv_priv(vq);
 	struct uvc_video *video = container_of(queue, struct uvc_video, queue);
+	struct uvc_device *uvc = container_of(video, struct uvc_device, video);
+	struct device *dev = &uvc->vdev->dev;
+	uvc_smalloc_conf_t ctx;
 
 	if (*nbuffers > UVC_MAX_VIDEO_BUFFERS)
 		*nbuffers = UVC_MAX_VIDEO_BUFFERS;
 
+	if (!static_memory_allocated ||
+		*nbuffers != capture_dma_buffer_nums) {
+		capture_dma_buffer_nums = *nbuffers;
+		printk(KERN_ERR "[uvc_queue][uvc_queue_setup]real nbuffers = %u\n", capture_dma_buffer_nums);
+
+		if (release_reserved_memory(dev))
+			return -EINVAL;
+
+		if (allocate_reserved_memory(dev, capture_dma_buffer_nums))
+			return -EINVAL;
+
+		ctx.en_non_cache_map = 0;
+		ctx.is_always_get_first_memory = 0;
+		ctx.buffer_virt_addr_list = &capture_dam_framebuffer_addrs[0];
+		ctx.buffer_phy_addr_list = &capture_dam_framebuffer_handles[0];
+		ctx.buffer_num = capture_dma_buffer_nums;
+		ctx.available_buffer_size = capture_dma_size;
+
+		if (alloc_ctx) {
+			uvc_smalloc_cleanup_ctx(alloc_ctx);
+			alloc_ctx = NULL;
+		}
+
+		alloc_ctx = uvc_smalloc_init_ctx(&ctx);
+		if (IS_ERR(alloc_ctx)) {
+			printk(KERN_ERR "[uvc_queue][uvc_queue_setup] (%d)"
+				"Failed to call the uvc_smalloc_init_ctx\n",
+				__LINE__);
+			return -1;
+		}
+
+		static_memory_allocated = 1;
+	}
+
 	*nplanes = 1;
 
 	sizes[0] = video->imagesize;
+
+	alloc_ctxs[0] = alloc_ctx;
 
 	return 0;
 }
@@ -150,7 +281,11 @@ static int uvc_queue_init(struct uvc_video_queue *queue,
 	queue->queue.drv_priv = queue;
 	queue->queue.buf_struct_size = sizeof(struct uvc_buffer);
 	queue->queue.ops = &uvc_queue_qops;
+#if 0
 	queue->queue.mem_ops = &vb2_vmalloc_memops;
+#else
+	queue->queue.mem_ops = &uvc_smalloc_memops;
+#endif
 	queue->queue.timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	ret = vb2_queue_init(&queue->queue);
 	if (ret)
