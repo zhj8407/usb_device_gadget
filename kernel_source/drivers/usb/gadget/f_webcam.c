@@ -35,7 +35,7 @@
  * the runtime footprint, and giving us at least some parts of what
  * a "gcc --combine ... part1.c part2.c part3.c ... " build would.
  */
-#include "uvc_static_malloc.c"
+#include "uvc_kmalloc.c"
 #include "uvc_queue.c"
 #include "uvc_video.c"
 #include "uvc_v4l2.c"
