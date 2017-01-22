@@ -15,10 +15,8 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/vmalloc.h>
 #include <linux/dma-mapping.h>
 #include <media/videobuf2-core.h>
-#include <media/videobuf2-vmalloc.h>
 #include <media/videobuf2-memops.h>
 
 #include "uvc_kmalloc.h"
@@ -154,8 +152,7 @@ static void *vb2_kmalloc_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_fl
 	struct vb2_kmalloc_buf *buf = NULL;
 	struct uvc_mem_pool_ctx *pool_ctx = (struct uvc_mem_pool_ctx *)conf->context;
 
-	//buf = kzalloc(sizeof(*buf), GFP_KERNEL | gfp_flags);
-	buf = (struct vb2_kmalloc_buf *)vmalloc(sizeof(struct vb2_kmalloc_buf));
+	buf = kzalloc(sizeof(struct vb2_kmalloc_buf), GFP_KERNEL | gfp_flags);
 
 	if (!buf) {
 		return NULL;
@@ -182,7 +179,7 @@ static void *vb2_kmalloc_alloc(void *alloc_ctx, unsigned long size, gfp_t gfp_fl
 			(void *)buf->vaddr, (void *)buf->phys_addr, (int)buf->index);
 
 		if (buf) {
-			vfree(buf);
+			kfree(buf);
 			buf = NULL;
 		}
 
@@ -218,7 +215,7 @@ static void vb2_kmalloc_put(void *buf_priv)
 		p->buffer_in_used[buf->index] = 0;
 
 		if (buf) {
-			vfree(buf);
+			kfree(buf);
 			buf = NULL;
 		}
 
@@ -230,11 +227,13 @@ static void vb2_kmalloc_put(void *buf_priv)
 static void *vb2_kmalloc_get_userptr(void *alloc_ctx, unsigned long vaddr,
 									 unsigned long size, int write)
 {
+	/* TODO. Add implementation of get_userptr callback. */
 	return NULL;
 }
 
 static void vb2_kmalloc_put_userptr(void *buf_priv)
 {
+	/* TODO. Add implementation of put_userptr callback. */
 	return;
 }
 
@@ -367,22 +366,21 @@ void *uvc_kmalloc_init_ctx(uvc_kmalloc_conf_t *ctx)
 		goto exit;
 	}
 
-	pool_ctx = (struct uvc_mem_pool_ctx *)vmalloc(sizeof(struct uvc_mem_pool_ctx));
+	pool_ctx = kzalloc(sizeof(struct uvc_mem_pool_ctx), GFP_KERNEL);
 
 	if (!pool_ctx) {
 		printk(KERN_INFO"[uvc_kmalloc](%d) pool_ctx (%p)  is NULL!!\n", __LINE__, pool_ctx);
 		goto exit;
 	}
 
-	pool_ctx->mem_pool = (struct uvc_mem_pool *)vmalloc(sizeof(struct uvc_mem_pool));
+	pool_ctx->mem_pool = kzalloc(sizeof(struct uvc_mem_pool), GFP_KERNEL);
 
 	if (!pool_ctx->mem_pool) {
 		printk(KERN_INFO"[uvc_kmalloc](%d) conf (%p) or mem_pool(%p)  is NULL!!\n", __LINE__, conf, pool_ctx->mem_pool);
 		goto exit;
 	}
 
-	//conf = kzalloc(sizeof *conf, GFP_KERNEL);
-	conf = (struct uvc_kmalloc_conf  *)vmalloc(sizeof(struct uvc_kmalloc_conf));
+	conf = kzalloc(sizeof(struct uvc_kmalloc_conf), GFP_KERNEL);
 
 	if (!conf) {
 		printk(KERN_INFO"[uvc_kmalloc](%d) conf (%p) is NULL \n", __LINE__, conf);
@@ -406,16 +404,16 @@ exit:
 
 	if (pool_ctx) {
 		if (pool_ctx->mem_pool) {
-			vfree(pool_ctx->mem_pool);
+			kfree(pool_ctx->mem_pool);
 			pool_ctx->mem_pool  = NULL;
 		}
 
-		vfree(pool_ctx);
+		kfree(pool_ctx);
 		pool_ctx = NULL;
 	}
 
 	if (conf) {
-		vfree(conf);
+		kfree(conf);
 		conf = NULL;
 	}
 
@@ -437,18 +435,17 @@ void uvc_kmalloc_cleanup_ctx(void *alloc_ctx)
 
 		if (pool_ctx->mem_pool) {
 			pool_destroy(conf);
-			vfree(pool_ctx->mem_pool);
+			kfree(pool_ctx->mem_pool);
 			pool_ctx->mem_pool  = NULL;
 		}
 
-		vfree(pool_ctx);
+		kfree(pool_ctx);
 		pool_ctx = NULL;
 	}
 
 	if (conf) {
-		vfree(conf);
+		kfree(conf);
 		conf = NULL;
 	}
-
 }
 

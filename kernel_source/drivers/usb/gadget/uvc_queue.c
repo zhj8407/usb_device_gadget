@@ -29,74 +29,98 @@
 
 #define MY_DATA_SIZE (4*1024*1024)
 
-static size_t capture_dma_size = PAGE_ALIGN(MY_DATA_SIZE);
-
-static size_t capture_dma_framebuffer_size = PAGE_ALIGN(MY_DATA_SIZE + PAGE_SIZE);
-
-static void *capture_dma_addrs[UVC_MAX_VIDEO_BUFFERS] = { NULL };
-
-static unsigned int capture_dma_buffer_nums = UVC_MAX_VIDEO_BUFFERS;
-
-static unsigned int static_memory_allocated = 0;
-
-static struct vb2_alloc_ctx *alloc_ctx;
-
-static int release_reserved_memory(void)
+static int release_reserved_memory(struct uvc_video_queue *uvc_queue)
 {
 	int status = 0;
-	int j = 0;
+	int i = 0;
 
-	for (j = 0 ; j < capture_dma_buffer_nums; j++) {
-		if (capture_dma_addrs[j]  != NULL) {
-			kfree(capture_dma_addrs[j]);
-			capture_dma_addrs[j] = NULL;
+	for (i = 0 ; i < uvc_queue->output_buff_nums; i++) {
+		if (uvc_queue->output_buff_addrs[i]  != NULL) {
+			kfree(uvc_queue->output_buff_addrs[i]);
+			uvc_queue->output_buff_addrs[i] = NULL;
 		}
 	}
 
 	return status;
 }
 
-static int allocate_reserved_memory(unsigned int buffer_num)
+static int allocate_reserved_memory(struct uvc_video_queue *uvc_queue,
+					unsigned int buffer_num)
 {
 	int status = 0;
-	int j = 0;
-	int i, num_of_pages;
+	int i, j, num_of_pages;
+	size_t output_buff_size = uvc_queue->output_buff_size;
 	unsigned char *tmp;
 
-	for (j  = 0; j < buffer_num; j++) {
-		capture_dma_addrs[j] = kmalloc(capture_dma_size, GFP_KERNEL);
-		if (!capture_dma_addrs[j]) {
+	for (i  = 0; i < buffer_num; i++) {
+		uvc_queue->output_buff_addrs[i] = kmalloc(output_buff_size, GFP_KERNEL);
+		if (!uvc_queue->output_buff_addrs[i]) {
 			printk(KERN_ERR "[uvc_queue]failed to kmalloc  %d memory for (index:%d) !!\n",
-				capture_dma_size, j);
+				output_buff_size, i);
 			status = -1;
 			goto exit;
 		}
 
 		/* Set the Page Flag to be reserved. */
-		num_of_pages = (capture_dma_size + PAGE_SIZE - 1 ) / PAGE_SIZE;
-		tmp = (unsigned char *)(capture_dma_addrs[j]);
+		num_of_pages = (output_buff_size + PAGE_SIZE - 1 ) / PAGE_SIZE;
+		tmp = (unsigned char *)(uvc_queue->output_buff_addrs[i]);
 
-		for (i = 0; i < num_of_pages; i++) {
+		for (j = 0; j < num_of_pages; j++) {
 			SetPageReserved(virt_to_page(tmp));
 			tmp += PAGE_SIZE;
 		}
 
 		printk(KERN_ERR "[uvc_queue]Successfull to allocate %d bytes video memory: (index:%d)"
 			" --->  (virt:0x%p, phy:0x%p) !!\n",
-			capture_dma_framebuffer_size, j,
-			capture_dma_addrs[j],
-			(void *)virt_to_phys(capture_dma_addrs[j]));
+			output_buff_size, i,
+			uvc_queue->output_buff_addrs[i],
+			(void *)virt_to_phys(uvc_queue->output_buff_addrs[i]));
 	}
-	capture_dma_buffer_nums = buffer_num;
+	uvc_queue->output_buff_nums = buffer_num;
 	return status;
 exit:
-	for (j = 0 ; j < capture_dma_buffer_nums; j++) {
-		if (capture_dma_addrs[j]  != NULL) {
-			kfree(capture_dma_addrs[j]);
-			capture_dma_addrs[j] = NULL;
+	for (i = 0 ; i < uvc_queue->output_buff_nums; i++) {
+		if (uvc_queue->output_buff_addrs[i]  != NULL) {
+			kfree(uvc_queue->output_buff_addrs[i]);
+			uvc_queue->output_buff_addrs[i] = NULL;
 		}
 	}
 	return status;
+}
+
+static int uvc_queue_buffer_init(struct uvc_video_queue *uvc_queue,
+					unsigned int buffer_num)
+{
+	uvc_kmalloc_conf_t ctx;
+
+	if (release_reserved_memory(uvc_queue))
+		return -EINVAL;
+
+	if (allocate_reserved_memory(uvc_queue, buffer_num))
+		return -EINVAL;
+
+	ctx.en_non_cache_map = 0;
+	ctx.is_always_get_first_memory = 0;
+	ctx.buffer_virt_addr_list = &uvc_queue->output_buff_addrs[0];
+	ctx.buffer_num = uvc_queue->output_buff_nums;
+	ctx.available_buffer_size = uvc_queue->output_buff_size;
+
+	if (uvc_queue->alloc_ctx) {
+		uvc_kmalloc_cleanup_ctx(uvc_queue->alloc_ctx);
+		uvc_queue->alloc_ctx = NULL;
+	}
+
+	uvc_queue->alloc_ctx = uvc_kmalloc_init_ctx(&ctx);
+	if (IS_ERR(uvc_queue->alloc_ctx)) {
+		printk(KERN_ERR "[uvc_queue][uvc_queue_setup] (%d)"
+			"Failed to call the uvc_kmalloc_init_ctx\n",
+			__LINE__);
+		return -1;
+	}
+
+	uvc_queue->static_memory_allocated = 1;
+
+	return 0;
 }
 
 /*
@@ -145,49 +169,23 @@ static int uvc_queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 {
 	struct uvc_video_queue *queue = vb2_get_drv_priv(vq);
 	struct uvc_video *video = container_of(queue, struct uvc_video, queue);
-	uvc_kmalloc_conf_t ctx;
 
 	if (*nbuffers > UVC_MAX_VIDEO_BUFFERS)
 		*nbuffers = UVC_MAX_VIDEO_BUFFERS;
 
-	if (!static_memory_allocated ||
-		*nbuffers != capture_dma_buffer_nums) {
-		capture_dma_buffer_nums = *nbuffers;
-		printk(KERN_ERR "[uvc_queue][uvc_queue_setup]real nbuffers = %u\n", capture_dma_buffer_nums);
-
-		if (release_reserved_memory())
-			return -EINVAL;
-
-		if (allocate_reserved_memory(capture_dma_buffer_nums))
-			return -EINVAL;
-
-		ctx.en_non_cache_map = 0;
-		ctx.is_always_get_first_memory = 0;
-		ctx.buffer_virt_addr_list = &capture_dma_addrs[0];
-		ctx.buffer_num = capture_dma_buffer_nums;
-		ctx.available_buffer_size = capture_dma_size;
-
-		if (alloc_ctx) {
-			uvc_kmalloc_cleanup_ctx(alloc_ctx);
-			alloc_ctx = NULL;
-		}
-
-		alloc_ctx = uvc_kmalloc_init_ctx(&ctx);
-		if (IS_ERR(alloc_ctx)) {
-			printk(KERN_ERR "[uvc_queue][uvc_queue_setup] (%d)"
-				"Failed to call the uvc_kmalloc_init_ctx\n",
-				__LINE__);
+	if (!queue->static_memory_allocated ||
+			*nbuffers != queue->output_buff_nums) {
+		printk(KERN_ERR "[uvc_queue][uvc_queue_setup]real nbuffers = %u\n", *nbuffers);
+		/* We need to re-allocate the buffers. */
+		if (uvc_queue_buffer_init(queue, *nbuffers))
 			return -1;
-		}
-
-		static_memory_allocated = 1;
 	}
 
 	*nplanes = 1;
 
 	sizes[0] = video->imagesize;
 
-	alloc_ctxs[0] = alloc_ctx;
+	alloc_ctxs[0] = queue->alloc_ctx;
 
 	return 0;
 }
@@ -253,6 +251,14 @@ static int uvc_queue_init(struct uvc_video_queue *queue,
 			  enum v4l2_buf_type type)
 {
 	int ret;
+
+	/* Initialize the output buffers. */
+	queue->output_buff_size = PAGE_ALIGN(MY_DATA_SIZE);
+	queue->output_buff_nums = UVC_MAX_VIDEO_BUFFERS;
+
+	ret = uvc_queue_buffer_init(queue, queue->output_buff_nums);
+	if (ret)
+		return ret;
 
 	queue->queue.type = type;
 	queue->queue.io_modes = VB2_MMAP | VB2_USERPTR;
