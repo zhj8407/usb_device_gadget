@@ -1064,6 +1064,7 @@ WEBCAM_CONFIG_ATTR(bulkmode, "%d\n", 0, 1)
 WEBCAM_CONFIG_ATTR(bulksize, "%d\n", 512, 16384)
 WEBCAM_CONFIG_ATTR(maxpayload, "%x\n", 0, 0xFFFFFFFF)
 WEBCAM_CONFIG_ATTR(usbreqnums, "%d\n", 1, UVC_MAX_NUM_REQUESTS)
+WEBCAM_CONFIG_ATTR(vb2kmalloc, "%d\n", 0, 1)
 
 WEBCAM_CONFIG_STRING_ATTR(iad)
 WEBCAM_CONFIG_STRING_ATTR(control)
@@ -1079,6 +1080,7 @@ static struct device_attribute *webcam_function_attributes[] = {
 	&dev_attr_webcam_bulksize,
 	&dev_attr_webcam_maxpayload,
 	&dev_attr_webcam_usbreqnums,
+	&dev_attr_webcam_vb2kmalloc,
 	&dev_attr_webcam_iad_string,
 	&dev_attr_webcam_control_string,
 	&dev_attr_webcam_stream_string,

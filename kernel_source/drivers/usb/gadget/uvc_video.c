@@ -388,7 +388,8 @@ uvc_video_init(struct uvc_video *video,
 		unsigned int bulksize,
 		unsigned char headersize,
 		unsigned int maxpayload,
-		unsigned int usbreqnums)
+		unsigned int usbreqnums,
+		unsigned int vb2kmalloc)
 {
 	INIT_LIST_HEAD(&video->req_free);
 	spin_lock_init(&video->req_lock);
@@ -405,7 +406,7 @@ uvc_video_init(struct uvc_video *video,
 	video->usb_req_nums = usbreqnums;
 
 	/* Initialize the video buffers queue. */
-	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	uvc_queue_init(&video->queue, V4L2_BUF_TYPE_VIDEO_OUTPUT, vb2kmalloc);
 	return 0;
 }
 

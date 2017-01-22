@@ -12,6 +12,8 @@
 #define UVC_MAX_FRAME_SIZE	(16*1024*1024)
 /* Maximum number of video buffers. */
 #define UVC_MAX_VIDEO_BUFFERS	2
+/* Default VB2 kmalloc flag. */
+#define UVC_VB2_KMALLOC_FLAG	0
 
 /* ------------------------------------------------------------------------
  * Structures.
@@ -50,6 +52,8 @@ struct uvc_video_queue {
 
 	spinlock_t irqlock;	/* Protects flags and irqqueue */
 	struct list_head irqqueue;
+
+	unsigned int vb2_kmalloc_flag;
 
 	size_t output_buff_size;
 

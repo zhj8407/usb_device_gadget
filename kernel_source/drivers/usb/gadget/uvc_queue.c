@@ -173,8 +173,9 @@ static int uvc_queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 	if (*nbuffers > UVC_MAX_VIDEO_BUFFERS)
 		*nbuffers = UVC_MAX_VIDEO_BUFFERS;
 
-	if (!queue->static_memory_allocated ||
-			*nbuffers != queue->output_buff_nums) {
+	if (queue->vb2_kmalloc_flag &&
+		(!queue->static_memory_allocated ||
+		*nbuffers != queue->output_buff_nums)) {
 		printk(KERN_ERR "[uvc_queue][uvc_queue_setup]real nbuffers = %u\n", *nbuffers);
 		/* We need to re-allocate the buffers. */
 		if (uvc_queue_buffer_init(queue, *nbuffers))
@@ -248,28 +249,31 @@ static struct vb2_ops uvc_queue_qops = {
 };
 
 static int uvc_queue_init(struct uvc_video_queue *queue,
-			  enum v4l2_buf_type type)
+			  enum v4l2_buf_type type,
+			  unsigned int vb2kmalloc)
 {
 	int ret;
 
 	/* Initialize the output buffers. */
-	queue->output_buff_size = PAGE_ALIGN(MY_DATA_SIZE);
-	queue->output_buff_nums = UVC_MAX_VIDEO_BUFFERS;
+	queue->vb2_kmalloc_flag = vb2kmalloc;
 
-	ret = uvc_queue_buffer_init(queue, queue->output_buff_nums);
-	if (ret)
-		return ret;
+	if (queue->vb2_kmalloc_flag) {
+		queue->output_buff_size = PAGE_ALIGN(MY_DATA_SIZE);
+		queue->output_buff_nums = UVC_MAX_VIDEO_BUFFERS;
+		ret = uvc_queue_buffer_init(queue, queue->output_buff_nums);
+		if (ret)
+			return ret;
+	}
 
 	queue->queue.type = type;
 	queue->queue.io_modes = VB2_MMAP | VB2_USERPTR;
 	queue->queue.drv_priv = queue;
 	queue->queue.buf_struct_size = sizeof(struct uvc_buffer);
 	queue->queue.ops = &uvc_queue_qops;
-#if 0
-	queue->queue.mem_ops = &vb2_vmalloc_memops;
-#else
-	queue->queue.mem_ops = &uvc_kmalloc_memops;
-#endif
+	if (queue->vb2_kmalloc_flag)
+		queue->queue.mem_ops = &uvc_kmalloc_memops;
+	else
+		queue->queue.mem_ops = &vb2_vmalloc_memops;
 	queue->queue.timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	ret = vb2_queue_init(&queue->queue);
 	if (ret)
