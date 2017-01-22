@@ -103,7 +103,8 @@ static int uvc_queue_buffer_init(struct uvc_video_queue *uvc_queue,
 	ctx.is_always_get_first_memory = 0;
 	ctx.buffer_virt_addr_list = &uvc_queue->output_buff_addrs[0];
 	ctx.buffer_num = uvc_queue->output_buff_nums;
-	ctx.available_buffer_size = uvc_queue->output_buff_size;
+	ctx.available_buffer_size = uvc_queue->output_buff_size
+		* uvc_queue->output_buff_nums;
 
 	if (uvc_queue->alloc_ctx) {
 		uvc_kmalloc_cleanup_ctx(uvc_queue->alloc_ctx);
