@@ -1485,49 +1485,116 @@ re_init:
 	
 }
 
-static void adv762x_interrupt_service(struct work_struct *work){
-	
+static void adv762x_interrupt_service(struct work_struct *work)
+{
 	struct adv762x_ctx  *ctx = container_of(work,struct adv762x_ctx, interrupt_service);
-	u8 intr_status = 0;
-	u8 val = 0;
+    u8 val = 0;
+    u8 cable_det_e_st = 0;
+    u8 cable_det_e_raw = 0; 
+    u8 int_txa_st = 0;
+    u8 int_txb_st = 0;
 	
 	if (!ctx) return;
 	
 	atomic_set(&g_interrupt_sevice_done, -1);
-	
-	intr_status = (u8)adv_smbus_read_byte_data(ctx->io, 0x49);
-	
-	val  = (u8)adv_smbus_read_byte_data(ctx->io, 0x4a);
-	if ( intr_status & 0x80) {
-		adv_smbus_write_byte_data(ctx->io, 0x4a, (val & 0x7f) | 0x80);
-	} 
-	if ( intr_status & 0x40) {
-			adv_smbus_write_byte_data(ctx->io, 0x4a, (val & 0xbf) | 0x40);
-	}
-	
-	if (process_tx_intrrupt(ctx) == 2) goto re_init;
-	atomic_set(&g_interrupt_sevice_done, 0);
-	return;
+   
+    //  HDMI input plug/unplug process
+    val = (u8)adv_smbus_read_byte_data(ctx->io, 0x53);
+    cable_det_e_st = (val & 0x40) >> 6;
+ 
+    val = (u8)adv_smbus_read_byte_data(ctx->io, 0x49);
+    int_txa_st = (val & 0x80) >> 7;
+    int_txb_st = (val & 0x40) >> 6;
 
-re_init:
-	atomic_set(&g_interrupt_sevice_done, 0);
-	 init_tx_rx(ctx); 
-	return;
+    //printk(KERN_CRIT "[zynq_adv762x] %s()%d. e_st=%d, txa_st=%d, txb_st=%d\n", 
+    //       __func__, __LINE__, cable_det_e_st, int_txa_st, int_txb_st);
+   
+    if (cable_det_e_st == 1) 
+    {
+        // clear RxE interrupt
+        val  = (u8)adv_smbus_read_byte_data(ctx->io, 0x54);
+        val = (val & 0xbf) | 0x40;
+        adv_smbus_write_byte_data(ctx->io, 0x54, val);
+
+        // RxE interrupt action
+        if (ctx->hdmi_src_id == CON18HDMI)
+        {
+            val = (u8)adv_smbus_read_byte_data(ctx->io, 0x52);
+            cable_det_e_raw = (val & 0x40) >> 6;
+            //printk(KERN_CRIT"[zynq_adv762x] %s()%d. cable_det_e_raw=%d\n", __func__, __LINE__, cable_det_e_raw);
+            if (cable_det_e_raw == 0) 
+            {
+                // No cable detected on HDMI RxE
+           	    atomic_set(&g_interrupt_sevice_done, 0);
+                mux_mode_init(ctx);
+            } 
+            else 
+            {
+                // Cable detected on HDMI RxE (High level on RXE_5V)
+           	    atomic_set(&g_interrupt_sevice_done, 0);
+                init_tx_rx(ctx); 
+            }
+        }
+    }
+    else if ((int_txa_st == 1) || (int_txb_st == 1))
+    {
+        if (int_txa_st == 1)
+        {
+            // clear TxA interrupt
+            val = (u8)adv_smbus_read_byte_data(ctx->io, 0x4a);
+            val = (val & 0x7f) | 0x80;
+            adv_smbus_write_byte_data(ctx->io, 0x4a, val);
+        }
+        
+        if (int_txb_st == 1)
+        {
+            // clear TxB interrupt
+            val = (u8)adv_smbus_read_byte_data(ctx->io, 0x4a);
+            val = (val & 0xbf) | 0x40;
+            adv_smbus_write_byte_data(ctx->io, 0x4a, val);
+        }
+
+        val = (u8)adv_smbus_read_byte_data(ctx->io, 0x52);
+        cable_det_e_raw = (val & 0x40) >> 6;
+        //printk(KERN_CRIT "[zynq_adv762x] %s()%d. hdmi_src_id=%d, cable_det_e_raw=%d\n", 
+        //       __func__, __LINE__, ctx->hdmi_src_id, cable_det_e_raw);
+        if ((ctx->hdmi_src_id == CON18HDMI) && (cable_det_e_raw == 0))
+        {
+            // HDMI input is configured as BYOC(CON18) and this cable does exist.
+            // Do nothing
+        }
+        else
+        {
+            if (process_tx_intrrupt(ctx) == 2)
+            {
+	            atomic_set(&g_interrupt_sevice_done, 0);
+                init_tx_rx(ctx); 
+            }
+        }
+    }
+
+    if (atomic_read(&g_interrupt_sevice_done) == -1)
+	    atomic_set(&g_interrupt_sevice_done, 0);
+
+    //printk(KERN_CRIT "[zynq_adv762x] %s()%d. DONE\n", __func__, __LINE__);
+    return;
 }
 
-static irqreturn_t adv762x_irq_handler(int irq, void *devid) {
-	struct adv762x_ctx  *ctx = (struct adv762x_ctx  *)devid;
-	//printk(KERN_INFO"[zynq_adv762x] Got interrupt in adv762x_irq_handler()!!\n");
-	if (ctx) {
-			if (atomic_read(&g_interrupt_sevice_done) == -1) {
-				 queue_work(ctx->work_queue, &ctx->interrupt_service);
-				atomic_set(&g_interrupt_sevice_first_run, 0);
-			}
-			 if (atomic_read(&g_interrupt_sevice_done) == 0)
-				 queue_work(ctx->work_queue, &ctx->interrupt_service);
-	}
-exit:	
-	return IRQ_HANDLED;
+static irqreturn_t adv762x_irq_handler(int irq, void *devid)
+{
+    struct adv762x_ctx *ctx = (struct adv762x_ctx  *)devid;
+
+    if (ctx) {
+        if (atomic_read(&g_interrupt_sevice_done) == -1) {
+            queue_work(ctx->work_queue, &ctx->interrupt_service);
+            atomic_set(&g_interrupt_sevice_first_run, 0);
+        }
+        if (atomic_read(&g_interrupt_sevice_done) == 0)
+        {
+            queue_work(ctx->work_queue, &ctx->interrupt_service);
+        }
+    }
+    return IRQ_HANDLED;
 }
 
 
@@ -1552,7 +1619,13 @@ static int interrupt_init(struct adv762x_ctx  *ctx) {
 	set_tx_interrupt(ctx);
 	//adv_smbus_write_byte_data(ctx->tx_main, 0x94, 0x80);
 	//adv_smbus_write_byte_data(ctx->tx_main, 0x96, 0x80);
-	
+
+    // CABLE_DET_E_MB1:
+    //   This bit is the INT1 interrupt mask for the HDMI RxE +5V cable detection interrupt. 
+    //   When set, the HDMI RxE +5V cable detection interrupt will trigger the INT1 interrupt 
+    //   and CABLE_DET_E_ST will indicate the interrupt status.
+	adv_smbus_write_byte_data(ctx->io, 0x56, 0x40);
+
 	if (ctx->irq == -1) {
 		ctx->work_queue = create_singlethread_workqueue(ADV762X_DRIVER_NAME);
 		if (!ctx->work_queue) {
@@ -1661,26 +1734,40 @@ static ssize_t b_store(struct kobject *kobj, struct kobj_attribute *attr, const 
 };
 
 static ssize_t b_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
-	const char *name =  attr->attr.name;
-	int val = 0;
-	if (name)  {
-		if (strcmp(name, "HDMI_SOURCE") == 0) { 
-			mutex_lock(&g_ctx.lock);
-			val = (int)g_ctx.hdmi_src_id;
-			mutex_unlock(&g_ctx.lock);
-			return sprintf(buf, "%d\n", val );
-		}
-	}
-	return  0;
+    const char *name =  attr->attr.name;
+    int val = 0;
+    if (name)  {
+        if (strcmp(name, "HDMI_SOURCE") == 0) { 
+            mutex_lock(&g_ctx.lock);
+            val = (int)g_ctx.hdmi_src_id;
+            mutex_unlock(&g_ctx.lock);
+            return sprintf(buf, "%d\n", val);
+        }
+        else if (strcmp(name, "CABLE_DET") == 0) {
+            struct adv762x_ctx *ctx = &g_ctx;
+            u8 val = (u8) adv_smbus_read_byte_data(ctx->io, 0x52);
+            return sprintf(buf, "0x%02x\n", val);
+        }
+        else if (strcmp(name, "SYSTEM_PD") == 0) {
+            struct adv762x_ctx *ctx = &g_ctx;
+            u8 val = (u8) adv_smbus_read_byte_data(ctx->tx_main, 0x41);
+            return sprintf(buf, "0x%02x\n", val);
+        }
+    }
+    return  0;
 };
 
 static struct kobj_attribute hdmi_source_attribute = __ATTR(HDMI_SOURCE,  S_IRUGO |  S_IWUGO, b_show, b_store);
 static struct kobj_attribute hpd_attribute = __ATTR(HPD,  S_IRUGO |  S_IWUGO, b_show, b_store);
+static struct kobj_attribute cable_det_attribute = __ATTR(CABLE_DET,  S_IRUGO |  S_IWUGO, b_show, b_store);
+static struct kobj_attribute system_pd_attribute = __ATTR(SYSTEM_PD,  S_IRUGO |  S_IWUGO, b_show, b_store);
 
 
 static struct attribute *attrs[] = {
 	    (struct attribute *)&hdmi_source_attribute,
 	    (struct attribute *)&hpd_attribute,
+	    (struct attribute *)&cable_det_attribute,
+	    (struct attribute *)&system_pd_attribute,
 	    NULL
 };
 

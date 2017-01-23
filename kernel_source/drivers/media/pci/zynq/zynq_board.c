@@ -242,7 +242,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( ADV7611_I2C_ID_NAME, SUBDEV_CH0_I2C_ADDR ),
             .platform_data = &adv7611_pdata_0,
         },
-        .data_pin = VIN_0
+        .data_pin = VIN_0,
+        .iffm_i2cc = NULL
     },
     {
         .enable = 1,
@@ -251,7 +252,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( ADV7611_I2C_ID_NAME, SUBDEV_CH1_I2C_ADDR),
             .platform_data = &adv7611_pdata_1,
         },
-        .data_pin = VIN_1
+        .data_pin = VIN_1,
+        .iffm_i2cc = NULL
     },
     {
         .enable = 0,
@@ -260,7 +262,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( M10MO_I2C_ID_NAME, SUBDEV_CH2_I2C_ADDR ),
             .platform_data = NULL, //TODO: The  m10mo should need the platform_data ?
         },
-        .data_pin = VIN_2
+        .data_pin = VIN_2,
+        .iffm_i2cc = NULL
     },
     {
         .enable = 1,
@@ -269,7 +272,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( ADV7511_I2C_ID_NAME, SUBDEV_CH3_I2C_ADDR ),
             .platform_data = &adv7511_pdata_0,
         },
-        .data_pin = VOUT_0
+        .data_pin = VOUT_0,
+        .iffm_i2cc = NULL
     },
     {
         .enable = 1,
@@ -278,7 +282,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( ADV7511_I2C_ID_NAME, SUBDEV_CH4_I2C_ADDR ),
             .platform_data = &adv7511_pdata_1,
         },
-        .data_pin = VOUT_1
+        .data_pin = VOUT_1,
+        .iffm_i2cc = NULL
     },
     {
         .enable = 0,
@@ -287,7 +292,8 @@ struct vpif_subdev_info board_subdev_info[] = {
             I2C_BOARD_INFO( TC358746A_I2C_ID_NAME, SUBDEV_CH5_I2C_ADDR ),
             .platform_data =NULL, //TODO: The  tc358746a should need the platform_data ?
         },
-        .data_pin = VPINNONE
+        .data_pin = VPINNONE,
+        .iffm_i2cc = NULL
     }
 };
 

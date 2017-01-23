@@ -1274,6 +1274,38 @@ static int vpif_mmap(struct file *filep, struct vm_area_struct *vma)
 
     if (mutex_lock_interruptible(&common->lock))
         return -ERESTARTSYS;
+
+    /*
+     *   Fix visage crash issue when EagleEye does not exist.
+     *
+     *   CH0: left EagleEye
+     *   CH1: right EagleEye
+     *   Read vic code from adv7611 infoframe cmd(0x4).
+     *   If the vic code is 0, it means the EagleEye does not exist.
+     *   Just return ENOMEM. 
+     */
+    if ((ch->channel_id == 0) || (ch->channel_id == 1)) {
+        struct vpif_subdev_info *info = &board_subdev_info[ch->channel_id];
+        u8 command = 0x4;
+        s32 ret = 0;
+
+        if (info->iffm_i2cc != NULL) {
+            s32 i = 0;
+
+            // infofram_read
+            for (i = 0; i < 3; i++) {
+                ret = i2c_smbus_read_byte_data(info->iffm_i2cc, command);
+                if (ret >= 0)
+                    break;
+            }
+
+            if (ret == 0) {
+                mutex_unlock(&common->lock);
+                return -ENOMEM;
+            }
+        }
+    }
+
     ret = vb2_mmap(&common->buffer_queue, vma);
     mutex_unlock(&common->lock);
     return ret;
@@ -3487,7 +3519,6 @@ int vpif_capture_init(struct pci_dev *pdev)
         }
 
         vpif_obj.sd[i] = v4l2_i2c_new_subdev_board(&vpif_obj.v4l2_dev, i2c_adap, &subdevdata->board_info, NULL);
-
         if (!vpif_obj.sd[i]) {
             zynq_printk(0, "[zynq_capture]Error registering v4l2 subdevice %s !!\n",  subdevdata->name);
             g_video_cap_en[i] = 0;
@@ -3495,6 +3526,7 @@ int vpif_capture_init(struct pci_dev *pdev)
             // err = -EBUSY;
             // goto rls_sd_obj;
         }
+        subdevdata->iffm_i2cc = vpif_obj.sd[i]->iffm_i2cc_priv;
         actual_subdev_count++;
         //zynq_printk(1, "[zynq_capture]subdev : (name, bus, addr) - --> (%s, 0x%02x, 0x%02x)\n",  subdevdata->name, bus_num, subdevdata->board_info.addr);
     }
