@@ -25,6 +25,104 @@
 #include <media/v4l2-event.h>
 
 #include "uvc.h"
+#include "uvc_kmalloc.h"
+
+#define MY_DATA_SIZE (4*1024*1024)
+
+static int release_reserved_memory(struct uvc_video_queue *uvc_queue)
+{
+	int status = 0;
+	int i = 0;
+
+	for (i = 0 ; i < uvc_queue->output_buff_nums; i++) {
+		if (uvc_queue->output_buff_addrs[i]  != NULL) {
+			kfree(uvc_queue->output_buff_addrs[i]);
+			uvc_queue->output_buff_addrs[i] = NULL;
+		}
+	}
+
+	return status;
+}
+
+static int allocate_reserved_memory(struct uvc_video_queue *uvc_queue,
+					unsigned int buffer_num)
+{
+	int status = 0;
+	int i, j, num_of_pages;
+	size_t output_buff_size = uvc_queue->output_buff_size;
+	unsigned char *tmp;
+
+	for (i  = 0; i < buffer_num; i++) {
+		uvc_queue->output_buff_addrs[i] = kmalloc(output_buff_size, GFP_KERNEL);
+		if (!uvc_queue->output_buff_addrs[i]) {
+			printk(KERN_ERR "[uvc_queue]failed to kmalloc  %d memory for (index:%d) !!\n",
+				output_buff_size, i);
+			status = -1;
+			goto exit;
+		}
+
+		/* Set the Page Flag to be reserved. */
+		num_of_pages = (output_buff_size + PAGE_SIZE - 1 ) / PAGE_SIZE;
+		tmp = (unsigned char *)(uvc_queue->output_buff_addrs[i]);
+
+		for (j = 0; j < num_of_pages; j++) {
+			SetPageReserved(virt_to_page(tmp));
+			tmp += PAGE_SIZE;
+		}
+
+		printk(KERN_ERR "[uvc_queue]Successfull to allocate %d bytes video memory: (index:%d)"
+			" --->  (virt:0x%p, phy:0x%p) !!\n",
+			output_buff_size, i,
+			uvc_queue->output_buff_addrs[i],
+			(void *)virt_to_phys(uvc_queue->output_buff_addrs[i]));
+	}
+	uvc_queue->output_buff_nums = buffer_num;
+	return status;
+exit:
+	for (i = 0 ; i < uvc_queue->output_buff_nums; i++) {
+		if (uvc_queue->output_buff_addrs[i]  != NULL) {
+			kfree(uvc_queue->output_buff_addrs[i]);
+			uvc_queue->output_buff_addrs[i] = NULL;
+		}
+	}
+	return status;
+}
+
+static int uvc_queue_buffer_init(struct uvc_video_queue *uvc_queue,
+					unsigned int buffer_num)
+{
+	uvc_kmalloc_conf_t ctx;
+
+	if (release_reserved_memory(uvc_queue))
+		return -EINVAL;
+
+	if (allocate_reserved_memory(uvc_queue, buffer_num))
+		return -EINVAL;
+
+	ctx.en_non_cache_map = 0;
+	ctx.is_always_get_first_memory = 0;
+	ctx.buffer_virt_addr_list = &uvc_queue->output_buff_addrs[0];
+	ctx.buffer_num = uvc_queue->output_buff_nums;
+	ctx.available_buffer_size = uvc_queue->output_buff_size
+		* uvc_queue->output_buff_nums;
+
+	if (uvc_queue->alloc_ctx) {
+		uvc_kmalloc_cleanup_ctx(uvc_queue->alloc_ctx);
+		uvc_queue->alloc_ctx = NULL;
+	}
+
+	uvc_queue->alloc_ctx = uvc_kmalloc_init_ctx(&ctx);
+	if (IS_ERR(uvc_queue->alloc_ctx)) {
+		printk(KERN_ERR "[uvc_queue][uvc_queue_setup] (%d)"
+			"Failed to call the uvc_kmalloc_init_ctx\n",
+			__LINE__);
+		return -1;
+	}
+
+	uvc_queue->static_memory_allocated = 1;
+
+	return 0;
+}
 
 /*
  * Send video frame transfer done event through v4l2
@@ -76,9 +174,20 @@ static int uvc_queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 	if (*nbuffers > UVC_MAX_VIDEO_BUFFERS)
 		*nbuffers = UVC_MAX_VIDEO_BUFFERS;
 
+	if (queue->vb2_kmalloc_flag &&
+		(!queue->static_memory_allocated ||
+		*nbuffers != queue->output_buff_nums)) {
+		printk(KERN_ERR "[uvc_queue][uvc_queue_setup]real nbuffers = %u\n", *nbuffers);
+		/* We need to re-allocate the buffers. */
+		if (uvc_queue_buffer_init(queue, *nbuffers))
+			return -1;
+	}
+
 	*nplanes = 1;
 
 	sizes[0] = video->imagesize;
+
+	alloc_ctxs[0] = queue->alloc_ctx;
 
 	return 0;
 }
@@ -141,16 +250,31 @@ static struct vb2_ops uvc_queue_qops = {
 };
 
 static int uvc_queue_init(struct uvc_video_queue *queue,
-			  enum v4l2_buf_type type)
+			  enum v4l2_buf_type type,
+			  unsigned int vb2kmalloc)
 {
 	int ret;
+
+	/* Initialize the output buffers. */
+	queue->vb2_kmalloc_flag = vb2kmalloc;
+
+	if (queue->vb2_kmalloc_flag) {
+		queue->output_buff_size = PAGE_ALIGN(MY_DATA_SIZE);
+		queue->output_buff_nums = UVC_MAX_VIDEO_BUFFERS;
+		ret = uvc_queue_buffer_init(queue, queue->output_buff_nums);
+		if (ret)
+			return ret;
+	}
 
 	queue->queue.type = type;
 	queue->queue.io_modes = VB2_MMAP | VB2_USERPTR;
 	queue->queue.drv_priv = queue;
 	queue->queue.buf_struct_size = sizeof(struct uvc_buffer);
 	queue->queue.ops = &uvc_queue_qops;
-	queue->queue.mem_ops = &vb2_vmalloc_memops;
+	if (queue->vb2_kmalloc_flag)
+		queue->queue.mem_ops = &uvc_kmalloc_memops;
+	else
+		queue->queue.mem_ops = &vb2_vmalloc_memops;
 	queue->queue.timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	ret = vb2_queue_init(&queue->queue);
 	if (ret)
