@@ -585,6 +585,8 @@ struct v4l2_subdev {
 	void *host_priv;
 	/* subdev device node */
 	struct video_device *devnode;
+
+    void *iffm_i2cc_priv;
 };
 
 #define media_entity_to_v4l2_subdev(ent) \

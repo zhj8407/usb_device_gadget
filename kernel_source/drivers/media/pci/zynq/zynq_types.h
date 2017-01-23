@@ -175,6 +175,7 @@ struct vpif_subdev_info {
     const char *name;
     struct i2c_board_info board_info;
     vpif_video_data_pin_t data_pin;
+    struct i2c_client *iffm_i2cc;
 };
 
 struct vpif_output {

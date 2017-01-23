@@ -1047,6 +1047,8 @@ static int adv761x_probe(struct i2c_client *client,
 		v4l2_err(sd, "I2C clients setup failed\n");
 		goto err_i2c;
 	}
+
+    sd->iffm_i2cc_priv = state->i2c_inf;
 #endif
 	/* Setup control handlers */
 	ctrl_hdl = &state->ctrl_hdl;

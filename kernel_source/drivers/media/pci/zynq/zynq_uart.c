@@ -441,7 +441,7 @@ static int zynq_uart_request_port(struct uart_port *port);
 static void zynq_uart_config_port(struct uart_port *port, int flags) ;
 static int zynq_uart_verify_port(struct uart_port *port, struct serial_struct *ser);
 static irqreturn_t  zynq_uart_isr(int irq, void *dev_id);
-static irqreturn_t ulite_isr_by_one_port(int irq, void *dev_id);
+//static irqreturn_t ulite_isr_by_one_port(int irq, void *dev_id);
 #ifdef CONFIG_CONSOLE_POLL
 static int zynq_get_poll_char(struct uart_port *port);
 static void zynq_put_poll_char(struct uart_port *port, unsigned char ch);
@@ -504,6 +504,14 @@ struct zynq_card_t {
 };
 
 struct zynq_card_t  *zynq_card = NULL;
+
+struct work_struct			zynq_uart_work;
+struct workqueue_struct		*zynq_uart_workqueue = NULL;
+void zynq_uart_do_interrupt_service(struct work_struct *work);
+
+static struct kobject *zynq_uart_kobj = NULL;
+static atomic64_t zynq_uart_isr_cnts = ATOMIC64_INIT(0);
+static atomic64_t zynq_uart_ist_cnts = ATOMIC64_INIT(0);
 
 #define MAX_UART_MMAP_REG_NUM 12
 u32 zynq_mmap[MAX_UART_MMAP_REG_NUM];
@@ -673,6 +681,30 @@ static int check_endianess(struct uart_port *port)
     return 0;
 }
 
+static ssize_t zynq_uart_intr_show(struct kobject *kobj, struct kobj_attribute *attr,
+		      char *buf)
+{
+    int len = 0;
+
+    len += sprintf(buf+len, "isr_cnts=%llu, ist_cnts=%llu\n",
+            atomic64_read(&zynq_uart_isr_cnts), atomic64_read(&zynq_uart_ist_cnts));
+
+    return len;
+}
+
+static struct kobj_attribute zynq_uart_intr_attribute =
+	__ATTR(intr, 0666, zynq_uart_intr_show, NULL);
+
+static struct attribute *zynq_uart_attrs[] = {
+	&zynq_uart_intr_attribute.attr,
+	NULL,	/* need to NULL terminate the list of attributes */
+};
+
+static struct attribute_group zynq_uart_attr_group = {
+	.attrs = zynq_uart_attrs,
+};
+
+
 /*
  parameter BASE_GLOBAL                           = 0,
                   	  BASE_UART0                            = 1,
@@ -789,31 +821,43 @@ static int init_uart_ports( struct pci_dev *pdev)
         }
         zynq_card->initialized_uarts++;
 
+        #if 0
         if (uart_interrupt_mode == 1) {
-            if(request_irq (zynq_uarts[i].irq, ulite_isr_by_one_port,  IRQF_ONESHOT    |   IRQF_TRIGGER_RISING, "zynq_uart", (void *)p)) 	{
+            if(request_irq (zynq_uarts[i].irq, ulite_isr_by_one_port, IRQF_TRIGGER_RISING, "zynq_uart", (void *)p)) 	{
                 zynq_printk(0,  "[zynq_uart] IRQ request for  pin %u fail!!\n", zynq_uarts[i].irq);
                 return -1;
             }
         }
-
-    }
-    /*
-     * IRQF_ONESHOT - Interrupt is not reenabled after the hardirq handler finished.
-     * Used by threaded interrupts which need to keep the irq line disabled until the threaded handler has been run.
-     * IRQF_SHARED - allow sharing the irq among several devices
-     */
-
-    if (uart_interrupt_mode == 0) {
-        if(request_irq (zynq_card->irq, zynq_uart_isr,  IRQF_ONESHOT    |  IRQF_TRIGGER_HIGH /*| IRQF_TRIGGER_RISING*/, "zynq_uart", (void *)zynq_card)) 	{
-            zynq_printk(0,  "[zynq_uart] IRQ request for  pin %u fail!!\n", zynq_card->irq);
-            return -1;
-        }
+        #endif
     }
 
+    // create work thread for IST
+	INIT_WORK(&zynq_uart_work, zynq_uart_do_interrupt_service);
+	zynq_uart_workqueue = create_singlethread_workqueue("zynq_uart");
+
+    if(request_irq (zynq_card->irq, zynq_uart_isr, IRQF_TRIGGER_RISING, "zynq_uart", (void *)zynq_card)) 	        {
+        zynq_printk(0,  "[zynq_uart] IRQ request for  pin %u fail!!\n", zynq_card->irq);
+        return -1;
+    }
+
+    // Add sysfs for debug
+    {
+        int retval;
+
+        zynq_uart_kobj = kobject_create_and_add("zynq_uart", kernel_kobj);
+        if (!zynq_uart_kobj)
+            return -ENOMEM;
+
+        /* Create the files associated with this kobject */
+        retval = sysfs_create_group(zynq_uart_kobj, &zynq_uart_attr_group);
+        if (retval)
+            kobject_put(zynq_uart_kobj);
+    }
 
     return 0;
 }
 
+#if 0
 /////////////////////////////////////////////////////////////////////////
 /*For 4 interrupt mode*/
 static irqreturn_t ulite_isr_by_one_port(int irq, void *dev_id)
@@ -836,9 +880,11 @@ static irqreturn_t ulite_isr_by_one_port(int irq, void *dev_id)
         return IRQ_NONE;
     }
 }
+#endif
+
 /////////////////////////////////////////////////////////////////////////
 /*For single interrupt mode*/
-static int ulite_isr(struct uart_port *port)
+static int ulite_do_interrupt_service(struct uart_port *port)
 {
     int busy =0, n = 0;
 
@@ -858,31 +904,40 @@ static int ulite_isr(struct uart_port *port)
     }
 }
 
-static irqreturn_t  zynq_uart_isr(int irq, void *dev_id)
+void zynq_uart_do_interrupt_service(struct work_struct *work)
 {
-    struct zynq_card_t *card = (struct zynq_card_t *)dev_id;
+    struct zynq_card_t *card = zynq_card;
     struct zynq_uart_t 	*uarts = NULL;
     int handled = 0;
     unsigned int i = 0;
 //	int idx = 0;
 
-    if (!card) return IRQ_NONE;
+    atomic64_inc(&zynq_uart_ist_cnts);
+
+    if (!card) return;
 
     uarts = card->uarts;
 
-    if (!uarts) return IRQ_NONE;
+    if (!uarts) return;
 
     for (i  = 0 ; i < ZYNQ_UART_NR_PORTS; i++) {
         if (uarts[i].enable) {
             if (atomic_inc_and_test(&uarts[i].refcount)) {
-                if (ulite_isr(&(uarts[i].port))) handled |= (1 << i);
+                if (ulite_do_interrupt_service(&(uarts[i].port))) handled |= (1 << i);
             } else {
                 zynq_printk(0, "[zynq_uart](%d)The ISR() is breaked.(%d)\n", __LINE__, atomic_read(&uarts[i].refcount) );
             }
             atomic_dec(&uarts[i].refcount);
         }
     }
-    return handled ? IRQ_HANDLED : IRQ_NONE;
+    return;
+}
+
+static irqreturn_t  zynq_uart_isr(int irq, void *dev_id)
+{
+    atomic64_inc(&zynq_uart_isr_cnts);
+    queue_work(zynq_uart_workqueue, &zynq_uart_work);
+    return IRQ_HANDLED;
 }
 
 static unsigned int zynq_uart_tx_empty(struct uart_port *port)

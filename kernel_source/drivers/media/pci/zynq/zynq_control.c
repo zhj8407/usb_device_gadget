@@ -196,11 +196,14 @@ static int vpif_control_config_out_clock(eVideoFormat format)
 
 static int vpif_control_enable_video_stream_by_id(ePIPEPORTID id, unsigned int enable)
 {
+    u32 old_val = 0;
     u32 val = 0;
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
         val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+        old_val = val;
+        val |= 0x8;
         switch (id) {
             case EVIN0:
                 if (enable)
@@ -224,13 +227,14 @@ static int vpif_control_enable_video_stream_by_id(ePIPEPORTID id, unsigned int e
                 return 0;
         }
         val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-        //zynq_printk(0, "[zynq_control](%d) enable video stream reg: 0x%08x\n", __LINE__, val);
+        zynq_printk(0, "vpif_control_enable_video_stream_by_id(). id=%d, enable=%d reg:0x%08x->0x%08x\n", id, enable, old_val, val);
     }
     return 0;
 }
 
 static int vpif_control_enable_video_streams(unsigned int enable)
 {
+    u32 old_val = 0;
     u32 val = 0;
 
     if (!zynq_reg_base) return -1;
@@ -238,36 +242,37 @@ static int vpif_control_enable_video_streams(unsigned int enable)
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
 
         val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-
+        old_val = val;
+        val |= 0x8;
         if (enable)
             fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff8) | 0x7);
         else
             fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff8) | 0x0);
 
         val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-        //	zynq_printk(0, "[zynq_control](%d) enable video stream reg: 0x%08x\n", __LINE__, val);
+        zynq_printk(0, "vpif_control_enable_video_streams(). enable=%d, reg:0x%08x->0x%08x\n", enable, old_val, val);
     }
     return  0;
 }
 
 int vpif_control_config_webcam_enable(unsigned int enable)
 {
-
+    u32 old_val = 0;
     u32 val = 0;
     if (!zynq_reg_base) return -1;
 
     if ((fpga_release_date >= FPGA_MODULE_SUPPORT_DATE) && (en_modules == 1)) {
         val = fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
+        old_val = val;
+        val |= 0x8;
         if (enable)
-            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x8);
+            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffffb) | 0x4);
         else
-            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffff7) | 0x0);
+            fpga_reg_write(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG, (val&0xfffffffb) | 0x0);
         val =  fpga_reg_read(zynq_reg_base, FPGA_VIDEO_STREAM_ENABLE_REG);
-        zynq_printk(0, "[zynq_control] (%d) enable web cam video stream reg: 0x%08x\n", __LINE__, val);
+        zynq_printk(0, "vpif_control_enable_webcam_enable(). enable=%d, reg:0x%08x->0x%08x\n", enable, old_val, val);
     }
     return 0;
-
-
 }
 
 int vpif_control_config_webcam_res(unsigned int out_width, unsigned int out_height )
@@ -807,14 +812,17 @@ static int vpif_vout_pipline(struct file *file, void *fh, struct v4l2_vout_pipel
         unsigned int  frame_rate_vin1 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN1);
         unsigned int  frame_rate_vin2 = (unsigned int)vselector_get_frame_rate (VSELECTOR_VIN2);
         unsigned int  frame_rate_cpu = (unsigned int)vselector_get_frame_rate (VSELECTOR_CPU);
-        if (frame_rate_vin0 == 0x3c) {
+        
+        // check EE valid, frame rate range 60 +- 5
+        if ((frame_rate_vin0 >= 55) && (frame_rate_vin0 <= 65)) {
             vpif_control_config_vin(EVIN0, 1);
             is_valid_vin0 = vpif_control_is_valid(EVIN0) ;
         }
-        if (frame_rate_vin1 == 0x3c) {
+        if ((frame_rate_vin1 >= 55) && (frame_rate_vin1 <= 65)) {
             vpif_control_config_vin(EVIN1, 1);
             is_valid_vin1 = vpif_control_is_valid(EVIN1) ;
         }
+
         if (frame_rate_vin2 != 0) {
             vpif_control_config_vin(EVIN2, 1);
             is_valid_vin2 = vpif_control_is_valid(EVIN2) ;
@@ -1322,9 +1330,11 @@ static void config_osd(vpif_vidoe_pipelie_entity_t *entity)
     config.data = &param;
     entity->config(entity,  &config);
 
+    // OSD layer1 is disabled by default. 
+    // Enable it according to vselector osd source config later
     config.flag = OSD_OPTION_SET_LAYER;
     param.id = OSD_LAYER_1;
-    param.enable = 1;
+    param.enable = 0;
     param.global_alpha_enable = 1;
     param.priority = 1;
     param.alpha_value = 0x100;
@@ -1367,23 +1377,42 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
     vselector_vout_frame_size_t size;
 
     if (b_firstconfig_vout_pipeline == 1) {
+        unsigned int vout_num = 2;
+ 
         if ((en_er_board == 0) &&  (fpga_release_date == 0x20160322)) {
             b_firstconfig_vout_pipeline = 0;
             vselector_sw_reset();
         }
+
         mutex_lock(&g_config_lock);
         g_vout_pipeline_config.pipes[0].full = ENONE;
         g_vout_pipeline_config.pipes[0].osd = ENONE;
-        g_vout_pipeline_config.pipes[1].full = EVIN2;
-        g_vout_pipeline_config.pipes[1].osd = EVIN2;
+        g_vout_pipeline_config.pipes[1].full = EVIN0;
+        g_vout_pipeline_config.pipes[1].osd = ENONE;
+        
         if (default_divisor == 3)
             g_vout_pipeline_config.osd_scale = E1TO9SCALE;
         else
             g_vout_pipeline_config.osd_scale = E1TO16SCALE;
+
         mutex_unlock(&g_config_lock);
+        
         if (tc358746_is_yuv() == 0) {
             zynq_printk(0, "[zynq_control] Because could not capture the video from webcam, should do the reset of vselector at the next configuration!!\n ");
             vpif_control_config_reset(1);
+        }
+
+        // OSD_LAYER_1 is not enable by default in config_osd()
+        // Enabel it here accoring to vout_pipeline_config osd source default config
+        for (i = 0; i < vout_num; i++) {
+            osd_enable_t osd_enable;
+
+            if (g_vout_pipeline_config.pipes[i].osd == ENONE) {
+                osd_enable.value = 0;
+            } else {
+                osd_enable.value = 1;
+            }
+            osd_setoption(OSD_OPTION_ENABLE_LAYER1, &osd_enable,(unsigned )i);
         }
     }
 
@@ -1444,26 +1473,7 @@ static void config_vselector(vpif_vidoe_pipelie_entity_t *entity)
             vselector_sw_reset();
     }
 
-    for (i = 0; i < 2; i++) {
-        if ((g_vout_pipeline_config.pipes[i].full  == EVIN0) || (g_vout_pipeline_config.pipes[i].osd == EVIN0)) {
-            vpif_control_enable_video_stream_by_id(EVIN0, 1);
-            break;
-        }
-    }
-
-    for (i = 0; i < 2; i++) {
-        if ((g_vout_pipeline_config.pipes[i].full  == EVIN1) || (g_vout_pipeline_config.pipes[i].osd == EVIN1)) {
-            vpif_control_enable_video_stream_by_id(EVIN1, 1);
-            break;
-        }
-    }
-
-    for (i = 0; i < 2; i++) {
-        if ((g_vout_pipeline_config.pipes[i].full  == EVIN2) || (g_vout_pipeline_config.pipes[i].osd == EVIN2)) {
-            vpif_control_enable_video_stream_by_id(EVIN2, 1);
-            break;
-        }
-    }
+    vpif_control_enable_video_streams(1);
 
     return;
 }
