@@ -451,6 +451,9 @@ static void dfu_complete_out(struct usb_ep *ep, struct usb_request *req)
 		return;
 	}
 
+	if (req->actual != DFU_BULK_BUFFER_SIZE)
+		WARNING(cdev, "Received data. len : %d\n", req->actual);
+
 	req_list = kzalloc(sizeof(*req_list), GFP_ATOMIC);
 	if (!req_list)
 		return;
@@ -495,6 +498,58 @@ static int dfu_create_bulk_endpoints(struct dfu_dev *dev,
 fail:
 	printk(KERN_ERR "dfu_bind() could not allocate requests\n");
 	return -1;
+}
+
+static int dfu_open_read_pipe(struct dfu_dev *dev)
+{
+	struct usb_composite_dev *cdev = dev->cdev;
+	struct usb_function *f = &dev->function;
+	struct usb_request *req;
+	int ret;
+	int i;
+	DBG(cdev, "dfu_open_read_pipe\n");
+
+	/* queue all the rx reqs at once. */
+	for (i = 0; i < dev->rx_qlen; i++) {
+		req = dev->rx_reqs[i];
+		if (req) {
+			req->length = DFU_BULK_BUFFER_SIZE;
+			req->status = 0;
+			ret = usb_ep_queue(dev->ep_out, dev->rx_reqs[i],
+				GFP_ATOMIC);
+			if (ret)
+				ERROR(cdev, "%s queue req --> %d\n",
+					dev->ep_out->name, ret);
+		}
+	}
+
+	return ret;
+}
+
+static void dfu_close_read_pipe(struct dfu_dev *dev)
+{
+	struct usb_composite_dev	*cdev = dev->cdev;
+	struct f_dfu_rx_req_list	*rx_list, *rx_next;
+	unsigned long flags;
+	int i;
+
+	DBG(cdev, "dfu_close_read_pipe\n");
+
+	/* Dequeue all the usb requests. */
+	for(i = 0; i < dev->rx_qlen; i++) {
+		if (dev->rx_reqs[i]) {
+			usb_ep_dequeue(dev->ep_out, dev->rx_reqs[i]);
+		}
+	}
+
+	/* Clean up the list in rx_idle. */
+	/* FIXME Need to acquire the lock? */
+	spin_lock_irqsave(&dev->read_lock, flags);
+	list_for_each_entry_safe(rx_list, rx_next, &dev->rx_idle, list) {
+		list_del(&rx_list->list);
+		kfree(rx_list);
+	}
+	spin_unlock_irqrestore(&dev->read_lock, flags);
 }
 
 static ssize_t dfu_read(struct file *fp, char __user *buf,
@@ -715,6 +770,30 @@ static long dfu_ioctl(struct file *filp, unsigned int cmd,
 
 		break;
 
+	case DFU_IOC_OPEN_STREAM:
+		if (!(filp->f_mode & FMODE_WRITE)) {
+			err = -EBADF;
+			break;
+		}
+
+		err = dfu_open_read_pipe(dev);
+		if (err)
+			ERROR(cdev, "failed to open the dfu read pipe\n");
+
+		break;
+
+	case DFU_IOC_CLOSE_STREAM:
+		if (!(filp->f_mode & FMODE_WRITE)) {
+			err = -EBADF;
+			break;
+		}
+
+		dfu_close_read_pipe(dev);
+
+		err = 0;
+
+		break;
+
 	default:
 		err = -ENOTTY;
 		break;
@@ -871,9 +950,13 @@ static int dfu_function_set_alt(struct usb_function *f,
 {
 	struct dfu_dev	*dev = func_to_dfu(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
+#if 0
 	struct usb_request *req;
+#endif
 	int ret;
+#if 0
 	int i;
+#endif
 	DBG(cdev, "dfu_function_set_alt intf: %d alt: %d\n", intf, alt);
 
 	if (dev->ep_out != NULL) {
@@ -902,6 +985,7 @@ static int dfu_function_set_alt(struct usb_function *f,
 	atomic_set(&dev->error, 0);
 	/* readers may be blocked waiting for us to go online */
 
+#if 0
 	/* queue all the rx reqs at once. */
 	for (i = 0; i < dev->rx_qlen; i++) {
 		req = dev->rx_reqs[i];
@@ -914,6 +998,7 @@ static int dfu_function_set_alt(struct usb_function *f,
 					dev->ep_out->name, ret);
 		}
 	}
+#endif
 
 	wake_up(&dev->read_wq);
 

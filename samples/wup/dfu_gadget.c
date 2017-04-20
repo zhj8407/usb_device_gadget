@@ -108,6 +108,9 @@ struct wup_device {
     char image_sw_version[32];
 };
 
+static int wup_open_read_pipe(struct wup_device *dev);
+static void wup_close_read_pipe(struct wup_device *dev);
+
 #ifdef DEBUG_CALCULATE_SPEED
 static long start_time;
 
@@ -314,10 +317,22 @@ wup_events_process(struct wup_device *dev)
                     start_time = get_current_time();
 #endif
 
+#if 1
+                    // Start the usb out pipe here
+                    ret = wup_open_read_pipe(dev);
+
+                    if (ret < 0) {
+                        fprintf(stderr, RED "Failed to enable the read pipe. ret is %d\n" RESET,
+                            ret);
+                        dev->status = WUP_STATUS_errUNKNOWN;
+                        return;
+                    }
+#endif
+
                     dev->state = WUP_STATE_dfuDNLOAD_IDLE;
                     dev->status = WUP_STATUS_OK;
 
-                    printf(WHT "\n\nStart Transfer. Image Size: %lu, "
+                    printf(WHT "Start Transfer. Image Size: %lu, "
                            "SyncBlockSize: %lu, bForced: %d, Version Number: %s\n" RESET,
                            dev->image_size, dev->sync_block_size,
                            dnload_info.bForced, dnload_info.sSwVersion);
@@ -329,12 +344,22 @@ wup_events_process(struct wup_device *dev)
                 if (dev->state != WUP_STATE_dfuUPDATE_BUSY)
                     dev->state = WUP_STATE_dfuIDLE;
 
+                // We need to reset the pipe here.
+                wup_close_read_pipe(dev);
+#if 0
+                // Then re-open the pipe here
+                wup_open_read_pipe(dev);
+#endif
+
+                // Remove the obsolete file
+                unlink(dev->image_file);
+
                 dev->status = WUP_STATUS_OK;
             } else if (wup_event.value == USB_REQ_WUP_INT_CHECK) {
 
                 if (dev->state != WUP_STATE_dfuDNLOAD_IDLE) {
                     //TODO STALL the request
-                    printf(WHT "INT CHECK: Wrong State. Current State is %d\n" RESET,
+                    printf(WHT "INT CHECK: Wrong State. Current State is %d\n\n\n" RESET,
                            dev->state);
                     dev->status = WUP_STATUS_errSTATE;
                     return;
@@ -379,6 +404,9 @@ wup_events_process(struct wup_device *dev)
 #endif
                     dev->state = WUP_STATE_dfuIDLE;
                 }
+
+                printf("\n\n\n");
+
             } else if (wup_event.value == USB_REQ_WUP_START_UPDATE) {
 #if 0
                 char swVerFromImage[64];
@@ -455,6 +483,13 @@ wup_events_process(struct wup_device *dev)
                                 close(dev->file_fd);
                                 dev->file_fd = -1;
                             }
+
+                            // We need to reset the pipe here.
+                            wup_close_read_pipe(dev);
+#if 0
+                            // Then re-open the pipe here
+                            wup_open_read_pipe(dev);
+#endif
                         }
                     }
                 }
@@ -566,6 +601,38 @@ wup_data_process(struct wup_device *dev)
             return;
         }
     }
+}
+
+static int
+wup_open_read_pipe(struct wup_device *dev)
+{
+    int type = 0;
+    int ret;
+
+#if 0
+    printf(MAG "Open the read pipe\n" RESET);
+#endif
+
+    ret = ioctl(dev->fd, DFU_IOC_OPEN_STREAM, &type);
+    if (ret < 0)
+        fprintf(stderr, RED "Failed to open the pipe\n" RESET);
+
+    return ret;
+}
+
+static void
+wup_close_read_pipe(struct wup_device *dev)
+{
+    int type = 0;
+    int ret;
+
+#if 0
+    printf(MAG "Close the read pipe\n" RESET);
+#endif
+
+    ret = ioctl(dev->fd, DFU_IOC_CLOSE_STREAM, &type);
+    if (ret < 0)
+        fprintf(stderr, RED "Failed to close the pipe\n" RESET);
 }
 
 int main(int argc, char **argv)

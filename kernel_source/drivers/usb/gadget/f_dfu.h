@@ -14,6 +14,8 @@ struct dfu_ctrl_event {
 
 #define DFU_IOC_SEND_CTRL_REPLY			_IOW('U', 0, struct dfu_ctrl_event)
 #define DFU_IOC_DQ_CTRL_EVENT			_IOR('U', 1, struct dfu_ctrl_event)
+#define DFU_IOC_OPEN_STREAM				_IOW('U', 2, int)
+#define DFU_IOC_CLOSE_STREAM			_IOW('U', 3, int)
 
 #define MAX_UAC_CTRL_EVENTS_COUNT	10
 
