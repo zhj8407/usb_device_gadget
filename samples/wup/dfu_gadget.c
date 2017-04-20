@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/select.h>
@@ -49,6 +50,10 @@
 #define WUP_TEMPFILE                    "/home/ubuntu/wup_upgrade_img.tar"
 
 #define FIRMWARE_IMAGE_LOCATION         "/home/ubuntu"
+
+#define WUP_BUFF_NUM                    4
+
+#define WUP_BUFF_SIZE                   1024 * 1024
 
 struct wup_status {
     uint8_t     bStatus;
@@ -106,10 +111,17 @@ struct wup_device {
 
     unsigned char f_force_updated;
     char image_sw_version[32];
+
+    void **pp_mem;
+    void *mem;
+    unsigned int num_of_buffs;
+    unsigned int buffer_length;
 };
 
 static int wup_open_read_pipe(struct wup_device *dev);
 static void wup_close_read_pipe(struct wup_device *dev);
+static int wup_start_data_stream(struct wup_device *dev);
+static void wup_stop_data_stream(struct wup_device *dev);
 
 #ifdef DEBUG_CALCULATE_SPEED
 static long start_time;
@@ -245,22 +257,14 @@ check_download_info(
 }
 
 static void
-wup_events_process(struct wup_device *dev)
+wup_ctrl_events_process(struct wup_device *dev,
+                        struct dfu_ctrl_event wup_event)
 {
-    struct dfu_ctrl_event wup_event;
     int ret;
     char md5_sum[40];
     unsigned char md5[MD5_DIGEST_LENGTH];
     int i;
     unsigned short reply_len = 0;
-
-    ret = ioctl(dev->fd, DFU_IOC_DQ_CTRL_EVENT, &wup_event);
-
-    if (ret < 0) {
-        fprintf(stderr, RED "DFU_IOC_DQ_CTRL_EVENT failed: %s (%d)\n" RESET,
-                strerror(errno), errno);
-        return;
-    }
 
 #if DEBUG_PRINT
     printf(WHT "Got WUP Control Event. Request: 0x%02x, Value: 0x%04x, "
@@ -323,10 +327,20 @@ wup_events_process(struct wup_device *dev)
 
                     if (ret < 0) {
                         fprintf(stderr, RED "Failed to enable the read pipe. ret is %d\n" RESET,
-                            ret);
+                                ret);
                         dev->status = WUP_STATUS_errUNKNOWN;
                         return;
                     }
+
+                    ret = wup_start_data_stream(dev);
+
+                    if (ret < 0) {
+                        fprintf(stderr, RED "Failed to start the data stream. ret is %d\n" RESET,
+                                ret);
+                        dev->status = WUP_STATUS_errUNKNOWN;
+                        return;
+                    }
+
 #endif
 
                     dev->state = WUP_STATE_dfuDNLOAD_IDLE;
@@ -344,12 +358,9 @@ wup_events_process(struct wup_device *dev)
                 if (dev->state != WUP_STATE_dfuUPDATE_BUSY)
                     dev->state = WUP_STATE_dfuIDLE;
 
+                wup_stop_data_stream(dev);
                 // We need to reset the pipe here.
                 wup_close_read_pipe(dev);
-#if 0
-                // Then re-open the pipe here
-                wup_open_read_pipe(dev);
-#endif
 
                 // Remove the obsolete file
                 unlink(dev->image_file);
@@ -479,17 +490,16 @@ wup_events_process(struct wup_device *dev)
                             //usb_dfu_read(dev);
                         } else {
                             // Close the file
+                            printf(MAG "Close the file\n" RESET);
+
                             if (dev->file_fd > 0) {
                                 close(dev->file_fd);
                                 dev->file_fd = -1;
                             }
 
+                            wup_stop_data_stream(dev);
                             // We need to reset the pipe here.
                             wup_close_read_pipe(dev);
-#if 0
-                            // Then re-open the pipe here
-                            wup_open_read_pipe(dev);
-#endif
                         }
                     }
                 }
@@ -537,11 +547,51 @@ wup_events_process(struct wup_device *dev)
 }
 
 static void
+wup_events_process(struct wup_device *dev)
+{
+    struct dfu_event wup_event;
+    int ret;
+
+    ret = ioctl(dev->fd, DFU_IOC_DQ_EVENT, &wup_event);
+
+    if (ret < 0) {
+        fprintf(stderr, RED "DFU_IOC_DQ_EVENT failed: %s (%d)\n" RESET,
+                strerror(errno), errno);
+        return;
+    }
+
+    switch (wup_event.event_type) {
+        case DFU_EVENT_TYPE_CTRL_REQ:
+            wup_ctrl_events_process(dev, wup_event.u.ctrl_event);
+            break;
+
+        case DFU_EVENT_TYPE_USB_STATE:
+            if (wup_event.u.usb_state == DFU_USB_STATE_SUSPEND) {
+                printf(MAG "DFU disconnected\n" RESET);
+                wup_stop_data_stream(dev);
+                wup_close_read_pipe(dev);
+                //Reset the state to detached.
+                dev->state = WUP_STATE_dfuDETACHED;
+                dev->status = WUP_STATUS_OK;
+            } else if (wup_event.u.usb_state == DFU_USB_STATE_RESUME) {
+                printf(CYN "DFU connected\n" RESET);
+                //Set the state
+                dev->state = WUP_STATE_dfuIDLE;
+                dev->status = WUP_STATUS_OK;
+            }
+
+            break;
+    }
+}
+
+static void
 wup_data_process(struct wup_device *dev)
 {
     int ret;
-    char buf[DFU_BUFFER_SIZE];
-    int read_len;
+    struct dfu_usr_buf usr_buf;
+#if 0
+    struct dfu_buf_read  buf_read;
+#endif
 
     // Check the current state
     if (dev->state != WUP_STATE_dfuDNLOAD_IDLE &&
@@ -562,45 +612,197 @@ wup_data_process(struct wup_device *dev)
         return;
     }
 
-    while ((read_len = read(dev->fd, buf, DFU_BUFFER_SIZE)) > 0) {
-        ret = write(dev->file_fd, buf, read_len);
+    ret = ioctl(dev->fd, DFU_IOC_DEQUEUE_BUF, &usr_buf);
 
-        if (ret < read_len) {
-            fprintf(stderr, RED "Failed to write all data into output file, %d - %d\n" RESET,
-                    read_len, ret);
-            // Change the state to WUP_STATE_dfuDNLOAD_SYNC
-            // Waiting for the host to get status
-            dev->state = WUP_STATE_dfuDNLOAD_SYNC;
-            dev->status = WUP_STATUS_errWRITE;
-            return;
-        }
+    if (ret < 0) {
+        fprintf(stderr, RED "Can not dequeue the buffer. ret is %d\n" RESET,
+                ret);
+        dev->status = WUP_STATUS_errTRANS;
+        return;
+    }
 
-        // Update the MD5 sum
-        MD5_Update(&dev->md5_ctx, buf, read_len);
-
-        dev->image_written_bytes += ret;
-
-        if (dev->sync_block_size != 0 &&
-                dev->image_written_bytes != 0 &&
-                dev->image_written_bytes % dev->sync_block_size == 0) {
-            // Reach the sync point
-            dev->state = WUP_STATE_dfuDNLOAD_SYNC;
-            return;
-        }
-
-        if (dev->image_written_bytes >= dev->image_size) {
-            printf(GRN "Transfer completed, total length: %lu\n" RESET,
-                   dev->image_size);
-#if DEBUG_CALCULATE_SPEED
-            unsigned long used_ms = get_current_time() - start_time;
-            printf(CYN "Transfer completed in %lu.%03lus. Speed: %.3fMB/s\n" RESET,
-                   used_ms / 1000, used_ms % 1000,
-                   ((float)(dev->image_size) / (1024 * 1024) / (used_ms / 1000)));
+#if DEBUG_PRINT
+    printf(GRN "Buf idx: %d, Transferred bytes: %u\n" RESET,
+           usr_buf.index,
+           usr_buf.bytesused);
 #endif
-            dev->state = WUP_STATE_dfuDNLOAD_SYNC;
-            return;
+
+#if 0
+    buf_read.index = usr_buf.index;
+    buf_read.length = usr_buf.bytesused;
+    buf_read.mem = dev->mem;
+
+    ret = ioctl(dev->fd, DFU_IOC_READ_BUF, &buf_read);
+
+    if (ret < 0) {
+        fprintf(stderr, RED "Can not read the buffer. ret is %d\n" RESET,
+                ret);
+        dev->status = WUP_STATUS_errTRANS;
+        return;
+    }
+
+#else
+    dev->mem = dev->pp_mem[usr_buf.index];
+
+    if (dev->mem == NULL) {
+        dev->state = WUP_STATE_dfuDNLOAD_SYNC;
+        dev->status = WUP_STATUS_errTRANS;
+        return;
+    }
+
+#endif
+
+    ret = write(dev->file_fd, dev->mem, usr_buf.bytesused);
+
+    if (ret < usr_buf.bytesused) {
+        fprintf(stderr, RED "Failed to write all data into output file, %d - %d\n" RESET,
+                usr_buf.bytesused, ret);
+        // Change the state to WUP_STATE_dfuDNLOAD_SYNC
+        // Waiting for the host to get status
+        dev->state = WUP_STATE_dfuDNLOAD_SYNC;
+        dev->status = WUP_STATUS_errWRITE;
+        return;
+    }
+
+    // Update the MD5 sum
+    MD5_Update(&dev->md5_ctx, dev->mem, usr_buf.bytesused);
+
+    dev->image_written_bytes += usr_buf.bytesused;
+
+    if (dev->sync_block_size != 0 &&
+            dev->image_written_bytes != 0 &&
+            dev->image_written_bytes % dev->sync_block_size == 0) {
+        // Reach the sync point
+        dev->state = WUP_STATE_dfuDNLOAD_SYNC;
+    }
+
+    if (dev->image_written_bytes >= dev->image_size) {
+        printf(GRN "Transfer completed, total length: %lu\n" RESET,
+               dev->image_size);
+#if DEBUG_CALCULATE_SPEED
+        unsigned long used_ms = get_current_time() - start_time;
+        printf(CYN "Transfer completed in %lu.%03lus. Speed: %.3fMB/s\n" RESET,
+               used_ms / 1000, used_ms % 1000,
+               ((float)(dev->image_size) / (1024 * 1024) / (used_ms / 1000)));
+#endif
+        dev->state = WUP_STATE_dfuDNLOAD_SYNC;
+        return;
+    }
+
+    // Re-enqueue the buffer
+    ret = ioctl(dev->fd, DFU_IOC_ENQUEUE_BUF, &usr_buf);
+
+    if (ret < 0) {
+        fprintf(stderr, RED "Can not enqueue the buffer. ret is %d\n" RESET,
+                ret);
+        dev->status = WUP_STATUS_errTRANS;
+        return;
+    }
+}
+
+static int
+wup_start_data_stream(struct wup_device *dev)
+{
+    int ret;
+    struct dfu_buf_alloc buf_alloc;
+    unsigned int i, j;
+    struct dfu_usr_buf usr_buf;
+
+    buf_alloc.num_of_buffs = dev->num_of_buffs;
+    buf_alloc.buff_length = dev->buffer_length;    // 1M
+
+    ret = ioctl(dev->fd, DFU_IOC_CREATE_BUF, &buf_alloc);
+
+    if (ret < 0) {
+        fprintf(stderr, RED "Failed to create buffers. err: %d\n" RESET,
+                ret);
+        return ret;
+    }
+
+    printf(YEL "Create %u buffers. Each buffer's length: %u\n" RESET,
+           buf_alloc.num_of_buffs,
+           buf_alloc.buff_length);
+
+    // Write them back
+    dev->num_of_buffs = buf_alloc.num_of_buffs;
+    dev->buffer_length = buf_alloc.buff_length;
+
+    // Do mmap()
+    dev->pp_mem = calloc(dev->num_of_buffs, sizeof(*(dev->pp_mem)));
+
+    if (!dev->pp_mem) {
+        fprintf(stderr, RED "Failed to create buffers.\n" RESET);
+        ret = -ENOMEM;
+        goto alloc_failed;
+    }
+
+    for (i = 0; i < dev->num_of_buffs; i++) {
+        dev->pp_mem[i] =
+            mmap(0, dev->buffer_length,
+                 PROT_READ,
+                 MAP_SHARED,
+                 dev->fd,
+                 i * dev->buffer_length);
+
+        if (dev->pp_mem[i] == MAP_FAILED) {
+            fprintf(stderr, RED "Failed to mmap buffer. (idx: %u)\n" RESET,
+                    i);
+            ret = -EINVAL;
+            goto mmap_failed;
         }
     }
+
+    for (i = 0; i < dev->num_of_buffs; i++) {
+        usr_buf.index = i;
+
+        ret = ioctl(dev->fd, DFU_IOC_ENQUEUE_BUF, &usr_buf);
+
+        if (ret < 0) {
+            fprintf(stderr, RED "Failed to enqueue buffer. idx: %d, err: %d\n" RESET,
+                    i, ret);
+            return ret;
+        }
+    }
+
+    return 0;
+
+mmap_failed:
+
+    for (j = i - 1; j >= 0; j--) {
+        if (dev->pp_mem[j])
+            munmap(dev->pp_mem[j], dev->buffer_length);
+    }
+
+    free(dev->pp_mem);
+    dev->pp_mem = NULL;
+alloc_failed:
+    memset(&buf_alloc, 0x00, sizeof(struct dfu_buf_alloc));
+
+    ioctl(dev->fd, DFU_IOC_CREATE_BUF, &buf_alloc);
+
+    return ret;
+}
+
+static void
+wup_stop_data_stream(struct wup_device *dev)
+{
+    struct dfu_buf_alloc buf_alloc;
+    unsigned int i;
+
+    if (dev->pp_mem) {
+        // Do munmap
+        for (i = 0; i < dev->num_of_buffs; i++) {
+            if (dev->pp_mem[i])
+                munmap(dev->pp_mem[i], dev->buffer_length);
+        }
+
+        free(dev->pp_mem);
+        dev->pp_mem = NULL;
+    }
+
+    memset(&buf_alloc, 0x00, sizeof(struct dfu_buf_alloc));
+
+    ioctl(dev->fd, DFU_IOC_CREATE_BUF, &buf_alloc);
 }
 
 static int
@@ -609,11 +811,12 @@ wup_open_read_pipe(struct wup_device *dev)
     int type = 0;
     int ret;
 
-#if 0
+#if DEBUG_PRINT
     printf(MAG "Open the read pipe\n" RESET);
 #endif
 
     ret = ioctl(dev->fd, DFU_IOC_OPEN_STREAM, &type);
+
     if (ret < 0)
         fprintf(stderr, RED "Failed to open the pipe\n" RESET);
 
@@ -626,11 +829,12 @@ wup_close_read_pipe(struct wup_device *dev)
     int type = 0;
     int ret;
 
-#if 0
+#if DEBUG_PRINT
     printf(MAG "Close the read pipe\n" RESET);
 #endif
 
     ret = ioctl(dev->fd, DFU_IOC_CLOSE_STREAM, &type);
+
     if (ret < 0)
         fprintf(stderr, RED "Failed to close the pipe\n" RESET);
 }
@@ -654,6 +858,9 @@ int main(int argc, char **argv)
 
     dev->fd = -1;
     dev->file_fd = -1;
+
+    dev->num_of_buffs = WUP_BUFF_NUM;
+    dev->buffer_length = WUP_BUFF_SIZE;
 
     dev->fd = open(device_name, O_RDWR | O_NONBLOCK);
 
@@ -689,7 +896,6 @@ out:
 
     if (dev) {
         close(dev->fd);
-
         free(dev);
     }
 
